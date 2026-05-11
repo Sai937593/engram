@@ -509,7 +509,8 @@ CLI:           click
 Terminal UI:   rich  (used for --pretty / formatted tables)
 Storage:       sqlite3  (Python stdlib — zero install)
 Search:        SQLite FTS5  (built into SQLite)
-Pip deps:      click, rich  (2 total)
+Search:        SQLite FTS5  (built into SQLite)
+Deps:          click, rich  (2 total, managed via uv)
 Entry point:   engram  (via pyproject.toml [scripts])
 Latency:       < 300ms per command (Python startup; DB ops < 10ms)
 ```
