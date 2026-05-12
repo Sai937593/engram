@@ -447,6 +447,65 @@ def export_handoff(output):
     
     console.print(f"[green]Handoff exported to:[/green] {filename}")
 
+@cli.command(name="guide")
+@click.argument("section", required=False)
+def guide(section):
+    """Show the User Manual. Optional: provide a section (concepts, commands, workflow, troubleshooting)."""
+    from rich.markdown import Markdown
+    import re
+    
+    # Path to manual relative to this file's project root
+    # We'll try to find it in the current project's docs folder
+    try:
+        p = get_current_project()
+        # Find the repo path that contains docs/USER_MANUAL.md
+        manual_path = None
+        for path in p.repo_paths:
+            candidate = os.path.join(path, "docs", "USER_MANUAL.md")
+            if os.path.exists(candidate):
+                manual_path = candidate
+                break
+        
+        if not manual_path:
+            console.print("[yellow]User Manual not found in project docs.[/yellow]")
+            return
+
+        with open(manual_path, "r") as f:
+            content = f.read()
+
+        if section:
+            section = section.lower()
+            # Mapping common names to headers
+            mapping = {
+                "concepts": "## 1. Core Concepts",
+                "commands": "## 2. Command Reference",
+                "workflow": "## 3. Recommended Agent Workflow",
+                "troubleshooting": "## 4. Troubleshooting"
+            }
+            
+            header = mapping.get(section)
+            if header:
+                # Find the section by finding the header and then the next '---' or next '## ' or end of string
+                parts = re.split(r'(\n##\s.*?\n|\n---)', content)
+                found = False
+                section_content = ""
+                for i in range(len(parts)):
+                    if header in parts[i]:
+                        found = True
+                        section_content = parts[i] + (parts[i+1] if i+1 < len(parts) else "")
+                        break
+                
+                if found:
+                    content = f"# Engram Guide: {section.capitalize()}\n\n" + section_content
+                else:
+                    console.print(f"[yellow]Section '{section}' not found in file.[/yellow]")
+                    return
+
+        console.print(Markdown(content))
+        
+    except Exception as e:
+        console.print(f"[red]Error reading manual:[/red] {str(e)}")
+
 def main():
     cli()
 
