@@ -8,17 +8,15 @@
 - [x] engram init (repo path binding + project creation)
 - [x] engram project CRUD
 
-### Phase 2: Core Entities (NEXT)
+### Phase 2: Core Entities (DONE)
+- [x] engram task CRUD + status lifecycle
+- [x] engram memory CRUD + type/tag/scope/always_include
+- [x] Field-level updates (--field --value) + audit log
 
-### Phase 2: Core Entities
-- [ ] engram task CRUD + status lifecycle
-- [ ] engram memory CRUD + type/tag/scope/always_include
-- [ ] Field-level updates (--field --value) + audit log
-
-### Phase 3: Sessions & Context
-- [ ] engram session start / close (embedded checkpoint)
-- [ ] engram context startup (< 500 token target)
-- [ ] engram context task
+### Phase 3: Sessions & Context (DONE)
+- [x] engram session start / close (embedded checkpoint)
+- [x] engram context startup (< 500 token target)
+- [x] engram context task
 
 ### Phase 4: Search
 - [ ] FTS5 virtual table + sync triggers on memories

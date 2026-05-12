@@ -21,6 +21,20 @@ class Project:
         conn.commit()
         conn.close()
         return cls(id, name, summary, repo_paths=repo_paths)
+    @classmethod
+    def get(cls, id):
+        conn = get_db_connection()
+        row = conn.execute("SELECT * FROM projects WHERE id = ?", (id,)).fetchone()
+        conn.close()
+        if row:
+            return cls(
+                row['id'], 
+                row['name'], 
+                row['summary'], 
+                row['status'], 
+                json.loads(row['repo_paths'])
+            )
+        return None
 
     @classmethod
     def find_by_repo_path(cls, path):

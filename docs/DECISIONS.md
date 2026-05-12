@@ -10,3 +10,4 @@
 | 2026-05-11 | Context Strategy | **On-demand** | Minimize token usage by allowing agents to pull specific memories/tasks as needed. |
 | 2026-05-11 | Entity Model | **4 Tables** | Simplified from 9 to Project, Task, Memory, Session for MVP speed. |
 | 2026-05-12 | Toolchain | **uv** | Used for package management and installation instead of pip for speed. |
+| 2026-05-12 | FTS5 rowid | **Internal rowid** | Map FTS5 `content_rowid` to table `rowid` (integer) for performance and standard SQLite behavior, even though primary keys are strings. |

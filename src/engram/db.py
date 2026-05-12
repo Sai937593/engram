@@ -105,8 +105,26 @@ def init_db(db_path=None):
             content_rowid='rowid'
         )
         """)
+        
+        # Triggers to keep FTS5 in sync
+        cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+          INSERT INTO memories_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
+        END;
+        """)
+        cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+          INSERT INTO memories_fts(memories_fts, rowid, title, content, tags) VALUES('delete', old.rowid, old.title, old.content, old.tags);
+        END;
+        """)
+        cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+          INSERT INTO memories_fts(memories_fts, rowid, title, content, tags) VALUES('delete', old.rowid, old.title, old.content, old.tags);
+          INSERT INTO memories_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
+        END;
+        """)
     except sqlite3.OperationalError:
-        # Fallback if FTS5 is not available (though it usually is in modern Python)
+        # Fallback if FTS5 is not available
         pass
 
     conn.commit()
