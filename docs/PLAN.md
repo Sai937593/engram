@@ -18,14 +18,15 @@
 - [x] engram context startup (< 500 token target)
 - [x] engram context task
 
-### Phase 4: Search
-- [ ] FTS5 virtual table + sync triggers on memories
-- [ ] engram memory search (text + type + tag filters)
+### Phase 4: Search (DONE)
+- [x] FTS5 virtual table + sync triggers on memories
+- [x] engram memory search (text + type + tag filters)
 
-### Phase 5: Exports & Polish
-- [ ] engram export snapshot
-- [ ] engram export handoff
-- [ ] Error handling, validation, edge cases
+### Phase 5: Exports & Polish (DONE)
+- [x] engram export snapshot
+- [x] engram export handoff
+- [x] Error handling, validation, edge cases
+- [x] CLI table formatting refinements
 
-### Phase 6: Demo & Validation
-- [ ] End-to-end demo scenario (acceptance test)
+### Phase 6: Demo & Validation (DONE)
+- [x] End-to-end demo scenario (acceptance test)

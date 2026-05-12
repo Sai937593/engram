@@ -1,10 +1,15 @@
 # TASKS
 
 ## ACTIVE TASK
-### Phase 5: Exports & Polish (NEXT)
-- [ ] engram export snapshot
-- [ ] engram export handoff
-- [ ] CLI table formatting refinements
+### Phase 6: Demo & Validation (DONE)
+- [x] Finalize `AGENTS.md` with Memory System instructions
+- [x] Execute End-to-end demo scenario
+- [x] Verify export outputs (Snapshot & Handoff)
+
+### Phase 5: Exports & Polish (DONE)
+- [x] engram export snapshot
+- [x] engram export handoff
+- [x] CLI table formatting refinements
 
 ### Phase 4: Search (DONE)
 - [x] FTS5 virtual table + sync triggers on memories
@@ -25,7 +30,8 @@
 - [x] engram project CRUD
 
 ## SESSION CONTEXT
-- Initialized project documentation and scaffolded the codebase.
-- Switched toolchain to `uv`.
-- Completed Phases 1, 2, and 3.
-- Completed Phase 4: Search (FTS5, filters, and full memory CRUD).
+- Finalized Phase 6: Demo & Validation.
+- Updated `AGENTS.md` with Engram memory system usage instructions.
+- Successfully executed end-to-end demo scenario validating task/memory CRUD, session management, context generation, and markdown exports.
+- Verified snapshot and handoff outputs.
+- Project MVP is now complete and validated.

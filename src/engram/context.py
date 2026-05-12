@@ -60,3 +60,77 @@ def get_task_context(task_id):
             context.append(m.content)
             
     return "\n".join(context)
+
+def get_snapshot_context(project_id):
+    project = Project.get(project_id)
+    tasks = Task.list_by_project(project_id)
+    memories = Memory.list_by_project(project_id)
+    sessions = Session.list_by_project(project_id)
+    
+    context = []
+    context.append(f"# PROJECT SNAPSHOT: {project.name} ({project.id})")
+    if project.summary:
+        context.append(f"Summary: {project.summary}")
+    context.append(f"Status: {project.status}")
+    
+    context.append("\n## TASKS")
+    for t in tasks:
+        context.append(f"### [{t.status.upper()}] {t.title} ({t.id})")
+        context.append(f"Priority: {t.priority}")
+        if t.description:
+            context.append(f"Description: {t.description}")
+        if t.acceptance:
+            context.append(f"Acceptance Criteria:\n{t.acceptance}")
+            
+    context.append("\n## MEMORIES")
+    for m in memories:
+        context.append(f"### {m.title} ({m.type}) [{m.id}]")
+        if m.tags:
+            context.append(f"Tags: {', '.join(m.tags)}")
+        context.append(m.content)
+        
+    context.append("\n## SESSION HISTORY")
+    for s in sessions:
+        context.append(f"- **{s.id}** ({s.status}): {s.goal}")
+        if s.summary:
+            context.append(f"  Summary: {s.summary}")
+            
+    return "\n".join(context)
+
+def get_handoff_context(project_id):
+    project = Project.get(project_id)
+    active_session = Session.get_active(project_id)
+    tasks = Task.list_by_project(project_id)
+    # Get important memories (lessons, decisions, always_include)
+    memories = Memory.list_by_project(project_id)
+    important_memories = [m for m in memories if m.type in ['lesson', 'decision'] or m.always_include]
+    
+    context = []
+    context.append(f"# PROJECT HANDOFF: {project.name}")
+    if project.summary:
+        context.append(f"Context: {project.summary}")
+        
+    if active_session:
+        context.append(f"\n## CURRENT GOAL")
+        context.append(active_session.goal)
+        
+    context.append("\n## ACTIVE TASKS")
+    active_tasks = [t for t in tasks if t.status in ['todo', 'in-progress', 'blocked']]
+    for t in active_tasks:
+        context.append(f"### {t.title} ({t.id})")
+        context.append(f"Status: {t.status} | Priority: {t.priority}")
+        if t.description:
+            context.append(f"Description: {t.description}")
+            
+    context.append("\n## CRITICAL CONTEXT")
+    for m in important_memories:
+        context.append(f"### {m.title} ({m.type})")
+        context.append(m.content)
+        
+    context.append("\n## NEXT STEPS")
+    if active_session and active_session.next_steps:
+        context.append(active_session.next_steps)
+    else:
+        context.append("Refer to active tasks above.")
+        
+    return "\n".join(context)

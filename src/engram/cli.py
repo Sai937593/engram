@@ -7,7 +7,7 @@ from engram.models.project import Project
 from engram.models.task import Task
 from engram.models.memory import Memory
 from engram.models.session import Session
-from engram.context import get_startup_context, get_task_context
+from engram.context import get_startup_context, get_task_context, get_snapshot_context, get_handoff_context
 
 console = Console()
 
@@ -93,11 +93,11 @@ def project_list():
         console.print("No projects registered.")
         return
 
-    table = Table(title="Engram Projects")
-    table.add_column("ID", style="cyan")
+    table = Table(title="Engram Projects", header_style="bold magenta", border_style="cyan")
+    table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Name", style="magenta")
     table.add_column("Status", style="green")
-    table.add_column("Repo Paths")
+    table.add_column("Repo Paths", style="dim")
 
     for p in projects:
         table.add_row(p.id, p.name, p.status, "\n".join(p.repo_paths))
@@ -117,7 +117,9 @@ def task():
 @click.option("--priority", type=click.Choice(['low', 'medium', 'high']), default='medium')
 @click.option("--status", type=click.Choice(['backlog', 'todo', 'in-progress', 'done', 'blocked', 'cancelled']), default='backlog')
 @click.option("--tags", help="Comma-separated tags")
-def task_add(title, description, priority, status, tags):
+@click.option("--acceptance", help="Acceptance criteria")
+@click.option("--phase", help="Project phase")
+def task_add(title, description, priority, status, tags, acceptance, phase):
     """Add a new task to the current project."""
     p = get_current_project()
     t = Task.create(
@@ -126,7 +128,9 @@ def task_add(title, description, priority, status, tags):
         description=description,
         priority=priority,
         status=status,
-        tags=tags.split(",") if tags else []
+        tags=tags.split(",") if tags else [],
+        acceptance=acceptance,
+        phase=phase
     )
     console.print(f"[green]Task created with ID:[/green] {t.id}")
 
@@ -144,20 +148,28 @@ def task_list(status):
         console.print("No tasks found.")
         return
 
-    table = Table(title=f"Tasks for Project: {p.name}")
-    table.add_column("ID", style="cyan")
+    table = Table(title=f"Tasks for Project: {p.name}", header_style="bold green", border_style="green")
+    table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title", style="white")
-    table.add_column("Status", style="green")
+    table.add_column("Status", style="bold green")
     table.add_column("Priority", style="yellow")
     
     for t in tasks:
-        table.add_row(t.id, t.title, t.status, t.priority)
+        status_style = "green"
+        if t.status == 'blocked': status_style = "red"
+        elif t.status == 'done': status_style = "blue"
+        elif t.status == 'in-progress': status_style = "yellow"
+        
+        priority_style = "yellow"
+        if t.priority == 'high': priority_style = "bold red"
+        
+        table.add_row(t.id, t.title, f"[{status_style}]{t.status}[/{status_style}]", f"[{priority_style}]{t.priority}[/{priority_style}]")
     
     console.print(table)
 
 @task.command(name="update")
 @click.argument("task_id")
-@click.option("--field", help="Field to update (title, status, priority, description, tags)")
+@click.option("--field", help="Field to update (title, status, priority, description, tags, acceptance, phase, evidence)")
 @click.option("--value", help="New value for the field")
 def task_update(task_id, field, value):
     """Update a task field."""
@@ -189,7 +201,10 @@ def task_get(task_id):
     console.print(f"[cyan]Title:[/cyan] {t.title}")
     console.print(f"[cyan]Status:[/cyan] {t.status}")
     console.print(f"[cyan]Priority:[/cyan] {t.priority}")
+    console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
     console.print(f"[cyan]Description:[/cyan] {t.description or 'N/A'}")
+    console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{t.acceptance or 'N/A'}")
+    console.print(f"[cyan]Evidence:[/cyan]\n{t.evidence or 'N/A'}")
     console.print(f"[cyan]Tags:[/cyan] {', '.join(t.tags)}")
 
 # --- Memory Commands ---
@@ -228,11 +243,11 @@ def memory_list():
         console.print("No memories found.")
         return
 
-    table = Table(title=f"Memories for Project: {p.name}")
-    table.add_column("ID", style="cyan")
+    table = Table(title=f"Memories for Project: {p.name}", header_style="bold blue", border_style="blue")
+    table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title", style="white")
     table.add_column("Type", style="magenta")
-    table.add_column("Tags", style="blue")
+    table.add_column("Tags", style="dim blue")
     
     for m in memories:
         table.add_row(m.id, m.title, m.type, ", ".join(m.tags))
@@ -250,14 +265,14 @@ def memory_search(query, type, tags):
         console.print("No results found.")
         return
     
-    table = Table(title=f"Search Results for: {query}")
-    table.add_column("ID", style="cyan")
+    table = Table(title=f"Search Results for: {query}", header_style="bold yellow", border_style="yellow")
+    table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title", style="white")
-    table.add_column("Snippet")
+    table.add_column("Snippet", style="dim")
     
     for m in results:
         # Simple snippet
-        snippet = m.content[:50] + "..." if len(m.content) > 50 else m.content
+        snippet = m.content[:70].replace("\n", " ") + "..." if len(m.content) > 70 else m.content.replace("\n", " ")
         table.add_row(m.id, m.title, snippet)
     
     console.print(table)
@@ -366,14 +381,15 @@ def session_list(all):
         console.print("No sessions found.")
         return
 
-    table = Table(title=f"Sessions for Project: {p.name}")
-    table.add_column("ID", style="cyan")
-    table.add_column("Status", style="green")
+    table = Table(title=f"Sessions for Project: {p.name}", header_style="bold yellow", border_style="yellow")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Status", style="bold green")
     table.add_column("Goal", style="white")
-    table.add_column("Started At", style="yellow")
+    table.add_column("Started At", style="dim yellow")
     
     for s in sessions:
-        table.add_row(s.id, s.status, s.goal or "N/A", s.started_at)
+        status_style = "green" if s.status == 'open' else "dim blue"
+        table.add_row(s.id, f"[{status_style}]{s.status}[/{status_style}]", s.goal or "N/A", s.started_at)
     
     console.print(table)
 
@@ -397,6 +413,39 @@ def context_task(task_id):
     """Generate task-specific context."""
     ctx = get_task_context(task_id)
     console.print(ctx)
+
+# --- Export Commands ---
+
+@cli.group()
+def export():
+    """Export project data."""
+    pass
+
+@export.command(name="snapshot")
+@click.option("--output", "-o", help="Output file path (default: SNAPSHOT.md)")
+def export_snapshot(output):
+    """Export a full project snapshot to Markdown."""
+    p = get_current_project()
+    ctx = get_snapshot_context(p.id)
+    
+    filename = output or "SNAPSHOT.md"
+    with open(filename, "w") as f:
+        f.write(ctx)
+    
+    console.print(f"[green]Snapshot exported to:[/green] {filename}")
+
+@export.command(name="handoff")
+@click.option("--output", "-o", help="Output file path (default: HANDOFF.md)")
+def export_handoff(output):
+    """Export a project handoff for another agent."""
+    p = get_current_project()
+    ctx = get_handoff_context(p.id)
+    
+    filename = output or "HANDOFF.md"
+    with open(filename, "w") as f:
+        f.write(ctx)
+    
+    console.print(f"[green]Handoff exported to:[/green] {filename}")
 
 def main():
     cli()
