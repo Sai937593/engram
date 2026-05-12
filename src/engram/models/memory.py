@@ -112,17 +112,28 @@ class Memory:
         AuditLog.log('memories', self.id, 'delete')
 
     @classmethod
-    def search(cls, query):
+    def search(cls, query, type_filter=None, tag_filters=None):
         conn = get_db_connection()
-        # Search via FTS5
-        rows = conn.execute(
-            """
+        
+        sql = """
             SELECT m.* FROM memories m
             JOIN memories_fts f ON m.rowid = f.rowid
             WHERE memories_fts MATCH ?
-            ORDER BY rank
-            """,
-            (query,)
-        ).fetchall()
+        """
+        params = [query]
+        
+        if type_filter:
+            sql += " AND m.type = ?"
+            params.append(type_filter)
+            
+        if tag_filters:
+            for tag in tag_filters:
+                # Simple LIKE search for tags in MVP
+                sql += " AND m.tags LIKE ?"
+                params.append(f"%{tag}%")
+                
+        sql += " ORDER BY rank"
+        
+        rows = conn.execute(sql, params).fetchall()
         conn.close()
         return [cls.from_row(row) for row in rows]

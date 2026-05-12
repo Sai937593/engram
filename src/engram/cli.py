@@ -241,9 +241,11 @@ def memory_list():
 
 @memory.command(name="search")
 @click.argument("query")
-def memory_search(query):
+@click.option("--type", help="Filter by memory type")
+@click.option("--tag", "tags", multiple=True, help="Filter by tag (can be used multiple times)")
+def memory_search(query, type, tags):
     """Search memories using FTS5."""
-    results = Memory.search(query)
+    results = Memory.search(query, type_filter=type, tag_filters=tags)
     if not results:
         console.print("No results found.")
         return
@@ -259,6 +261,59 @@ def memory_search(query):
         table.add_row(m.id, m.title, snippet)
     
     console.print(table)
+
+@memory.command(name="get")
+@click.argument("memory_id")
+def memory_get(memory_id):
+    """Show memory details."""
+    m = Memory.get(memory_id)
+    if not m:
+        console.print(f"[red]Error:[/red] Memory '{memory_id}' not found.")
+        return
+    
+    console.print(f"[cyan]ID:[/cyan] {m.id}")
+    console.print(f"[cyan]Title:[/cyan] {m.title}")
+    console.print(f"[cyan]Type:[/cyan] {m.type}")
+    console.print(f"[cyan]Tags:[/cyan] {', '.join(m.tags)}")
+    console.print(f"[cyan]Always Include:[/cyan] {m.always_include}")
+    console.print(f"[cyan]Content:[/cyan]\n{m.content}")
+
+@memory.command(name="update")
+@click.argument("memory_id")
+@click.option("--field", help="Field to update (title, content, type, tags, always_include)")
+@click.option("--value", help="New value for the field")
+def memory_update(memory_id, field, value):
+    """Update a memory field."""
+    m = Memory.get(memory_id)
+    if not m:
+        console.print(f"[red]Error:[/red] Memory '{memory_id}' not found.")
+        return
+    
+    if not field or value is None:
+        console.print("[yellow]Please provide both --field and --value.[/yellow]")
+        return
+    
+    if field == 'tags':
+        value = value.split(",")
+    elif field == 'always_include':
+        value = value.lower() in ('true', '1', 'yes')
+    
+    m.update(**{field: value})
+    console.print(f"[green]Memory '{memory_id}' updated.[/green]")
+
+@memory.command(name="delete")
+@click.argument("memory_id")
+@click.option("-y", "--yes", is_flag=True, help="Skip confirmation")
+def memory_delete(memory_id, yes):
+    """Delete a memory."""
+    m = Memory.get(memory_id)
+    if not m:
+        console.print(f"[red]Error:[/red] Memory '{memory_id}' not found.")
+        return
+    
+    if yes or click.confirm(f"Are you sure you want to delete memory '{memory_id}'?"):
+        m.delete()
+        console.print(f"[green]Memory '{memory_id}' deleted.[/green]")
 
 # --- Session Commands ---
 
