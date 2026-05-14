@@ -134,6 +134,20 @@ def task_add(title, description, priority, status, tags, acceptance, phase):
     )
     console.print(f"[green]Task created with ID:[/green] {t.id}")
 
+@task.command(name="start")
+@click.argument("task_id")
+def task_start(task_id):
+    """Mark a task as in-progress (claim it)."""
+    t = Task.get(task_id)
+    if not t:
+        console.print(f"[red]Error:[/red] Task '{task_id}' not found.")
+        return
+    if t.status == 'in-progress':
+        console.print(f"[yellow]Task '{task_id}' is already in-progress.[/yellow]")
+        return
+    t.update(status='in-progress')
+    console.print(f"[green]Task '{task_id}' marked as in-progress.[/green]")
+
 @task.command(name="list")
 @click.option("--status", help="Filter by status")
 def task_list(status):
@@ -167,6 +181,10 @@ def task_list(status):
     
     console.print(table)
 
+VALID_TASK_FIELDS = {'title', 'status', 'priority', 'description', 'tags', 'acceptance', 'phase', 'evidence'}
+VALID_TASK_STATUSES = {'todo', 'in-progress', 'done', 'blocked', 'cancelled'}
+VALID_TASK_PRIORITIES = {'low', 'medium', 'high', 'critical'}
+
 @task.command(name="update")
 @click.argument("task_id")
 @click.option("--field", help="Field to update (title, status, priority, description, tags, acceptance, phase, evidence)")
@@ -181,7 +199,19 @@ def task_update(task_id, field, value):
     if not field or not value:
         console.print("[yellow]Please provide both --field and --value.[/yellow]")
         return
-    
+
+    if field not in VALID_TASK_FIELDS:
+        console.print(f"[red]Error:[/red] Unknown field '{field}'. Valid fields: {', '.join(sorted(VALID_TASK_FIELDS))}")
+        return
+
+    if field == 'status' and value not in VALID_TASK_STATUSES:
+        console.print(f"[red]Error:[/red] Invalid status '{value}'. Valid: {', '.join(sorted(VALID_TASK_STATUSES))}")
+        return
+
+    if field == 'priority' and value not in VALID_TASK_PRIORITIES:
+        console.print(f"[red]Error:[/red] Invalid priority '{value}'. Valid: {', '.join(sorted(VALID_TASK_PRIORITIES))}")
+        return
+
     # Soft warning on terminal → active status transition
     terminal_statuses = {'done', 'cancelled'}
     if field == 'status' and t.status in terminal_statuses and value not in terminal_statuses:
@@ -272,8 +302,8 @@ def memory():
 
 @memory.command(name="add")
 @click.argument("title")
-@click.option("--content", prompt=True, help="Memory content")
-@click.option("--type", default="note", help="Memory type (note, lesson, decision, snippet)")
+@click.option("--content", required=True, help="Memory content (required)")
+@click.option("--type", default="note", type=click.Choice(['note', 'lesson', 'decision', 'constraint', 'snippet']), help="Memory type")
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--always-include", is_flag=True, help="Always include in context")
 def memory_add(title, content, type, tags, always_include):
@@ -349,6 +379,9 @@ def memory_get(memory_id):
     console.print(f"[cyan]Always Include:[/cyan] {m.always_include}")
     console.print(f"[cyan]Content:[/cyan]\n{m.content}")
 
+VALID_MEMORY_FIELDS = {'title', 'content', 'type', 'tags', 'always_include'}
+VALID_MEMORY_TYPES = {'note', 'lesson', 'decision', 'constraint', 'snippet'}
+
 @memory.command(name="update")
 @click.argument("memory_id")
 @click.option("--field", help="Field to update (title, content, type, tags, always_include)")
@@ -363,7 +396,15 @@ def memory_update(memory_id, field, value):
     if not field or value is None:
         console.print("[yellow]Please provide both --field and --value.[/yellow]")
         return
-    
+
+    if field not in VALID_MEMORY_FIELDS:
+        console.print(f"[red]Error:[/red] Unknown field '{field}'. Valid fields: {', '.join(sorted(VALID_MEMORY_FIELDS))}")
+        return
+
+    if field == 'type' and value not in VALID_MEMORY_TYPES:
+        console.print(f"[red]Error:[/red] Invalid type '{value}'. Valid: {', '.join(sorted(VALID_MEMORY_TYPES))}")
+        return
+
     if field == 'tags':
         value = value.split(",")
     elif field == 'always_include':
@@ -410,7 +451,7 @@ def session_start(goal):
     console.print(f"[green]Session started with ID:[/green] {s.id}")
 
 @session.command(name="close")
-@click.option("--summary", prompt="Session summary", help="What did you accomplish?")
+@click.option("--summary", required=True, help="What did you accomplish? (required)")
 @click.option("--next-steps", help="What are the next steps?")
 def session_close(summary, next_steps):
     """Close the active work session. If none exists, auto-creates one."""

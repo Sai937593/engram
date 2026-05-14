@@ -133,6 +133,9 @@ def init_db(db_path=None):
     # Migration: rename 'backlog' status to 'todo' (one-time, idempotent)
     cursor.execute("UPDATE tasks SET status = 'todo' WHERE status = 'backlog'")
 
+    # Migration: normalise 'completed' → 'done' (legacy status, not in current enum)
+    cursor.execute("UPDATE tasks SET status = 'done' WHERE status = 'completed'")
+
     # Migration: add updated_at to sessions if missing (for existing DBs)
     try:
         cursor.execute("ALTER TABLE sessions ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))")
