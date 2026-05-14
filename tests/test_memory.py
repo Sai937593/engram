@@ -1,5 +1,5 @@
 """Tests for Memory model including FTS5 search."""
-import pytest
+
 from engram.models.memory import Memory
 
 
@@ -48,8 +48,12 @@ def test_list_by_project(project):
 
 
 def test_list_always_include(project):
-    Memory.create(project_id=project.id, type="constraint", title="Always", content="x", always_include=True)
-    Memory.create(project_id=project.id, type="note", title="Not always", content="y", always_include=False)
+    Memory.create(
+        project_id=project.id, type="constraint", title="Always", content="x", always_include=True
+    )
+    Memory.create(
+        project_id=project.id, type="note", title="Not always", content="y", always_include=False
+    )
     results = Memory.list_always_include(project.id)
     assert len(results) == 1
     assert results[0].title == "Always"
@@ -79,8 +83,18 @@ def test_delete_memory(memory):
 
 
 def test_fts_search(project):
-    Memory.create(project_id=project.id, type="lesson", title="WAL mode", content="WAL mode needed for concurrent reads in SQLite.")
-    Memory.create(project_id=project.id, type="note", title="Unrelated", content="Something completely different.")
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="WAL mode",
+        content="WAL mode needed for concurrent reads in SQLite.",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Unrelated",
+        content="Something completely different.",
+    )
     results = Memory.search("WAL concurrent")
     titles = [m.title for m in results]
     assert "WAL mode" in titles

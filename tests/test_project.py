@@ -1,4 +1,5 @@
 """Tests for Project model CRUD operations."""
+
 from engram.models.project import Project
 
 
@@ -24,6 +25,7 @@ def test_get_nonexistent_project(tmp_db):
 
 def test_find_by_repo_path(tmp_db):
     import os
+
     repo_path = os.path.abspath("/tmp/myrepo")
     Project.create("path-proj", "Path Project", repo_paths=[repo_path])
     p = Project.find_by_repo_path(repo_path)
@@ -54,6 +56,7 @@ def test_update_project(project):
 
 def test_add_repo_path(project):
     import os
+
     new_path = os.path.abspath("/tmp/another-repo")
     project.add_repo_path(new_path)
     refreshed = Project.get(project.id)

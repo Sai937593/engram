@@ -1,8 +1,9 @@
 """Tests for context generation (startup and task context)."""
+
 from engram.context import get_startup_context, get_task_context
-from engram.models.task import Task
 from engram.models.memory import Memory
 from engram.models.session import Session
+from engram.models.task import Task
 
 
 def test_startup_context_contains_project_name(project):

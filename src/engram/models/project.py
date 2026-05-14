@@ -1,9 +1,11 @@
 import json
 import os
+
 from engram.db import get_db_connection
 
+
 class Project:
-    def __init__(self, id, name, summary=None, status='active', repo_paths=None):
+    def __init__(self, id, name, summary=None, status="active", repo_paths=None):
         self.id = id
         self.name = name
         self.summary = summary
@@ -16,11 +18,12 @@ class Project:
         repo_paths_json = json.dumps(repo_paths or [])
         conn.execute(
             "INSERT INTO projects (id, name, summary, repo_paths) VALUES (?, ?, ?, ?)",
-            (id, name, summary, repo_paths_json)
+            (id, name, summary, repo_paths_json),
         )
         conn.commit()
         conn.close()
         return cls(id, name, summary, repo_paths=repo_paths)
+
     @classmethod
     def get(cls, id):
         conn = get_db_connection()
@@ -28,11 +31,7 @@ class Project:
         conn.close()
         if row:
             return cls(
-                row['id'], 
-                row['name'], 
-                row['summary'], 
-                row['status'], 
-                json.loads(row['repo_paths'])
+                row["id"], row["name"], row["summary"], row["status"], json.loads(row["repo_paths"])
             )
         return None
 
@@ -42,17 +41,11 @@ class Project:
         conn = get_db_connection()
         rows = conn.execute("SELECT * FROM projects").fetchall()
         conn.close()
-        
+
         for row in rows:
-            paths = json.loads(row['repo_paths'])
+            paths = json.loads(row["repo_paths"])
             if path in paths:
-                return cls(
-                    row['id'], 
-                    row['name'], 
-                    row['summary'], 
-                    row['status'], 
-                    paths
-                )
+                return cls(row["id"], row["name"], row["summary"], row["status"], paths)
         return None
 
     @classmethod
@@ -62,12 +55,9 @@ class Project:
         conn.close()
         return [
             cls(
-                row['id'], 
-                row['name'], 
-                row['summary'], 
-                row['status'], 
-                json.loads(row['repo_paths'])
-            ) for row in rows
+                row["id"], row["name"], row["summary"], row["status"], json.loads(row["repo_paths"])
+            )
+            for row in rows
         ]
 
     def update(self, name=None, summary=None, status=None):
@@ -85,13 +75,13 @@ class Project:
             updates.append("status = ?")
             params.append(status)
             self.status = status
-        
+
         if not updates:
             return
 
         updates.append("updated_at = datetime('now')")
         params.append(self.id)
-        
+
         query = f"UPDATE projects SET {', '.join(updates)} WHERE id = ?"
         conn = get_db_connection()
         conn.execute(query, params)
@@ -105,7 +95,7 @@ class Project:
             conn = get_db_connection()
             conn.execute(
                 "UPDATE projects SET repo_paths = ? WHERE id = ?",
-                (json.dumps(self.repo_paths), self.id)
+                (json.dumps(self.repo_paths), self.id),
             )
             conn.commit()
             conn.close()

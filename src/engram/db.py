@@ -1,20 +1,20 @@
 import sqlite3
-import os
-import sys
 import warnings
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path.home() / ".engram" / "memory.db"
 
+
 def get_db_connection(db_path=None):
     if db_path is None:
         db_path = DEFAULT_DB_PATH
-    
+
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
+
 
 def init_db(db_path=None):
     conn = get_db_connection(db_path)
@@ -109,7 +109,7 @@ def init_db(db_path=None):
             content_rowid='rowid'
         )
         """)
-        
+
         # Triggers to keep FTS5 in sync
         cursor.execute("""
         CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
@@ -128,7 +128,11 @@ def init_db(db_path=None):
         END;
         """)
     except sqlite3.OperationalError as e:
-        warnings.warn(f"[engram] FTS5 search is unavailable: {e}. Memory search will not work.", RuntimeWarning)
+        warnings.warn(
+            f"[engram] FTS5 search is unavailable: {e}. Memory search will not work.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     # Migration: rename 'backlog' status to 'todo' (one-time, idempotent)
     cursor.execute("UPDATE tasks SET status = 'todo' WHERE status = 'backlog'")

@@ -1,5 +1,5 @@
 """Tests for Task model including status lifecycle and priority ordering."""
-import pytest
+
 from engram.models.task import Task
 
 
@@ -77,17 +77,19 @@ def test_db_migration_completed_to_done(tmp_db):
     """Verify the completed → done migration runs correctly."""
     from engram.db import get_db_connection
     from engram.models.project import Project
+
     p = Project.create("mig-proj", "Mig Project", repo_paths=["/tmp/mig"])
     # Manually insert a task with legacy 'completed' status
     conn = get_db_connection(tmp_db)
     conn.execute(
         "INSERT INTO tasks (id, project_id, title, status) VALUES ('t-legacy', ?, 'Legacy', 'completed')",
-        (p.id,)
+        (p.id,),
     )
     conn.commit()
     conn.close()
     # Re-run init_db to trigger the migration
     from engram.db import init_db
+
     init_db(tmp_db)
     t = Task.get("t-legacy")
     assert t.status == "done"
