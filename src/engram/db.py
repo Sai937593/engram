@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import sys
+import warnings
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path.home() / ".engram" / "memory.db"
@@ -78,7 +80,8 @@ def init_db(db_path=None):
         next_steps    TEXT,
         next_task_id  TEXT,
         started_at    TEXT DEFAULT (datetime('now')),
-        closed_at     TEXT
+        closed_at     TEXT,
+        updated_at    TEXT DEFAULT (datetime('now'))
     )
     """)
 
@@ -123,9 +126,17 @@ def init_db(db_path=None):
           INSERT INTO memories_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
         END;
         """)
+    except sqlite3.OperationalError as e:
+        warnings.warn(f"[engram] FTS5 search is unavailable: {e}. Memory search will not work.", RuntimeWarning)
+
+    # Migration: rename 'backlog' status to 'todo' (one-time, idempotent)
+    cursor.execute("UPDATE tasks SET status = 'todo' WHERE status = 'backlog'")
+
+    # Migration: add updated_at to sessions if missing (for existing DBs)
+    try:
+        cursor.execute("ALTER TABLE sessions ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))")
     except sqlite3.OperationalError:
-        # Fallback if FTS5 is not available
-        pass
+        pass  # Column already exists
 
     conn.commit()
     conn.close()

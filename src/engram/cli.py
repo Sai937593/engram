@@ -56,7 +56,7 @@ def get_current_project():
     if not project:
         console.print("[red]Error:[/red] Current directory is not bound to any Engram project.")
         console.print("Run 'engram init' to register this repository.")
-        exit(1)
+        raise SystemExit(1)
     return project
 
 @project.command(name="get")
@@ -114,8 +114,8 @@ def task():
 @task.command(name="add")
 @click.argument("title")
 @click.option("--description", help="Task description")
-@click.option("--priority", type=click.Choice(['low', 'medium', 'high']), default='medium')
-@click.option("--status", type=click.Choice(['backlog', 'todo', 'in-progress', 'done', 'blocked', 'cancelled']), default='backlog')
+@click.option("--priority", type=click.Choice(['low', 'medium', 'high', 'critical']), default='medium')
+@click.option("--status", type=click.Choice(['todo', 'in-progress', 'done', 'blocked', 'cancelled']), default='todo')
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--acceptance", help="Acceptance criteria")
 @click.option("--phase", help="Project phase")
@@ -182,6 +182,11 @@ def task_update(task_id, field, value):
         console.print("[yellow]Please provide both --field and --value.[/yellow]")
         return
     
+    # Soft warning on terminal → active status transition
+    terminal_statuses = {'done', 'cancelled'}
+    if field == 'status' and t.status in terminal_statuses and value not in terminal_statuses:
+        console.print(f"[yellow]⚠ Warning: transitioning '{task_id}' from '{t.status}' → '{value}'. Continuing...[/yellow]")
+
     if field == 'tags':
         value = value.split(",")
     
@@ -204,8 +209,59 @@ def task_get(task_id):
     console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
     console.print(f"[cyan]Description:[/cyan] {t.description or 'N/A'}")
     console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{t.acceptance or 'N/A'}")
-    console.print(f"[cyan]Evidence:[/cyan]\n{t.evidence or 'N/A'}")
+    console.print(f"[cyan]Evidence / Notes:[/cyan]\n{t.evidence or 'N/A'}")
     console.print(f"[cyan]Tags:[/cyan] {', '.join(t.tags)}")
+
+@task.command(name="done")
+@click.argument("task_id")
+@click.option("--evidence", help="Evidence of completion (tests, PR, etc.)")
+def task_done(task_id, evidence):
+    """Mark a task as done (optionally record evidence)."""
+    t = Task.get(task_id)
+    if not t:
+        console.print(f"[red]Error:[/red] Task '{task_id}' not found.")
+        return
+    
+    updates = {'status': 'done'}
+    if evidence:
+        updates['evidence'] = evidence
+    t.update(**updates)
+    console.print(f"[green]Task '{task_id}' marked as done.[/green]")
+
+@task.command(name="note")
+@click.argument("task_id")
+@click.argument("note")
+def task_note(task_id, note):
+    """Append a timestamped note to a task's evidence log."""
+    from datetime import datetime
+    t = Task.get(task_id)
+    if not t:
+        console.print(f"[red]Error:[/red] Task '{task_id}' not found.")
+        return
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    new_entry = f"[{timestamp}] {note}"
+    existing = t.evidence or ""
+    updated = (existing + "\n" + new_entry).strip()
+    t.update(evidence=updated)
+    console.print(f"[green]Note appended to '{task_id}'.[/green]")
+
+@task.command(name="next")
+def task_next():
+    """Show the next highest-priority todo task."""
+    p = get_current_project()
+    t = Task.get_next(p.id)
+    if not t:
+        console.print("[green]No todo tasks found. All clear![/green]")
+        return
+    
+    console.print(f"[cyan]ID:[/cyan] {t.id}")
+    console.print(f"[cyan]Title:[/cyan] {t.title}")
+    console.print(f"[cyan]Status:[/cyan] {t.status}")
+    console.print(f"[cyan]Priority:[/cyan] {t.priority}")
+    console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
+    console.print(f"[cyan]Description:[/cyan] {t.description or 'N/A'}")
+    console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{t.acceptance or 'N/A'}")
 
 # --- Memory Commands ---
 
@@ -357,24 +413,24 @@ def session_start(goal):
 @click.option("--summary", prompt="Session summary", help="What did you accomplish?")
 @click.option("--next-steps", help="What are the next steps?")
 def session_close(summary, next_steps):
-    """Close the active work session."""
+    """Close the active work session. If none exists, auto-creates one."""
     p = get_current_project()
     s = Session.get_active(p.id)
     if not s:
-        console.print("[red]Error:[/red] No active session found for this project.")
-        return
+        # Auto-create a session so session close is always safe to call
+        s = Session.create(project_id=p.id, goal="(auto)")
     
     s.close(summary=summary, next_steps=next_steps)
     console.print(f"[green]Session '{s.id}' closed.[/green]")
 
 @session.command(name="list")
-@click.option("--all", is_flag=True, help="List all sessions (including closed)")
-def session_list(all):
-    """List sessions for the current project."""
+@click.option("--active", is_flag=True, help="Show only active (open) sessions")
+def session_list(active):
+    """List sessions for the current project (all by default)."""
     p = get_current_project()
     sessions = Session.list_by_project(p.id)
     
-    if not all:
+    if active:
         sessions = [s for s in sessions if s.status == 'open']
         
     if not sessions:
@@ -452,59 +508,44 @@ def export_handoff(output):
 def guide(section):
     """Show the User Manual. Optional: provide a section (concepts, commands, workflow, troubleshooting)."""
     from rich.markdown import Markdown
+    from importlib import resources
     import re
     
-    # Path to manual relative to this file's project root
-    # We'll try to find it in the current project's docs folder
     try:
-        p = get_current_project()
-        # Find the repo path that contains docs/USER_MANUAL.md
-        manual_path = None
-        for path in p.repo_paths:
-            candidate = os.path.join(path, "docs", "USER_MANUAL.md")
-            if os.path.exists(candidate):
-                manual_path = candidate
-                break
-        
-        if not manual_path:
-            console.print("[yellow]User Manual not found in project docs.[/yellow]")
-            return
-
-        with open(manual_path, "r") as f:
-            content = f.read()
-
-        if section:
-            section = section.lower()
-            # Mapping common names to headers
-            mapping = {
-                "concepts": "## 1. Core Concepts",
-                "commands": "## 2. Command Reference",
-                "workflow": "## 3. Recommended Agent Workflow",
-                "troubleshooting": "## 4. Troubleshooting"
-            }
-            
-            header = mapping.get(section)
-            if header:
-                # Find the section by finding the header and then the next '---' or next '## ' or end of string
-                parts = re.split(r'(\n##\s.*?\n|\n---)', content)
-                found = False
-                section_content = ""
-                for i in range(len(parts)):
-                    if header in parts[i]:
-                        found = True
-                        section_content = parts[i] + (parts[i+1] if i+1 < len(parts) else "")
-                        break
-                
-                if found:
-                    content = f"# Engram Guide: {section.capitalize()}\n\n" + section_content
-                else:
-                    console.print(f"[yellow]Section '{section}' not found in file.[/yellow]")
-                    return
-
-        console.print(Markdown(content))
-        
+        # Load from the installed package resource — works regardless of cwd
+        pkg = resources.files("engram")
+        content = (pkg / "USER_MANUAL.md").read_text(encoding="utf-8")
     except Exception as e:
         console.print(f"[red]Error reading manual:[/red] {str(e)}")
+        return
+
+    if section:
+        section = section.lower()
+        mapping = {
+            "concepts": "## 1. Core Concepts",
+            "commands": "## 2. Command Reference",
+            "workflow": "## 3. Recommended Agent Workflow",
+            "troubleshooting": "## 4. Troubleshooting"
+        }
+        
+        header = mapping.get(section)
+        if header:
+            parts = re.split(r'(\n##\s.*?\n|\n---)', content)
+            found = False
+            section_content = ""
+            for i in range(len(parts)):
+                if header in parts[i]:
+                    found = True
+                    section_content = parts[i] + (parts[i+1] if i+1 < len(parts) else "")
+                    break
+            
+            if found:
+                content = f"# Engram Guide: {section.capitalize()}\n\n" + section_content
+            else:
+                console.print(f"[yellow]Section '{section}' not found.[/yellow]")
+                return
+
+    console.print(Markdown(content))
 
 def main():
     cli()

@@ -6,6 +6,7 @@ from engram.models.task import Task
 def get_startup_context(project_id):
     project = Project.get(project_id)
     active_session = Session.get_active(project_id)
+    last_closed = Session.get_latest_closed(project_id)
     always_include = Memory.list_always_include(project_id)
     
     context = []
@@ -13,6 +14,13 @@ def get_startup_context(project_id):
     if project.summary:
         context.append(f"Summary: {project.summary}")
     
+    if last_closed:
+        context.append(f"\n## LAST CHECKPOINT ({last_closed.id}, {last_closed.closed_at[:10] if last_closed.closed_at else 'unknown'})")
+        if last_closed.summary:
+            context.append(f"Done: {last_closed.summary}")
+        if last_closed.next_steps:
+            context.append(f"Next: {last_closed.next_steps}")
+
     if active_session:
         context.append(f"\n## ACTIVE SESSION: {active_session.id}")
         context.append(f"Goal: {active_session.goal}")
@@ -23,13 +31,17 @@ def get_startup_context(project_id):
             context.append(f"### {m.title} ({m.type})")
             context.append(m.content)
             
-    # Recent tasks (last 5)
+    # Active tasks (todo + in-progress)
     tasks = Task.list_by_project(project_id)
     todo_tasks = [t for t in tasks if t.status in ['todo', 'in-progress']]
     if todo_tasks:
         context.append("\n## ACTIVE TASKS")
         for t in todo_tasks[:5]:
             context.append(f"- [{t.status}] {t.title} ({t.id})")
+
+    pending_count = len([t for t in tasks if t.status not in ['done', 'cancelled']])
+    context.append(f"\nPending tasks: {pending_count}")
+    context.append("Tip: use 'engram task get <id>' for full detail, 'engram memory search <topic>' to find context")
             
     return "\n".join(context)
 
@@ -100,6 +112,7 @@ def get_snapshot_context(project_id):
 def get_handoff_context(project_id):
     project = Project.get(project_id)
     active_session = Session.get_active(project_id)
+    last_closed = Session.get_latest_closed(project_id)
     tasks = Task.list_by_project(project_id)
     # Get important memories (lessons, decisions, always_include)
     memories = Memory.list_by_project(project_id)
@@ -128,8 +141,9 @@ def get_handoff_context(project_id):
         context.append(m.content)
         
     context.append("\n## NEXT STEPS")
-    if active_session and active_session.next_steps:
-        context.append(active_session.next_steps)
+    # Use the last closed session's next_steps — the active session never has these populated
+    if last_closed and last_closed.next_steps:
+        context.append(last_closed.next_steps)
     else:
         context.append("Refer to active tasks above.")
         

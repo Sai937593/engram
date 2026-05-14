@@ -3,7 +3,7 @@ from engram.db import get_db_connection
 from engram.models.audit import AuditLog
 
 class Task:
-    def __init__(self, id, project_id, title, description=None, status='backlog', 
+    def __init__(self, id, project_id, title, description=None, status='todo', 
                  priority='medium', phase=None, acceptance=None, evidence=None, tags=None):
         self.id = id
         self.project_id = project_id
@@ -17,7 +17,7 @@ class Task:
         self.tags = tags or []
 
     @classmethod
-    def create(cls, project_id, title, description=None, status='backlog', priority='medium', 
+    def create(cls, project_id, title, description=None, status='todo', priority='medium', 
                phase=None, acceptance=None, tags=None, id=None):
         if not id:
             id = uuid.uuid4().hex[:8]
@@ -48,6 +48,20 @@ class Task:
     def get(cls, id):
         conn = get_db_connection()
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
+        conn.close()
+        if row:
+            return cls.from_row(row)
+        return None
+
+    @classmethod
+    def get_next(cls, project_id):
+        """Return the highest-priority todo task (critical>high>medium>low, then oldest first)."""
+        priority_order = "CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
+        conn = get_db_connection()
+        row = conn.execute(
+            f"SELECT * FROM tasks WHERE project_id = ? AND status = 'todo' ORDER BY {priority_order}, created_at ASC LIMIT 1",
+            (project_id,)
+        ).fetchone()
         conn.close()
         if row:
             return cls.from_row(row)

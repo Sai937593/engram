@@ -65,6 +65,19 @@ class Session:
         return [cls.from_row(row) for row in rows]
 
     @classmethod
+    def get_latest_closed(cls, project_id):
+        """Return the most recently closed session for a project."""
+        conn = get_db_connection()
+        row = conn.execute(
+            "SELECT * FROM sessions WHERE project_id = ? AND status = 'closed' ORDER BY closed_at DESC LIMIT 1",
+            (project_id,)
+        ).fetchone()
+        conn.close()
+        if row:
+            return cls.from_row(row)
+        return None
+
+    @classmethod
     def from_row(cls, row):
         return cls(
             row['id'],
@@ -113,14 +126,15 @@ class Session:
                 updates.append(f"{key} = ?")
                 params.append(value)
                 setattr(self, key, value)
+                AuditLog.log('sessions', self.id, 'update', field=key)
         
         if not updates:
             return
 
+        updates.append("updated_at = datetime('now')")
         params.append(self.id)
         query = f"UPDATE sessions SET {', '.join(updates)} WHERE id = ?"
         conn = get_db_connection()
         conn.execute(query, params)
         conn.commit()
         conn.close()
-        AuditLog.log('sessions', self.id, 'update')
