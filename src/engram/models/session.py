@@ -126,7 +126,6 @@ class Session:
                 next_steps = ?, next_task_id = ?, closed_at = ?
             WHERE id = ?
             """,
-
             (
                 self.summary,
                 self.changed_files,
