@@ -150,6 +150,10 @@ h2 {
 .status-chip,
 .pill,
 .tag-list span {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
   border: 1px solid var(--line);
   background: var(--panel-strong);
   padding: 4px 8px;
