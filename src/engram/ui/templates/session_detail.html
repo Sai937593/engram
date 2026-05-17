@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set title = "Engram UI - Session " ~ session.id %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <p class="eyebrow">Session · {{ session.id }}</p>
+    <h1>{{ session.goal or session.summary or session.id }}</h1>
+  </div>
+  <span class="pill {{ session.status }}">{{ session.status }}</span>
+</header>
+
+<section class="panel detail-main">
+  <dl class="metadata">
+    <div><dt>Started</dt><dd>{{ session.started_at }}</dd></div>
+    <div><dt>Closed</dt><dd>{{ session.closed_at or "N/A" }}</dd></div>
+    <div><dt>Next Task</dt><dd>{{ session.next_task_id or "N/A" }}</dd></div>
+    <div><dt>Updated</dt><dd>{{ session.updated_at }}</dd></div>
+  </dl>
+  <h2>Summary</h2>
+  <pre>{{ session.summary or "N/A" }}</pre>
+  <h2>Changed Files</h2>
+  <pre>{{ session.changed_files or "N/A" }}</pre>
+  <h2>Checks Run</h2>
+  <pre>{{ session.checks_run or "N/A" }}</pre>
+  <h2>Next Steps</h2>
+  <pre>{{ session.next_steps or "N/A" }}</pre>
+</section>
+{% endblock %}

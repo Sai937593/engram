@@ -47,6 +47,7 @@ from engram.cli import memory_cmds as _memory_cmds  # noqa: E402, F401
 from engram.cli import project_cmds as _project_cmds  # noqa: E402, F401
 from engram.cli import session_cmds as _session_cmds  # noqa: E402, F401
 from engram.cli import task_cmds as _task_cmds  # noqa: E402, F401
+from engram.cli import ui_cmds as _ui_cmds  # noqa: E402, F401
 from engram.cli import utils_cmds as _utils_cmds  # noqa: E402, F401
 
 

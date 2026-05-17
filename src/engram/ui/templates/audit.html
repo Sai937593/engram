@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% set title = "Engram UI - Audit" %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <p class="eyebrow">Audit</p>
+    <h1>Recent Changes</h1>
+  </div>
+</header>
+
+<section class="panel">
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Table</th>
+        <th>Target</th>
+        <th>Operation</th>
+        <th>Field</th>
+        <th>Old</th>
+        <th>New</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in audit_events %}
+      <tr>
+        <td>{{ event.timestamp }}</td>
+        <td>{{ event.target_table }}</td>
+        <td>{{ event.target_id }}</td>
+        <td>{{ event.operation }}</td>
+        <td>{{ event.field or "" }}</td>
+        <td>{{ event.old_value or "" }}</td>
+        <td>{{ event.new_value or "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="empty">No audit events recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

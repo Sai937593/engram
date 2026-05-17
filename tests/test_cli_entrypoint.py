@@ -29,5 +29,15 @@ def test_console_entrypoint_command_surface_loads():
         "project",
         "session",
         "task",
+        "ui",
     ]:
         assert command in result.output
+
+
+def test_ui_command_help_loads():
+    """The read-only UI command should be available without starting a server."""
+    result = CliRunner().invoke(cli, ["ui", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--host" in result.output
+    assert "--port" in result.output
