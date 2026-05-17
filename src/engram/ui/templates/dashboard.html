@@ -6,6 +6,7 @@
     <p class="eyebrow">Project</p>
     <h1>{{ project.name }}</h1>
     <p class="summary">{{ project.summary or "No project summary recorded." }}</p>
+    <p class="summary"><strong>ID:</strong> {{ project.id }} · <strong>Repo:</strong> {{ ui_target.repo_path }}</p>
   </div>
   <div class="status-chip">{{ project.status }}</div>
 </header>

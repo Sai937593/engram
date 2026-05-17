@@ -219,6 +219,15 @@ Show this manual from any directory. Optional sections: `concepts`, `commands`, 
 
 ---
 
+### Local UI
+
+```
+engram ui [--host 127.0.0.1] [--port 8765]
+```
+Launch the read-only local inspection UI for the project resolved from the directory where the command is run. If an Engram UI server is already running on the same host and port, the command updates that running UI to the latest launched project instead of starting a second server.
+
+---
+
 ## 3. Recommended Agent Workflow
 
 ### Step 1: Startup

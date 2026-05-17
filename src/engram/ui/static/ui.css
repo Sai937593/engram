@@ -60,6 +60,12 @@ a {
   font-weight: 700;
 }
 
+.brand-meta {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
 .brand-subtitle,
 .summary,
 small,
