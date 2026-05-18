@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pre-Commit Checklist"
+  short_description: "Pre-commit validation and commit gate"
+  default_prompt: "Use $pre-commit-checklist to verify this change is ready to commit."

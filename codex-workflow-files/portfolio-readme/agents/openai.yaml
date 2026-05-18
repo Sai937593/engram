@@ -1,0 +1,4 @@
+interface:
+  display_name: "Portfolio README"
+  short_description: "Recruiter-facing project README guidance"
+  default_prompt: "Use $portfolio-readme to write or tighten this project README."
