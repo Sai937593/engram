@@ -268,3 +268,249 @@ def test_task_context_includes_project_knowledge(tmp_db, project, task):
     assert "PROJECT KNOWLEDGE" in ctx
     assert "No secrets" in ctx
     assert "Use WAL" in ctx
+
+
+# ---------------------------------------------------------------------------
+# task depends_on tests
+# ---------------------------------------------------------------------------
+
+
+def test_task_add_depends_on_exact_and_prefix(tmp_db, project, monkeypatch):
+    """task add supports --depends-on / -d with exact ID and partial prefix."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    # 1. Create a dependency task
+    t_dep = Task.create(project_id=project.id, title="Dependency task")
+
+    # 2. Add task depending on exact ID
+    res = runner.invoke(cli, ["task", "add", "Task A", "--depends-on", t_dep.id])
+    assert res.exit_code == 0, res.output
+    # Parse the created ID from the output
+    match = re.search(r"Task created with ID:\s*([a-f0-9]{8})", res.output)
+    assert match is not None
+    t_a_id = match.group(1)
+
+    t_a = Task.get(t_a_id)
+    assert t_a.depends_on == t_dep.id
+
+    # 3. Add task depending on prefix of t_dep.id
+    prefix = t_dep.id[:4]
+    res2 = runner.invoke(cli, ["task", "add", "Task B", "-d", prefix])
+    assert res2.exit_code == 0, res2.output
+    match2 = re.search(r"Task created with ID:\s*([a-f0-9]{8})", res2.output)
+    assert match2 is not None
+    t_b_id = match2.group(1)
+
+    t_b = Task.get(t_b_id)
+    assert t_b.depends_on == t_dep.id
+
+
+def test_task_add_depends_on_errors(tmp_db, project, monkeypatch):
+    """task add handles non-existent and ambiguous depends-on values."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    # 1. Non-existent dependency
+    res = runner.invoke(cli, ["task", "add", "Task A", "-d", "nonexist"])
+    assert res.exit_code != 0
+    assert "Error: Task dependency 'nonexist' not found" in res.output
+
+    # 2. Ambiguous dependency (prefix matching multiple tasks)
+    # We force create two tasks starting with similar prefixes if possible, or just mock/insert them
+    # Since they have random IDs, let's create a few and find two that share a prefix, or manually insert them.
+    from engram.db import get_db_connection
+
+    conn = get_db_connection(tmp_db)
+    conn.execute(
+        "INSERT INTO tasks (id, project_id, title) VALUES ('aaaa1111', ?, 'Task 1')",
+        (project.id,),
+    )
+    conn.execute(
+        "INSERT INTO tasks (id, project_id, title) VALUES ('aaaa2222', ?, 'Task 2')",
+        (project.id,),
+    )
+    conn.commit()
+    conn.close()
+
+    res2 = runner.invoke(cli, ["task", "add", "Task B", "-d", "aaaa"])
+    assert res2.exit_code != 0
+    assert "Error: Ambiguous task dependency 'aaaa'" in res2.output
+
+
+def test_task_update_depends_on(tmp_db, project, monkeypatch):
+    """task update supports updating depends_on, prevents self-dependency, and allows clearing it."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    # Create two tasks
+    t1 = Task.create(project_id=project.id, title="Task 1")
+    t2 = Task.create(project_id=project.id, title="Task 2")
+
+    # Update t1 to depend on t2 prefix
+    res = runner.invoke(
+        cli, ["task", "update", t1.id, "--field", "depends_on", "--value", t2.id[:4]]
+    )
+    assert res.exit_code == 0, res.output
+    t1_refreshed = Task.get(t1.id)
+    assert t1_refreshed.depends_on == t2.id
+
+    # Try to make t1 depend on itself
+    res2 = runner.invoke(
+        cli, ["task", "update", t1.id, "--field", "depends_on", "--value", t1.id[:4]]
+    )
+    assert res2.exit_code != 0
+    assert "Error: A task cannot depend on itself" in res2.output
+
+    # Clear dependency
+    res3 = runner.invoke(cli, ["task", "update", t1.id, "--field", "depends_on", "--value", "none"])
+    assert res3.exit_code == 0, res3.output
+    t1_cleared = Task.get(t1.id)
+    assert t1_cleared.depends_on is None
+
+
+def test_task_get_shows_depends_on(tmp_db, project, monkeypatch):
+    """task get displays Depends On information."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    t_dep = Task.create(project_id=project.id, title="Dep")
+    t = Task.create(project_id=project.id, title="Main", depends_on=t_dep.id)
+
+    res = runner.invoke(cli, ["task", "get", t.id])
+    assert res.exit_code == 0, res.output
+    assert f"Depends On: {t_dep.id}" in res.output
+
+    # Get task without dependency
+    res2 = runner.invoke(cli, ["task", "get", t_dep.id])
+    assert res2.exit_code == 0, res2.output
+    assert "Depends On: N/A" in res2.output
+
+
+def test_task_dependency_cycle_detection(tmp_db, project, monkeypatch):
+    """Circular dependencies are blocked and not written to SQLite."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    # 1. Create a chain: A depends_on B, B depends_on C.
+    t_c = Task.create(project_id=project.id, title="Task C")
+    t_b = Task.create(project_id=project.id, title="Task B", depends_on=t_c.id)
+    t_a = Task.create(project_id=project.id, title="Task A", depends_on=t_b.id)
+
+    # 2. Try to make C depend on A (creating cycle A -> B -> C -> A)
+    res = runner.invoke(cli, ["task", "update", t_c.id, "--field", "depends_on", "--value", t_a.id])
+    assert res.exit_code != 0
+    assert "Error: Circular dependency detected" in res.output
+
+    # Verify that the value was NOT updated in the database
+    t_c_refreshed = Task.get(t_c.id)
+    assert t_c_refreshed.depends_on is None
+
+
+# ---------------------------------------------------------------------------
+# task status propagation and dependency validation tests
+# ---------------------------------------------------------------------------
+
+
+def test_task_status_propagation_effective_status(tmp_db, project) -> None:
+    """get_effective_status correctly computes transitive statuses down the DAG."""
+    from engram.cli.task_cmds import get_effective_status
+
+    # 1. Non-dependent task gets its own status
+    t1 = Task.create(project_id=project.id, title="T1", status="todo")
+    assert get_effective_status(t1) == "todo"
+
+    t1.update(status="in-progress")
+    assert get_effective_status(t1) == "in-progress"
+
+    # 2. Task depending on unfinished task is blocked
+    t2 = Task.create(project_id=project.id, title="T2", status="todo", depends_on=t1.id)
+    assert get_effective_status(t2) == "blocked"
+
+    # 3. Transitive dependency propagation
+    t3 = Task.create(project_id=project.id, title="T3", status="todo", depends_on=t2.id)
+    assert get_effective_status(t3) == "blocked"
+
+    # 4. Dependency is cancelled -> downstream is cancelled
+    t1.update(status="cancelled")
+    assert get_effective_status(t2) == "cancelled"
+    assert get_effective_status(t3) == "cancelled"
+
+    # 5. Dependency is blocked -> downstream is blocked
+    t1.update(status="blocked")
+    assert get_effective_status(t2) == "blocked"
+    assert get_effective_status(t3) == "blocked"
+
+    # 6. Dependency is done -> downstream gets its own status
+    t1.update(status="done")
+    t2.update(status="done")
+    t3.update(status="todo")
+    assert get_effective_status(t3) == "todo"
+
+
+def test_task_start_blocked_by_dependency(tmp_db, project, monkeypatch) -> None:
+    """task start is blocked if any transitive dependency is not done."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    t1 = Task.create(project_id=project.id, title="Dep Task", status="todo")
+    t2 = Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
+
+    # Attempt to start sub task while dependency is todo
+    res = runner.invoke(cli, ["task", "start", t2.id])
+    assert "Error:" in res.output
+    assert "blocked by unfinished" in res.output
+    assert f"'{t1.id}'" in res.output
+    assert Task.get(t2.id).status == "todo"
+
+    # Set dependency to done
+    t1.update(status="done")
+
+    # Now sub task should start successfully
+    res2 = runner.invoke(cli, ["task", "start", t2.id])
+    assert res2.exit_code == 0
+    assert "marked as in-progress" in res2.output
+    assert Task.get(t2.id).status == "in-progress"
+
+
+def test_task_done_blocked_by_dependency(tmp_db, project, monkeypatch) -> None:
+    """task done is blocked if any transitive dependency is not done."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    t1 = Task.create(project_id=project.id, title="Dep Task", status="todo")
+    t2 = Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
+
+    # Attempt to complete sub task while dependency is todo
+    res = runner.invoke(cli, ["task", "done", t2.id])
+    assert "Error:" in res.output
+    assert "blocked by unfinished" in res.output
+    assert f"'{t1.id}'" in res.output
+    assert Task.get(t2.id).status == "todo"
+
+
+def test_task_list_shows_effective_status(tmp_db, project, monkeypatch) -> None:
+    """task list shows effective status and allows filtering by it."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    t1 = Task.create(project_id=project.id, title="Dep Task", status="todo")
+    Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
+
+    # Verify task list shows blocked (dep) for the downstream task
+    res = runner.invoke(cli, ["task", "list"])
+    assert res.exit_code == 0
+    assert "blocked (dep)" in res.output
+    assert "todo" in res.output  # for Dep Task
+
+    # Verify task list --status blocked shows Sub Task
+    res_blocked = runner.invoke(cli, ["task", "list", "--status", "blocked"])
+    assert res_blocked.exit_code == 0
+    assert "Sub Task" in res_blocked.output
+    assert "Dep Task" not in res_blocked.output  # Dep Task is 'todo', not effectively blocked
+
+
+def test_task_next_shows_implicit_blockers_count(tmp_db, project, monkeypatch) -> None:
+    """task next correctly counts and displays implicit blockers when all tasks are blocked."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    t1 = Task.create(project_id=project.id, title="Dep Task", status="blocked")
+    Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
+
+    # All tasks are effectively blocked (t1 is explicitly blocked, t2 is implicitly blocked)
+    res = runner.invoke(cli, ["task", "next"])
+    assert res.exit_code == 0
+    assert "All remaining tasks are blocked" in res.output
+    assert "2 blocked" in res.output

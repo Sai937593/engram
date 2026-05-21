@@ -3,6 +3,8 @@
 import re
 import subprocess
 
+import click
+
 import engram.cli as cli_root
 from engram.context import get_task_context
 from engram.models.task import Task
@@ -32,6 +34,24 @@ def git_checkout_phase_branch(phase: str) -> None:
         subprocess.run(["git", "checkout", "-b", branch_name], check=False)
 
 
+def is_working_tree_dirty() -> bool:
+    """Return True if there are uncommitted changes in the git repository."""
+    res = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+    if res.returncode != 0:
+        return False
+    return bool(res.stdout.strip())
+
+
+def get_current_branch() -> str:
+    """Return the name of the current active git branch."""
+    res = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True
+    )
+    if res.returncode != 0:
+        return ""
+    return res.stdout.strip()
+
+
 @cli_root.cli.command(name="start")
 def start():
     """Start the next task in the workflow."""
@@ -44,11 +64,7 @@ def start():
 
     if in_progress:
         t = in_progress[0]
-        cli_root.console.print(f"[yellow]Resuming in-progress task:[/yellow] {t.id}")
-    elif t:
-        t.update(status="in-progress")
-        cli_root.console.print(f"[green]Started task:[/green] {t.id}")
-    else:
+    elif not t:
         # No task available
         counts = Task.count_by_status(p.id)
         total = sum(counts.values())
@@ -74,6 +90,24 @@ def start():
             )
         return
 
+    # Check git status before branch checkout safely
+    if t.phase:
+        target_branch = f"feat/phase-{slugify(t.phase)}"
+        current_branch = get_current_branch()
+        if current_branch != target_branch and is_working_tree_dirty():
+            cli_root.console.print(
+                f"[red]Error:[/red] Git working tree is dirty, and starting this task requires checking out branch "
+                f"[cyan]{target_branch}[/cyan] (current branch is [cyan]{current_branch or 'unknown'}[/cyan])."
+            )
+            cli_root.console.print("Please commit or stash your changes before starting a task.")
+            raise SystemExit(1)
+
+    if in_progress:
+        cli_root.console.print(f"[yellow]Resuming in-progress task:[/yellow] {t.id}")
+    else:
+        t.update(status="in-progress")
+        cli_root.console.print(f"[green]Started task:[/green] {t.id}")
+
     # We have a task, check out phase branch
     if t.phase:
         git_checkout_phase_branch(t.phase)
@@ -87,7 +121,14 @@ def start():
 
 
 @cli_root.cli.command(name="finish")
-def finish():
+@click.option(
+    "-t",
+    "--type",
+    "commit_type",
+    default=None,
+    help="Conventional commit type (e.g. feat, fix, docs)",
+)
+def finish(commit_type):
     """Finish the active task (commit, push, and mark done)."""
     p = cli_root.get_current_project()
     tasks = Task.list_by_project(p.id)
@@ -98,12 +139,53 @@ def finish():
         return
 
     t = in_progress[0]
+
+    # Validate or resolve commit type
+    resolved_type = None
+    if commit_type:
+        resolved_type = commit_type.lower()
+        if resolved_type not in cli_root.CONVENTIONAL_COMMIT_TYPES:
+            cli_root.console.print(f"[red]Error:[/red] Invalid commit type '{commit_type}'.")
+            cli_root.console.print(
+                f"Must be one of: {', '.join(sorted(cli_root.CONVENTIONAL_COMMIT_TYPES))}"
+            )
+            raise SystemExit(1)
+    else:
+        # Auto-resolve from tags
+        tag_to_type = {
+            "bug": "fix",
+            "bugfix": "fix",
+            "fix": "fix",
+            "docs": "docs",
+            "documentation": "docs",
+            "chore": "chore",
+            "refactor": "refactor",
+            "test": "test",
+            "testing": "test",
+            "ci": "ci",
+            "style": "style",
+            "perf": "perf",
+            "feat": "feat",
+            "feature": "feat",
+        }
+        for tag in t.tags:
+            cleaned_tag = tag.strip().lower()
+            if cleaned_tag in cli_root.CONVENTIONAL_COMMIT_TYPES:
+                resolved_type = cleaned_tag
+                break
+            if cleaned_tag in tag_to_type:
+                resolved_type = tag_to_type[cleaned_tag]
+                break
+
+        if not resolved_type:
+            resolved_type = "feat"
+
     cli_root.console.print(f"Finishing task: {t.title} ({t.id})")
 
     # Git operations
     subprocess.run(["git", "add", "-A"], check=False)
 
-    commit_msg = f"feat({slugify(t.phase) or 'misc'}): {t.title} [{t.id}]"
+    commit_msg = f"{resolved_type}({slugify(t.phase) or 'misc'}): {t.title} [{t.id}]"
     commit_res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True)
 
     if commit_res.returncode != 0:
