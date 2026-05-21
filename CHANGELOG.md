@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(cli): implement --all/-a option for 'engram task list' and improve empty states with helpful guidance.
 - feat(cli): 'engram task list' by default only shows todo tasks.
 - feat(cli): display phase for each task in 'engram task list'.
 - feat(cli): checkout to a 'misc' branch during 'engram start' for tasks without a phase.

@@ -230,14 +230,49 @@ def task_start(task_id: str) -> None:
     default="todo",
     help="Filter by status (default: todo, use 'all' to show all tasks)",
 )
-def task_list(status: str) -> None:
+@click.option(
+    "--all",
+    "-a",
+    "show_all",
+    is_flag=True,
+    help="Show all tasks regardless of status (equivalent to --status all)",
+)
+def task_list(status: str, show_all: bool) -> None:
     """List tasks for the current project."""
     p = cli_root.get_current_project()
     tasks = Task.list_by_project(p.id)
+    if show_all:
+        status = "all"
     if status.lower() != "all":
         tasks = [t for t in tasks if get_effective_status(t) == status.lower()]
     if not tasks:
-        cli_root.console.print("No tasks found.")
+        # Check if the project has absolutely no tasks
+        all_tasks = Task.list_by_project(p.id)
+        if not all_tasks:
+            cli_root.console.print(
+                "[yellow]No tasks defined.[/yellow] The next phase has not been planned yet."
+            )
+            cli_root.console.print(
+                "Action: Ask the user what the next phase of work should be, then run:"
+            )
+            cli_root.console.print(
+                '  [cyan]engram task add "<task title>" --phase "Phase N" --priority high[/cyan]'
+            )
+        else:
+            # Count tasks by their effective status to reflect implicit blockers
+            counts = {}
+            for t in all_tasks:
+                eff_status = get_effective_status(t)
+                counts[eff_status] = counts.get(eff_status, 0) + 1
+
+            if status.lower() == "todo" and all(s in ("done", "cancelled") for s in counts):
+                cli_root.console.print("[green]All tasks complete.[/green] This phase is done.")
+                cli_root.console.print(
+                    "Action: Confirm with the user whether to plan the next phase or close the project."
+                )
+                cli_root.console.print('  [cyan]engram task add "<next task>"[/cyan] to continue')
+            else:
+                cli_root.console.print(f"No tasks found with status '{status}'.")
         return
 
     table = Table(

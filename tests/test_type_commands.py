@@ -547,3 +547,46 @@ def test_task_list_default_todo_filter(tmp_db, project, monkeypatch) -> None:
     assert res_all.exit_code == 0
     assert "Task Todo" in res_all.output
     assert "Task Done" in res_all.output
+
+
+def test_task_list_all_flag(tmp_db, project, monkeypatch) -> None:
+    """task list supports --all / -a to show all tasks regardless of status."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    Task.create(project_id=project.id, title="Task Todo", status="todo")
+    Task.create(project_id=project.id, title="Task Done", status="done")
+
+    # 1. Shows all tasks with --all
+    res_all = runner.invoke(cli, ["task", "list", "--all"])
+    assert res_all.exit_code == 0
+    assert "Task Todo" in res_all.output
+    assert "Task Done" in res_all.output
+
+    # 2. Shows all tasks with -a
+    res_a = runner.invoke(cli, ["task", "list", "-a"])
+    assert res_a.exit_code == 0
+    assert "Task Todo" in res_a.output
+    assert "Task Done" in res_a.output
+
+
+def test_task_list_empty_project_guidance(tmp_db, project, monkeypatch) -> None:
+    """task list shows helpful guidance when no tasks are defined in the project."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    res = runner.invoke(cli, ["task", "list"])
+    assert res.exit_code == 0
+    assert "No tasks defined" in res.output
+    assert "engram task add" in res.output
+
+
+def test_task_list_all_completed_guidance(tmp_db, project, monkeypatch) -> None:
+    """task list shows phase done guidance when all tasks are done or cancelled."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    Task.create(project_id=project.id, title="Done Task", status="done")
+    Task.create(project_id=project.id, title="Cancelled Task", status="cancelled")
+
+    res = runner.invoke(cli, ["task", "list"])
+    assert res.exit_code == 0
+    assert "All tasks complete" in res.output
+    assert "engram task add" in res.output
