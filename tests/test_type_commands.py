@@ -490,7 +490,7 @@ def test_task_list_shows_effective_status(tmp_db, project, monkeypatch) -> None:
     Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
 
     # Verify task list shows blocked (dep) for the downstream task
-    res = runner.invoke(cli, ["task", "list"])
+    res = runner.invoke(cli, ["task", "list", "--status", "all"])
     assert res.exit_code == 0
     assert "blocked (dep)" in res.output
     assert "todo" in res.output  # for Dep Task
@@ -527,3 +527,23 @@ def test_task_list_shows_phase(tmp_db, project, monkeypatch) -> None:
     assert res.exit_code == 0
     assert "Phase Alpha" in res.output
     assert "-" in res.output
+
+
+def test_task_list_default_todo_filter(tmp_db, project, monkeypatch) -> None:
+    """task list defaults to only showing todo tasks, and allows showing all using --status all."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    Task.create(project_id=project.id, title="Task Todo", status="todo")
+    Task.create(project_id=project.id, title="Task Done", status="done")
+
+    # 1. By default, only shows Todo tasks
+    res_default = runner.invoke(cli, ["task", "list"])
+    assert res_default.exit_code == 0
+    assert "Task Todo" in res_default.output
+    assert "Task Done" not in res_default.output
+
+    # 2. Shows all tasks with --status all
+    res_all = runner.invoke(cli, ["task", "list", "--status", "all"])
+    assert res_all.exit_code == 0
+    assert "Task Todo" in res_all.output
+    assert "Task Done" in res_all.output

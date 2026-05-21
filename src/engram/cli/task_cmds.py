@@ -225,13 +225,17 @@ def task_start(task_id: str) -> None:
 
 
 @task.command(name="list")
-@click.option("--status", help="Filter by status")
-def task_list(status: str | None) -> None:
+@click.option(
+    "--status",
+    default="todo",
+    help="Filter by status (default: todo, use 'all' to show all tasks)",
+)
+def task_list(status: str) -> None:
     """List tasks for the current project."""
     p = cli_root.get_current_project()
     tasks = Task.list_by_project(p.id)
-    if status:
-        tasks = [t for t in tasks if get_effective_status(t) == status]
+    if status.lower() != "all":
+        tasks = [t for t in tasks if get_effective_status(t) == status.lower()]
     if not tasks:
         cli_root.console.print("No tasks found.")
         return
