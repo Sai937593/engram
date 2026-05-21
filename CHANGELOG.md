@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(cli): implement task dependency status propagation, list/next visualization, and CLI blocker enforcement.
 - feat(cli): implement DFS cycle detection for task dependencies to block circular relationships.
 - feat(cli): add `depends_on` support to task commands with partial/exact ID resolution.
 - fix(ui): fix fatal React crash due to mapping over `task.tags` instead of `task.tag_list`.

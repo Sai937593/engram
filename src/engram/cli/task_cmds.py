@@ -92,6 +92,41 @@ def check_dependency_cycle(task_id: str, depends_on_id: str | None, project_id: 
         raise click.ClickException("Circular dependency detected.")
 
 
+def get_effective_status(task: Task) -> str:
+    """Calculate the implicit/effective status of the task based on dependencies."""
+    if task.status in ("done", "cancelled"):
+        return task.status
+
+    visited = set()
+    curr = task
+    has_unfinished = False
+    has_blocked = False
+    has_cancelled = False
+
+    while curr.depends_on:
+        if curr.depends_on in visited:
+            break
+        visited.add(curr.depends_on)
+        dep = Task.get(curr.depends_on)
+        if not dep:
+            break
+        if dep.status == "cancelled":
+            has_cancelled = True
+            break  # cancelled is a terminal state that propagates fully
+        elif dep.status == "blocked":
+            has_blocked = True
+        elif dep.status != "done":
+            has_unfinished = True
+        curr = dep
+
+    if has_cancelled:
+        return "cancelled"
+    if has_blocked or has_unfinished:
+        return "blocked"
+
+    return task.status
+
+
 @cli_root.cli.group()
 def task():
     """Manage tasks."""
@@ -148,27 +183,55 @@ def task_add(
 
 @task.command(name="start")
 @click.argument("task_id")
-def task_start(task_id):
+def task_start(task_id: str) -> None:
     """Mark a task as in-progress (claim it)."""
     t = Task.get(task_id)
     if not t:
         cli_root.console.print(f"[red]Error:[/red] Task '{task_id}' not found.")
         return
+
+    eff_status = get_effective_status(t)
+    if eff_status == "blocked":
+        visited = set()
+        curr = t
+        blockers = []
+        while curr.depends_on:
+            if curr.depends_on in visited:
+                break
+            visited.add(curr.depends_on)
+            dep = Task.get(curr.depends_on)
+            if not dep:
+                break
+            if dep.status != "done":
+                blockers.append(f"'{dep.id}' ({dep.title}, status: {dep.status})")
+            curr = dep
+        cli_root.console.print(
+            f"[red]Error:[/red] Task '{task_id}' is blocked by unfinished dependency/dependencies: {', '.join(blockers)}"
+        )
+        return
+
+    if eff_status == "cancelled":
+        cli_root.console.print(
+            f"[red]Error:[/red] Task '{task_id}' is cancelled (either directly or by a cancelled dependency)."
+        )
+        return
+
     if t.status == "in-progress":
         cli_root.console.print(f"[yellow]Task '{task_id}' is already in-progress.[/yellow]")
         return
+
     t.update(status="in-progress")
     cli_root.console.print(f"[green]Task '{task_id}' marked as in-progress.[/green]")
 
 
 @task.command(name="list")
 @click.option("--status", help="Filter by status")
-def task_list(status):
+def task_list(status: str | None) -> None:
     """List tasks for the current project."""
     p = cli_root.get_current_project()
     tasks = Task.list_by_project(p.id)
     if status:
-        tasks = [t for t in tasks if t.status == status]
+        tasks = [t for t in tasks if get_effective_status(t) == status]
     if not tasks:
         cli_root.console.print("No tasks found.")
         return
@@ -180,21 +243,31 @@ def task_list(status):
     table.add_column("Title", style="white")
     table.add_column("Status", style="bold green")
     table.add_column("Priority", style="yellow")
+    table.add_column("Depends On", style="magenta")
 
     for t in tasks:
+        eff_status = get_effective_status(t)
         status_style = "green"
-        if t.status == "blocked":
+        if eff_status == "blocked":
             status_style = "red"
-        elif t.status == "done":
+        elif eff_status == "done":
             status_style = "blue"
-        elif t.status == "in-progress":
+        elif eff_status == "in-progress":
             status_style = "yellow"
+        elif eff_status == "cancelled":
+            status_style = "dim white"
+
+        status_str = eff_status
+        if eff_status != t.status:
+            status_str = f"{eff_status} (dep)"
+
         priority_style = "bold red" if t.priority == "high" else "yellow"
         table.add_row(
             t.id,
             t.title,
-            f"[{status_style}]{t.status}[/{status_style}]",
+            f"[{status_style}]{status_str}[/{status_style}]",
             f"[{priority_style}]{t.priority}[/{priority_style}]",
+            t.depends_on or "-",
         )
     cli_root.console.print(table)
 
@@ -257,7 +330,12 @@ def task_get(task_id: str) -> None:
         return
     cli_root.console.print(f"[cyan]ID:[/cyan] {t.id}")
     cli_root.console.print(f"[cyan]Title:[/cyan] {t.title}")
-    cli_root.console.print(f"[cyan]Status:[/cyan] {t.status}")
+
+    eff_status = get_effective_status(t)
+    status_str = eff_status
+    if eff_status != t.status:
+        status_str = f"{eff_status} (propagated from dependency)"
+    cli_root.console.print(f"[cyan]Status:[/cyan] {status_str}")
     cli_root.console.print(f"[cyan]Priority:[/cyan] {t.priority}")
     cli_root.console.print(f"[cyan]Depends On:[/cyan] {t.depends_on or 'N/A'}")
     cli_root.console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
@@ -270,11 +348,31 @@ def task_get(task_id: str) -> None:
 @task.command(name="done")
 @click.argument("task_id")
 @click.option("--evidence", help="Evidence of completion (tests, PR, etc.)")
-def task_done(task_id, evidence):
+def task_done(task_id: str, evidence: str | None) -> None:
     """Mark a task as done (optionally record evidence)."""
     t = Task.get(task_id)
     if not t:
         cli_root.console.print(f"[red]Error:[/red] Task '{task_id}' not found.")
+        return
+
+    eff_status = get_effective_status(t)
+    if eff_status == "blocked" and t.status != "done":
+        visited = set()
+        curr = t
+        blockers = []
+        while curr.depends_on:
+            if curr.depends_on in visited:
+                break
+            visited.add(curr.depends_on)
+            dep = Task.get(curr.depends_on)
+            if not dep:
+                break
+            if dep.status != "done":
+                blockers.append(f"'{dep.id}' ({dep.title})")
+            curr = dep
+        cli_root.console.print(
+            f"[red]Error:[/red] Cannot mark '{task_id}' as done. It is blocked by unfinished dependency/dependencies: {', '.join(blockers)}"
+        )
         return
 
     updates = {"status": "done"}
@@ -310,14 +408,25 @@ def task_next() -> None:
     if t:
         cli_root.console.print(f"[cyan]ID:[/cyan] {t.id}")
         cli_root.console.print(f"[cyan]Title:[/cyan] {t.title}")
-        cli_root.console.print(f"[cyan]Status:[/cyan] {t.status}")
+
+        eff_status = get_effective_status(t)
+        status_str = eff_status
+        if eff_status != t.status:
+            status_str = f"{eff_status} (dep)"
+        cli_root.console.print(f"[cyan]Status:[/cyan] {status_str}")
         cli_root.console.print(f"[cyan]Priority:[/cyan] {t.priority}")
         cli_root.console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
         cli_root.console.print(f"[cyan]Description:[/cyan] {t.description or 'N/A'}")
         cli_root.console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{t.acceptance or 'N/A'}")
         return
 
-    counts = Task.count_by_status(p.id)
+    # Count tasks by their effective status to reflect implicit blockers
+    tasks = Task.list_by_project(p.id)
+    counts = {}
+    for task in tasks:
+        eff_status = get_effective_status(task)
+        counts[eff_status] = counts.get(eff_status, 0) + 1
+
     total = sum(counts.values())
     if total == 0:
         cli_root.console.print(
