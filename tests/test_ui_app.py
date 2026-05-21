@@ -21,7 +21,7 @@ def _target(project, repo_path="/tmp/test", version="2026-01-01T00:00:00+00:00")
 
 
 def test_ui_pages_render_project_data(project, tmp_path):
-    """Core read-only pages render seeded project data."""
+    """API endpoints render seeded project data."""
     state_path = tmp_path / "ui_state.json"
     write_target(_target(project), state_path)
     task = Task.create(project_id=project.id, title="Render tasks", status="in-progress")
@@ -30,16 +30,14 @@ def test_ui_pages_render_project_data(project, tmp_path):
     )
     client = TestClient(create_app(state_path))
 
-    pages = {
-        "/": project.name,
-        "/tasks": task.title,
-        f"/tasks/{task.id}": task.title,
-        "/memories": memory.title,
-        f"/memories/{memory.id}": memory.title,
-        "/audit": task.id,
+    endpoints = {
+        "/api/dashboard": project.name,
+        "/api/tasks": task.title,
+        "/api/memories": memory.title,
+        "/api/audit": task.id,
     }
 
-    for path, expected in pages.items():
+    for path, expected in endpoints.items():
         response = client.get(path)
         assert response.status_code == 200
         assert expected in response.text
@@ -86,31 +84,33 @@ def test_existing_ui_routes_switch_when_state_changes(project, tmp_path):
     write_target(_target(project), state_path)
     client = TestClient(create_app(state_path))
 
-    assert project.name in client.get("/").text
+    assert project.name in client.get("/api/ui-state").text
 
     write_target(_target(other, "/tmp/switch", "2026-01-01T00:00:02+00:00"), state_path)
 
-    response = client.get("/")
+    response = client.get("/api/ui-state")
     assert response.status_code == 200
     assert other.name in response.text
     assert project.name not in response.text
 
 
 def test_ui_unknown_ids_return_404(project, tmp_path):
-    """Detail routes are scoped and return 404 for missing records."""
+    """Detail mutation routes are scoped and return 404 for missing records."""
     state_path = tmp_path / "ui_state.json"
     write_target(_target(project), state_path)
     client = TestClient(create_app(state_path))
 
-    assert client.get("/tasks/missing").status_code == 404
-    assert client.get("/memories/missing").status_code == 404
+    assert client.patch("/api/tasks/missing/status", json={"status": "done"}).status_code == 404
+    assert client.patch("/api/memories/missing", json={"title": "new"}).status_code == 404
 
 
-def test_ui_routes_are_read_only(project, tmp_path):
-    """Mutation methods are not exposed by the UI."""
+def test_ui_routes_allow_mutations(project, tmp_path):
+    """Mutation methods work for tasks."""
     state_path = tmp_path / "ui_state.json"
     write_target(_target(project), state_path)
     client = TestClient(create_app(state_path))
+    task = Task.create(project_id=project.id, title="Update me")
 
-    assert client.post("/tasks").status_code == 405
-    assert client.post("/api/snapshot-version").status_code == 405
+    res = client.patch(f"/api/tasks/{task.id}/status", json={"status": "in-progress"})
+    assert res.status_code == 200
+    assert res.json()["task"]["status"] == "in-progress"
