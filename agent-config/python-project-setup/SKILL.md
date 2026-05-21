@@ -22,7 +22,38 @@ For a new or incomplete Python repo, add or verify:
 - `README.md`
 - `CHANGELOG.md` with `## [Unreleased]`
 - `.env.example` when the project reads environment variables
-- `.pre-commit-config.yaml` configured to run `ruff check` and `pytest`
+- `.pre-commit-config.yaml` configured to run `ruff check` and `pytest`. Use the exact configuration below to seed the file:
+  ```yaml
+  repos:
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v5.0.0
+      hooks:
+        - id: trailing-whitespace
+        - id: end-of-file-fixer
+        - id: check-toml
+        - id: check-yaml
+        - id: check-added-large-files
+          args: ['--maxkb=5000']
+        - id: check-merge-conflict
+        - id: debug-statements
+        - id: detect-private-key
+
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.9.9
+      hooks:
+        - id: ruff
+          args: [--fix]
+        - id: ruff-format
+
+    - repo: local
+      hooks:
+        - id: pytest
+          name: pytest
+          entry: uv run pytest tests/ -v --tb=short
+          language: system
+          pass_filenames: false
+          stages: [pre-push]
+  ```
 
 ## Keep setup conservative
 
