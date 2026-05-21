@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- feat(cli): 'engram task list' by default only shows todo tasks.
+- feat(cli): display phase for each task in 'engram task list'.
 - feat(cli): checkout to a 'misc' branch during 'engram start' for tasks without a phase.
 - fix(cli): fix UnicodeEncodeError in engram guide on legacy windows terminal.
 - feat(cli): add working tree safety checks to `engram start` preventing dirty state checkouts.

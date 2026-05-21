@@ -225,13 +225,17 @@ def task_start(task_id: str) -> None:
 
 
 @task.command(name="list")
-@click.option("--status", help="Filter by status")
-def task_list(status: str | None) -> None:
+@click.option(
+    "--status",
+    default="todo",
+    help="Filter by status (default: todo, use 'all' to show all tasks)",
+)
+def task_list(status: str) -> None:
     """List tasks for the current project."""
     p = cli_root.get_current_project()
     tasks = Task.list_by_project(p.id)
-    if status:
-        tasks = [t for t in tasks if get_effective_status(t) == status]
+    if status.lower() != "all":
+        tasks = [t for t in tasks if get_effective_status(t) == status.lower()]
     if not tasks:
         cli_root.console.print("No tasks found.")
         return
@@ -241,6 +245,7 @@ def task_list(status: str | None) -> None:
     )
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title", style="white")
+    table.add_column("Phase", style="blue")
     table.add_column("Status", style="bold green")
     table.add_column("Priority", style="yellow")
     table.add_column("Depends On", style="magenta")
@@ -265,6 +270,7 @@ def task_list(status: str | None) -> None:
         table.add_row(
             t.id,
             t.title,
+            t.phase or "-",
             f"[{status_style}]{status_str}[/{status_style}]",
             f"[{priority_style}]{t.priority}[/{priority_style}]",
             t.depends_on or "-",
