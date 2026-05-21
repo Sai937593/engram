@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function KanbanBoard({ tasks, onTaskUpdated }) {
+export default function KanbanBoard({ tasks = [], onTaskUpdated }) {
   const [dragging, setDragging] = useState(null)
 
   const columns = [
@@ -9,6 +9,8 @@ export default function KanbanBoard({ tasks, onTaskUpdated }) {
     { id: 'blocked', title: 'Blocked' },
     { id: 'done', title: 'Done' }
   ]
+
+  const safeTasks = Array.isArray(tasks) ? tasks : []
 
   const handleDragStart = (e, task) => {
     setDragging(task)
@@ -51,10 +53,10 @@ export default function KanbanBoard({ tasks, onTaskUpdated }) {
         >
           <div className="kanban-col-header">
             {col.title}
-            <span>{tasks.filter(t => t.status === col.id).length}</span>
+            <span>{safeTasks.filter(t => t && t.status === col.id).length}</span>
           </div>
           <div className="kanban-cards">
-            {tasks.filter(t => t.status === col.id).map(task => (
+            {safeTasks.filter(t => t && t.status === col.id).map(task => (
               <div
                 key={task.id}
                 className="task-card"
@@ -62,10 +64,10 @@ export default function KanbanBoard({ tasks, onTaskUpdated }) {
                 onDragStart={(e) => handleDragStart(e, task)}
               >
                 <div className="task-id">#{task.id}</div>
-                <div className="task-title">{task.title}</div>
-                {task.tags && task.tags.length > 0 && (
+                <div className="task-title">{task.title || "Untitled Task"}</div>
+                {task.tag_list && task.tag_list.length > 0 && (
                   <div style={{ marginTop: 8 }}>
-                    {task.tags.map(tag => (
+                    {task.tag_list.map(tag => (
                       <span key={tag} className="tag">{tag}</span>
                     ))}
                   </div>
