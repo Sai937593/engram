@@ -268,3 +268,116 @@ def test_task_context_includes_project_knowledge(tmp_db, project, task):
     assert "PROJECT KNOWLEDGE" in ctx
     assert "No secrets" in ctx
     assert "Use WAL" in ctx
+
+
+# ---------------------------------------------------------------------------
+# task depends_on tests
+# ---------------------------------------------------------------------------
+
+
+def test_task_add_depends_on_exact_and_prefix(tmp_db, project, monkeypatch):
+    """task add supports --depends-on / -d with exact ID and partial prefix."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    # 1. Create a dependency task
+    t_dep = Task.create(project_id=project.id, title="Dependency task")
+
+    # 2. Add task depending on exact ID
+    res = runner.invoke(cli, ["task", "add", "Task A", "--depends-on", t_dep.id])
+    assert res.exit_code == 0, res.output
+    # Parse the created ID from the output
+    match = re.search(r"Task created with ID:\s*([a-f0-9]{8})", res.output)
+    assert match is not None
+    t_a_id = match.group(1)
+
+    t_a = Task.get(t_a_id)
+    assert t_a.depends_on == t_dep.id
+
+    # 3. Add task depending on prefix of t_dep.id
+    prefix = t_dep.id[:4]
+    res2 = runner.invoke(cli, ["task", "add", "Task B", "-d", prefix])
+    assert res2.exit_code == 0, res2.output
+    match2 = re.search(r"Task created with ID:\s*([a-f0-9]{8})", res2.output)
+    assert match2 is not None
+    t_b_id = match2.group(1)
+
+    t_b = Task.get(t_b_id)
+    assert t_b.depends_on == t_dep.id
+
+
+def test_task_add_depends_on_errors(tmp_db, project, monkeypatch):
+    """task add handles non-existent and ambiguous depends-on values."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    # 1. Non-existent dependency
+    res = runner.invoke(cli, ["task", "add", "Task A", "-d", "nonexist"])
+    assert res.exit_code != 0
+    assert "Error: Task dependency 'nonexist' not found" in res.output
+
+    # 2. Ambiguous dependency (prefix matching multiple tasks)
+    # We force create two tasks starting with similar prefixes if possible, or just mock/insert them
+    # Since they have random IDs, let's create a few and find two that share a prefix, or manually insert them.
+    from engram.db import get_db_connection
+
+    conn = get_db_connection(tmp_db)
+    conn.execute(
+        "INSERT INTO tasks (id, project_id, title) VALUES ('aaaa1111', ?, 'Task 1')",
+        (project.id,),
+    )
+    conn.execute(
+        "INSERT INTO tasks (id, project_id, title) VALUES ('aaaa2222', ?, 'Task 2')",
+        (project.id,),
+    )
+    conn.commit()
+    conn.close()
+
+    res2 = runner.invoke(cli, ["task", "add", "Task B", "-d", "aaaa"])
+    assert res2.exit_code != 0
+    assert "Error: Ambiguous task dependency 'aaaa'" in res2.output
+
+
+def test_task_update_depends_on(tmp_db, project, monkeypatch):
+    """task update supports updating depends_on, prevents self-dependency, and allows clearing it."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    # Create two tasks
+    t1 = Task.create(project_id=project.id, title="Task 1")
+    t2 = Task.create(project_id=project.id, title="Task 2")
+
+    # Update t1 to depend on t2 prefix
+    res = runner.invoke(
+        cli, ["task", "update", t1.id, "--field", "depends_on", "--value", t2.id[:4]]
+    )
+    assert res.exit_code == 0, res.output
+    t1_refreshed = Task.get(t1.id)
+    assert t1_refreshed.depends_on == t2.id
+
+    # Try to make t1 depend on itself
+    res2 = runner.invoke(
+        cli, ["task", "update", t1.id, "--field", "depends_on", "--value", t1.id[:4]]
+    )
+    assert res2.exit_code != 0
+    assert "Error: A task cannot depend on itself" in res2.output
+
+    # Clear dependency
+    res3 = runner.invoke(cli, ["task", "update", t1.id, "--field", "depends_on", "--value", "none"])
+    assert res3.exit_code == 0, res3.output
+    t1_cleared = Task.get(t1.id)
+    assert t1_cleared.depends_on is None
+
+
+def test_task_get_shows_depends_on(tmp_db, project, monkeypatch):
+    """task get displays Depends On information."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    t_dep = Task.create(project_id=project.id, title="Dep")
+    t = Task.create(project_id=project.id, title="Main", depends_on=t_dep.id)
+
+    res = runner.invoke(cli, ["task", "get", t.id])
+    assert res.exit_code == 0, res.output
+    assert f"Depends On: {t_dep.id}" in res.output
+
+    # Get task without dependency
+    res2 = runner.invoke(cli, ["task", "get", t_dep.id])
+    assert res2.exit_code == 0, res2.output
+    assert "Depends On: N/A" in res2.output

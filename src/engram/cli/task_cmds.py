@@ -6,6 +6,7 @@ import click
 from rich.table import Table
 
 import engram.cli as cli_root
+from engram.db import get_db_connection
 from engram.models.task import Task
 
 VALID_TASK_FIELDS = {
@@ -17,9 +18,37 @@ VALID_TASK_FIELDS = {
     "acceptance",
     "phase",
     "evidence",
+    "depends_on",
 }
 VALID_TASK_STATUSES = {"todo", "in-progress", "done", "blocked", "cancelled"}
 VALID_TASK_PRIORITIES = {"low", "medium", "high", "critical"}
+
+
+def resolve_task_dependency(value: str | None, project_id: str) -> str | None:
+    """Resolve a partial or exact task ID to a full 8-character ID."""
+    if not value or value.lower() in ("none", "null", "clear"):
+        return None
+
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT id FROM tasks WHERE project_id = ? AND (id = ? OR id LIKE ?)",
+        (project_id, value, value + "%"),
+    ).fetchall()
+    conn.close()
+
+    matching_ids = sorted(list(set(row["id"] for row in rows)))
+
+    if not matching_ids:
+        raise click.ClickException(f"Task dependency '{value}' not found in this project.")
+
+    if len(matching_ids) > 1:
+        if value in matching_ids:
+            return value
+        raise click.ClickException(
+            f"Ambiguous task dependency '{value}'. Multiple matches found: {', '.join(matching_ids)}"
+        )
+
+    return matching_ids[0]
 
 
 @cli_root.cli.group()
@@ -42,9 +71,23 @@ def task():
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--acceptance", help="Acceptance criteria")
 @click.option("--phase", help="Project phase")
-def task_add(title, description, priority, status, tags, acceptance, phase):
+@click.option("--depends-on", "-d", help="Task ID or 8-char prefix that this task depends on")
+def task_add(
+    title: str,
+    description: str | None,
+    priority: str,
+    status: str,
+    tags: str | None,
+    acceptance: str | None,
+    phase: str | None,
+    depends_on: str | None = None,
+) -> None:
     """Add a new task to the current project."""
     p = cli_root.get_current_project()
+    resolved_dep = None
+    if depends_on:
+        resolved_dep = resolve_task_dependency(depends_on, p.id)
+
     t = Task.create(
         project_id=p.id,
         title=title,
@@ -54,6 +97,7 @@ def task_add(title, description, priority, status, tags, acceptance, phase):
         tags=tags.split(",") if tags else [],
         acceptance=acceptance,
         phase=phase,
+        depends_on=resolved_dep,
     )
     cli_root.console.print(f"[green]Task created with ID:[/green] {t.id}")
 
@@ -115,7 +159,7 @@ def task_list(status):
 @click.argument("task_id")
 @click.option("--field", help="Field to update")
 @click.option("--value", help="New value for the field")
-def task_update(task_id, field, value):
+def task_update(task_id: str, field: str, value: str) -> None:
     """Update a task field."""
     t = Task.get(task_id)
     if not t:
@@ -148,13 +192,19 @@ def task_update(task_id, field, value):
 
     if field == "tags":
         value = value.split(",")
+    elif field == "depends_on":
+        resolved_dep = resolve_task_dependency(value, t.project_id)
+        if resolved_dep == task_id:
+            raise click.ClickException("A task cannot depend on itself.")
+        value = resolved_dep
+
     t.update(**{field: value})
     cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
 
 
 @task.command(name="get")
 @click.argument("task_id")
-def task_get(task_id):
+def task_get(task_id: str) -> None:
     """Show task details."""
     t = Task.get(task_id)
     if not t:
@@ -164,6 +214,7 @@ def task_get(task_id):
     cli_root.console.print(f"[cyan]Title:[/cyan] {t.title}")
     cli_root.console.print(f"[cyan]Status:[/cyan] {t.status}")
     cli_root.console.print(f"[cyan]Priority:[/cyan] {t.priority}")
+    cli_root.console.print(f"[cyan]Depends On:[/cyan] {t.depends_on or 'N/A'}")
     cli_root.console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
     cli_root.console.print(f"[cyan]Description:[/cyan] {t.description or 'N/A'}")
     cli_root.console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{t.acceptance or 'N/A'}")
