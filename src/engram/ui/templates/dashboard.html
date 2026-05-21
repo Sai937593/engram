@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% set title = "Engram UI - Dashboard" %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <p class="eyebrow">Project</p>
+    <h1>{{ project.name }}</h1>
+    <p class="summary">{{ project.summary or "No project summary recorded." }}</p>
+    <p class="summary"><strong>ID:</strong> {{ project.id }} · <strong>Repo:</strong> {{ ui_target.repo_path }}</p>
+  </div>
+  <div class="status-chip">{{ project.status }}</div>
+</header>
+
+<section class="metric-grid">
+  {% for status, count in task_counts.items() %}
+  <a class="metric" href="/tasks?status={{ status }}">
+    <span>{{ status }}</span>
+    <strong>{{ count }}</strong>
+  </a>
+  {% endfor %}
+</section>
+
+<section class="dashboard-grid">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Active Tasks</h2>
+      <a href="/tasks">View all</a>
+    </div>
+    <div class="compact-list">
+      {% for task in active_tasks %}
+      <a class="list-row" href="/tasks/{{ task.id }}">
+        <span class="pill {{ task.status }}">{{ task.status }}</span>
+        <strong>{{ task.title }}</strong>
+        <small>{{ task.priority }} · {{ task.id }}</small>
+      </a>
+      {% else %}
+      <p class="empty">No active tasks.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Blocked</h2>
+      <a href="/tasks?status=blocked">View</a>
+    </div>
+    <div class="compact-list">
+      {% for task in blocked_tasks %}
+      <a class="list-row" href="/tasks/{{ task.id }}">
+        <span class="pill blocked">blocked</span>
+        <strong>{{ task.title }}</strong>
+        <small>{{ task.priority }} · {{ task.id }}</small>
+      </a>
+      {% else %}
+      <p class="empty">No blocked tasks.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Latest Session</h2>
+      <a href="/sessions">Timeline</a>
+    </div>
+    {% if latest_session %}
+    <a class="session-card" href="/sessions/{{ latest_session.id }}">
+      <span class="pill {{ latest_session.status }}">{{ latest_session.status }}</span>
+      <strong>{{ latest_session.goal or latest_session.summary or latest_session.id }}</strong>
+      <small>{{ latest_session.started_at }}</small>
+    </a>
+    {% else %}
+    <p class="empty">No sessions recorded.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Memory Types</h2>
+      <a href="/memories">Browse</a>
+    </div>
+    <div class="type-grid">
+      {% for type, count in memory_counts.items() %}
+      <a href="/memories?type={{ type }}">
+        <span>{{ type }}</span>
+        <strong>{{ count }}</strong>
+      </a>
+      {% else %}
+      <p class="empty">No memories recorded.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>Recent Audit</h2>
+    <a href="/audit">View all</a>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Target</th>
+        <th>Operation</th>
+        <th>Field</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in recent_audit %}
+      <tr>
+        <td>{{ event.timestamp }}</td>
+        <td>{{ event.target_table }} / {{ event.target_id }}</td>
+        <td>{{ event.operation }}</td>
+        <td>{{ event.field or "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">No audit events recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

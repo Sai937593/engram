@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set title = "Engram UI - Task " ~ task.id %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <p class="eyebrow">Task · {{ task.id }}</p>
+    <h1>{{ task.title }}</h1>
+  </div>
+  <span class="pill {{ task.status }}">{{ task.status }}</span>
+</header>
+
+<section class="detail-grid">
+  <div class="panel detail-main">
+    <dl class="metadata">
+      <div><dt>Priority</dt><dd>{{ task.priority }}</dd></div>
+      <div><dt>Phase</dt><dd>{{ task.phase or "N/A" }}</dd></div>
+      <div><dt>Created</dt><dd>{{ task.created_at }}</dd></div>
+      <div><dt>Updated</dt><dd>{{ task.updated_at }}</dd></div>
+    </dl>
+    <h2>Description</h2>
+    <pre>{{ task.description or "N/A" }}</pre>
+    <h2>Acceptance</h2>
+    <pre>{{ task.acceptance or "N/A" }}</pre>
+    <h2>Evidence</h2>
+    <pre>{{ task.evidence or "N/A" }}</pre>
+  </div>
+  <aside class="panel">
+    <h2>Tags</h2>
+    <div class="tag-list">
+      {% for tag in task.tag_list %}
+      <span>{{ tag }}</span>
+      {% else %}
+      <p class="empty">No tags.</p>
+      {% endfor %}
+    </div>
+  </aside>
+</section>
+{% endblock %}
