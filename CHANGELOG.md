@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(cli): checkout to a 'misc' branch during 'engram start' for tasks without a phase.
 - fix(cli): fix UnicodeEncodeError in engram guide on legacy windows terminal.
 - feat(cli): add working tree safety checks to `engram start` preventing dirty state checkouts.
 - feat(cli): support dynamic Conventional Commit types and optional `-t`/`--type` flag in `engram finish`.

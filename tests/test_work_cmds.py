@@ -107,6 +107,59 @@ def test_start_allows_when_dirty_on_same_branch(tmp_db, project, mock_git, monke
     assert "Started task" in result.output
 
 
+def test_start_success_without_phase_clean(tmp_db, project, mock_git, monkeypatch) -> None:
+    """engram start checks out feat/misc when starting a task with no phase and git is clean."""
+    Task.create(project_id=project.id, title="Task No Phase", phase=None, status="todo")
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "Started task" in result.output
+
+    # Check that it checks out the feat/misc branch
+    in_progress = [t for t in Task.list_by_project(project.id) if t.status == "in-progress"]
+    assert len(in_progress) == 1
+    assert in_progress[0].title == "Task No Phase"
+
+
+def test_start_blocks_without_phase_dirty(tmp_db, project, mock_git, monkeypatch) -> None:
+    """engram start blocks when starting a task with no phase and git is dirty and not on feat/misc."""
+    Task.create(project_id=project.id, title="Task No Phase", phase=None, status="todo")
+
+    # Set mock git to be dirty and current branch to main
+    mock_git.status_stdout = " M src/cli/work_cmds.py\n"
+    mock_git.branch_stdout = "main"
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+
+    # Should raise SystemExit(1)
+    assert result.exit_code == 1
+    assert "Error: Git working tree is dirty" in result.output
+    assert "feat/misc" in result.output
+
+    # Task should still be in todo status
+    tasks = Task.list_by_project(project.id)
+    assert tasks[0].status == "todo"
+
+
+def test_start_allows_without_phase_dirty_on_same_branch(
+    tmp_db, project, mock_git, monkeypatch
+) -> None:
+    """engram start allows starting a task with no phase when dirty if already on feat/misc."""
+    Task.create(project_id=project.id, title="Task No Phase", phase=None, status="todo")
+
+    # Set mock git to be dirty but already on the target branch (feat/misc)
+    mock_git.status_stdout = " M src/cli/work_cmds.py\n"
+    mock_git.branch_stdout = "feat/misc"
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+
+    assert result.exit_code == 0
+    assert "Started task" in result.output
+
+
 # ---------------------------------------------------------------------------
 # engram finish tests
 # ---------------------------------------------------------------------------

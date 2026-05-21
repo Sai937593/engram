@@ -18,9 +18,13 @@ def slugify(text: str) -> str:
     return text.strip("-")
 
 
-def git_checkout_phase_branch(phase: str) -> None:
-    slug = slugify(phase)
-    branch_name = f"feat/phase-{slug}"
+def git_checkout_phase_branch(phase: str | None) -> None:
+    """Check out the git branch corresponding to the given phase, or a misc branch if None."""
+    if not phase:
+        branch_name = "feat/misc"
+    else:
+        slug = slugify(phase)
+        branch_name = f"feat/phase-{slug}"
 
     # Check if branch exists
     result = subprocess.run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"])
@@ -91,16 +95,15 @@ def start():
         return
 
     # Check git status before branch checkout safely
-    if t.phase:
-        target_branch = f"feat/phase-{slugify(t.phase)}"
-        current_branch = get_current_branch()
-        if current_branch != target_branch and is_working_tree_dirty():
-            cli_root.console.print(
-                f"[red]Error:[/red] Git working tree is dirty, and starting this task requires checking out branch "
-                f"[cyan]{target_branch}[/cyan] (current branch is [cyan]{current_branch or 'unknown'}[/cyan])."
-            )
-            cli_root.console.print("Please commit or stash your changes before starting a task.")
-            raise SystemExit(1)
+    target_branch = f"feat/phase-{slugify(t.phase)}" if t.phase else "feat/misc"
+    current_branch = get_current_branch()
+    if current_branch != target_branch and is_working_tree_dirty():
+        cli_root.console.print(
+            f"[red]Error:[/red] Git working tree is dirty, and starting this task requires checking out branch "
+            f"[cyan]{target_branch}[/cyan] (current branch is [cyan]{current_branch or 'unknown'}[/cyan])."
+        )
+        cli_root.console.print("Please commit or stash your changes before starting a task.")
+        raise SystemExit(1)
 
     if in_progress:
         cli_root.console.print(f"[yellow]Resuming in-progress task:[/yellow] {t.id}")
@@ -109,8 +112,7 @@ def start():
         cli_root.console.print(f"[green]Started task:[/green] {t.id}")
 
     # We have a task, check out phase branch
-    if t.phase:
-        git_checkout_phase_branch(t.phase)
+    git_checkout_phase_branch(t.phase)
 
     # Print the rich context
     context_str = get_task_context(t.id)
