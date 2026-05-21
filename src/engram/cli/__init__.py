@@ -45,10 +45,10 @@ def get_current_project() -> Project:
 from engram.cli import context_cmds as _context_cmds  # noqa: E402, F401
 from engram.cli import memory_cmds as _memory_cmds  # noqa: E402, F401
 from engram.cli import project_cmds as _project_cmds  # noqa: E402, F401
-from engram.cli import session_cmds as _session_cmds  # noqa: E402, F401
 from engram.cli import task_cmds as _task_cmds  # noqa: E402, F401
 from engram.cli import ui_cmds as _ui_cmds  # noqa: E402, F401
 from engram.cli import utils_cmds as _utils_cmds  # noqa: E402, F401
+from engram.cli import work_cmds as _work_cmds  # noqa: E402, F401
 
 
 def main():

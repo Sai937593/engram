@@ -40,9 +40,10 @@ def init_db(db_path=None):
         project_id  TEXT NOT NULL REFERENCES projects(id),
         title       TEXT NOT NULL,
         description TEXT,
-        status      TEXT DEFAULT 'backlog',
+        status      TEXT DEFAULT 'todo',
         priority    TEXT DEFAULT 'medium',
         phase       TEXT,
+        depends_on  TEXT REFERENCES tasks(id),
         acceptance  TEXT,
         evidence    TEXT,
         tags        TEXT,
@@ -50,6 +51,12 @@ def init_db(db_path=None):
         updated_at  TEXT DEFAULT (datetime('now'))
     )
     """)
+
+    # Migration: add depends_on to tasks if missing (for existing DBs)
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN depends_on TEXT REFERENCES tasks(id)")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Memories
     cursor.execute("""
@@ -68,23 +75,7 @@ def init_db(db_path=None):
     )
     """)
 
-    # Sessions
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS sessions (
-        id            TEXT PRIMARY KEY,
-        project_id    TEXT NOT NULL REFERENCES projects(id),
-        goal          TEXT,
-        status        TEXT DEFAULT 'open',
-        summary       TEXT,
-        changed_files TEXT,
-        checks_run    TEXT,
-        next_steps    TEXT,
-        next_task_id  TEXT,
-        started_at    TEXT DEFAULT (datetime('now')),
-        closed_at     TEXT,
-        updated_at    TEXT DEFAULT (datetime('now'))
-    )
-    """)
+    # Sessions table removed for 2-Command Workflow migration
 
     # Audit Log
     cursor.execute("""
@@ -139,12 +130,6 @@ def init_db(db_path=None):
 
     # Migration: normalise 'completed' → 'done' (legacy status, not in current enum)
     cursor.execute("UPDATE tasks SET status = 'done' WHERE status = 'completed'")
-
-    # Migration: add updated_at to sessions if missing (for existing DBs)
-    try:
-        cursor.execute("ALTER TABLE sessions ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
 
     conn.commit()
     conn.close()

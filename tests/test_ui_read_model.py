@@ -2,7 +2,6 @@
 
 from engram.db import get_db_connection
 from engram.models.memory import Memory
-from engram.models.session import Session
 from engram.models.task import Task
 from engram.ui import read_model
 
@@ -11,7 +10,6 @@ def test_dashboard_snapshot_groups_current_project_state(project):
     """Dashboard read model returns dense project state without writes."""
     task = Task.create(project_id=project.id, title="Inspect UI", status="in-progress")
     Memory.create(project_id=project.id, type="lesson", title="Live UI", content="Poll DB")
-    Session.create(project_id=project.id, goal="Build UI")
 
     dashboard = read_model.get_dashboard(project.id)
 
@@ -19,7 +17,6 @@ def test_dashboard_snapshot_groups_current_project_state(project):
     assert dashboard["task_counts"]["in-progress"] == 1
     assert dashboard["active_tasks"][0]["id"] == task.id
     assert dashboard["memory_counts"]["lesson"] == 1
-    assert dashboard["latest_session"]["goal"] == "Build UI"
 
 
 def test_snapshot_version_changes_when_project_rows_change(project, task):

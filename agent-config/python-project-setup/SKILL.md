@@ -22,6 +22,7 @@ For a new or incomplete Python repo, add or verify:
 - `README.md`
 - `CHANGELOG.md` with `## [Unreleased]`
 - `.env.example` when the project reads environment variables
+- `.pre-commit-config.yaml` configured to run `ruff check` and `pytest`
 
 ## Keep setup conservative
 

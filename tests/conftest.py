@@ -21,9 +21,6 @@ def tmp_db(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "engram.models.memory.get_db_connection", lambda: get_db_connection(db_path)
     )
-    monkeypatch.setattr(
-        "engram.models.session.get_db_connection", lambda: get_db_connection(db_path)
-    )
     monkeypatch.setattr("engram.models.audit.get_db_connection", lambda: get_db_connection(db_path))
     init_db(db_path)
     return db_path

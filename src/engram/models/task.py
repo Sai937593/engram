@@ -14,6 +14,7 @@ class Task:
         status="todo",
         priority="medium",
         phase=None,
+        depends_on=None,
         acceptance=None,
         evidence=None,
         tags=None,
@@ -25,6 +26,7 @@ class Task:
         self.status = status
         self.priority = priority
         self.phase = phase
+        self.depends_on = depends_on
         self.acceptance = acceptance
         self.evidence = evidence
         self.tags = tags or []
@@ -38,6 +40,7 @@ class Task:
         status="todo",
         priority="medium",
         phase=None,
+        depends_on=None,
         acceptance=None,
         tags=None,
         id=None,
@@ -48,8 +51,8 @@ class Task:
         conn = get_db_connection()
         conn.execute(
             """
-            INSERT INTO tasks (id, project_id, title, description, status, priority, phase, acceptance, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (id, project_id, title, description, status, priority, phase, depends_on, acceptance, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 id,
@@ -59,6 +62,7 @@ class Task:
                 status,
                 priority,
                 phase,
+                depends_on,
                 acceptance,
                 ",".join(tags or []),
             ),
@@ -69,7 +73,17 @@ class Task:
         AuditLog.log("tasks", id, "create")
 
         return cls(
-            id, project_id, title, description, status, priority, phase, acceptance, None, tags
+            id,
+            project_id,
+            title,
+            description,
+            status,
+            priority,
+            phase,
+            depends_on,
+            acceptance,
+            None,
+            tags,
         )
 
     @classmethod
@@ -90,13 +104,20 @@ class Task:
 
     @classmethod
     def get_next(cls, project_id: str) -> "Task | None":
-        """Return the highest-priority todo task (critical>high>medium>low, then oldest first)."""
-        priority_order = "CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
+        """Return the highest-priority todo task, respecting dependencies."""
+        priority_order = "CASE t1.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
         conn = get_db_connection()
-        row = conn.execute(
-            f"SELECT * FROM tasks WHERE project_id = ? AND status = 'todo' ORDER BY {priority_order}, created_at ASC LIMIT 1",
-            (project_id,),
-        ).fetchone()
+        # Find a task that is 'todo', and either has no dependency, OR its dependency is 'done'
+        query = f"""
+            SELECT t1.* FROM tasks t1
+            LEFT JOIN tasks t2 ON t1.depends_on = t2.id
+            WHERE t1.project_id = ?
+              AND t1.status = 'todo'
+              AND (t1.depends_on IS NULL OR t2.status = 'done')
+            ORDER BY {priority_order}, t1.created_at ASC
+            LIMIT 1
+        """
+        row = conn.execute(query, (project_id,)).fetchone()
         conn.close()
         if row:
             return cls.from_row(row)
@@ -123,6 +144,7 @@ class Task:
             row["status"],
             row["priority"],
             row["phase"],
+            row["depends_on"],
             row["acceptance"],
             row["evidence"],
             row["tags"].split(",") if row["tags"] else [],

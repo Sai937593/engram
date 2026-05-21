@@ -2,21 +2,12 @@
 
 from engram.context import get_startup_context, get_task_context
 from engram.models.memory import Memory
-from engram.models.session import Session
 from engram.models.task import Task
 
 
 def test_startup_context_contains_project_name(project):
     ctx = get_startup_context(project.id)
     assert "Test Project" in ctx
-
-
-def test_startup_context_shows_last_checkpoint(project):
-    s = Session.create(project_id=project.id, goal="Do work")
-    s.close(summary="Finished the thing", next_steps="Do more things")
-    ctx = get_startup_context(project.id)
-    assert "Finished the thing" in ctx
-    assert "Do more things" in ctx
 
 
 def test_startup_context_shows_always_include_memories(project):

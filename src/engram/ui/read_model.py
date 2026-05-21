@@ -158,27 +158,6 @@ def group_memories_by_type(memories: list[dict[str, Any]]) -> dict[str, list[dic
     return dict(grouped)
 
 
-def list_sessions(project_id: str) -> list[dict[str, Any]]:
-    """Return sessions for a project, newest first."""
-    rows = _rows(
-        "SELECT * FROM sessions WHERE project_id = ? ORDER BY started_at DESC",
-        (project_id,),
-    )
-    for row in rows:
-        _ensure_updated_at(row)
-    return rows
-
-
-def get_session(project_id: str, session_id: str) -> dict[str, Any] | None:
-    """Return a single session in the current project."""
-    session = _row(
-        "SELECT * FROM sessions WHERE project_id = ? AND id = ?", (project_id, session_id)
-    )
-    if session:
-        _ensure_updated_at(session)
-    return session
-
-
 def list_audit_events(project_id: str, limit: int = 100) -> list[dict[str, Any]]:
     """Return recent audit events associated with project-owned rows."""
     target_ids = _project_target_ids(project_id)
@@ -200,7 +179,6 @@ def get_dashboard(project_id: str) -> dict[str, Any]:
     """Return the dense dashboard snapshot for the current project."""
     tasks = list_tasks(project_id)
     memories = list_memories(project_id)
-    sessions = list_sessions(project_id)
     return {
         "project": get_project(project_id),
         "task_counts": count_tasks_by_status(project_id),
@@ -208,8 +186,6 @@ def get_dashboard(project_id: str) -> dict[str, Any]:
         "blocked_tasks": [task for task in tasks if task["status"] == "blocked"][:8],
         "recent_memories": memories[:8],
         "memory_counts": dict(Counter(memory["type"] for memory in memories)),
-        "latest_session": sessions[0] if sessions else None,
-        "recent_sessions": sessions[:5],
         "recent_audit": list_audit_events(project_id, limit=10),
         "snapshot_version": get_snapshot_version(project_id),
     }
@@ -235,16 +211,13 @@ def get_snapshot_version(project_id: str) -> str:
             SELECT {task_ts} AS latest FROM tasks WHERE project_id = ?
             UNION ALL
             SELECT {memory_ts} AS latest FROM memories WHERE project_id = ?
-            UNION ALL
-            SELECT {session_ts} AS latest FROM sessions WHERE project_id = ?
         )
         """.format(
             project_ts=_timestamp_expr("projects", "created_at"),
             task_ts=_timestamp_expr("tasks", "created_at"),
             memory_ts=_timestamp_expr("memories", "created_at"),
-            session_ts=_timestamp_expr("sessions", "started_at"),
         ),
-        (project_id, project_id, project_id, project_id),
+        (project_id, project_id, project_id),
     )
     row_max = row["latest"] if row else None
     return max(value for value in (row_max, audit_max, "0") if value is not None)
@@ -258,9 +231,7 @@ def _project_target_ids(project_id: str) -> tuple[str, ...]:
         SELECT id FROM tasks WHERE project_id = ?
         UNION ALL
         SELECT id FROM memories WHERE project_id = ?
-        UNION ALL
-        SELECT id FROM sessions WHERE project_id = ?
         """,
-        (project_id, project_id, project_id, project_id),
+        (project_id, project_id, project_id),
     )
     return tuple(row["id"] for row in rows)

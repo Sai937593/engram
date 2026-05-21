@@ -1,14 +1,11 @@
 from engram.models.memory import Memory
 from engram.models.project import Project
-from engram.models.session import Session
 from engram.models.task import Task
 
 
 def get_startup_context(project_id: str) -> str:
     """Generate a compact, agent-optimized startup context string."""
     project = Project.get(project_id)
-    active_session = Session.get_active(project_id)
-    last_closed = Session.get_latest_closed(project_id)
 
     # Fetch typed memories up-front
     constraints = Memory.list_by_type(project_id, "constraint")
@@ -23,20 +20,6 @@ def get_startup_context(project_id: str) -> str:
     context.append(f"# PROJECT: {project.name}")
     if project.summary:
         context.append(f"Summary: {project.summary}")
-
-    if last_closed:
-        context.append(
-            f"\n## LAST CHECKPOINT ({last_closed.id},"
-            f" {last_closed.closed_at[:10] if last_closed.closed_at else 'unknown'})"
-        )
-        if last_closed.summary:
-            context.append(f"Done: {last_closed.summary}")
-        if last_closed.next_steps:
-            context.append(f"Next: {last_closed.next_steps}")
-
-    if active_session:
-        context.append(f"\n## ACTIVE SESSION: {active_session.id}")
-        context.append(f"Goal: {active_session.goal}")
 
     # --- Constraints (hard rules — always read FIRST) ---
     if constraints:
@@ -149,7 +132,6 @@ def get_snapshot_context(project_id: str) -> str:
     project = Project.get(project_id)
     tasks = Task.list_by_project(project_id)
     memories = Memory.list_by_project(project_id)
-    sessions = Session.list_by_project(project_id)
 
     context = []
     context.append(f"# PROJECT SNAPSHOT: {project.name} ({project.id})")
@@ -173,20 +155,12 @@ def get_snapshot_context(project_id: str) -> str:
             context.append(f"Tags: {', '.join(m.tags)}")
         context.append(m.content)
 
-    context.append("\n## SESSION HISTORY")
-    for s in sessions:
-        context.append(f"- **{s.id}** ({s.status}): {s.goal}")
-        if s.summary:
-            context.append(f"  Summary: {s.summary}")
-
     return "\n".join(context)
 
 
 def get_handoff_context(project_id: str) -> str:
     """Generate a project handoff document for another agent or human."""
     project = Project.get(project_id)
-    active_session = Session.get_active(project_id)
-    last_closed = Session.get_latest_closed(project_id)
     tasks = Task.list_by_project(project_id)
     constraints = Memory.list_by_type(project_id, "constraint")
     lessons = Memory.list_by_type(project_id, "lesson")
@@ -200,10 +174,6 @@ def get_handoff_context(project_id: str) -> str:
     context.append(f"# PROJECT HANDOFF: {project.name}")
     if project.summary:
         context.append(f"Context: {project.summary}")
-
-    if active_session:
-        context.append("\n## CURRENT GOAL")
-        context.append(active_session.goal)
 
     context.append("\n## ACTIVE TASKS")
     active_tasks = [t for t in tasks if t.status in ("todo", "in-progress", "blocked")]
@@ -238,9 +208,6 @@ def get_handoff_context(project_id: str) -> str:
             context.append(m.content)
 
     context.append("\n## NEXT STEPS")
-    if last_closed and last_closed.next_steps:
-        context.append(last_closed.next_steps)
-    else:
-        context.append("Refer to active tasks above.")
+    context.append("Refer to active tasks above.")
 
     return "\n".join(context)

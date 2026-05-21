@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.models.project import Project
-from engram.models.session import Session
 from engram.models.task import Task
 from engram.ui.app import create_app
 from engram.ui.state import UiTarget, write_target
@@ -29,7 +28,6 @@ def test_ui_pages_render_project_data(project, tmp_path):
     memory = Memory.create(
         project_id=project.id, type="decision", title="Render memory", content="x"
     )
-    session = Session.create(project_id=project.id, goal="Render session")
     client = TestClient(create_app(state_path))
 
     pages = {
@@ -38,8 +36,6 @@ def test_ui_pages_render_project_data(project, tmp_path):
         f"/tasks/{task.id}": task.title,
         "/memories": memory.title,
         f"/memories/{memory.id}": memory.title,
-        "/sessions": session.goal,
-        f"/sessions/{session.id}": session.goal,
         "/audit": task.id,
     }
 
@@ -108,7 +104,6 @@ def test_ui_unknown_ids_return_404(project, tmp_path):
 
     assert client.get("/tasks/missing").status_code == 404
     assert client.get("/memories/missing").status_code == 404
-    assert client.get("/sessions/missing").status_code == 404
 
 
 def test_ui_routes_are_read_only(project, tmp_path):

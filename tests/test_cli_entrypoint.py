@@ -27,7 +27,6 @@ def test_console_entrypoint_command_surface_loads():
         "export",
         "memory",
         "project",
-        "session",
         "task",
         "ui",
     ]:
