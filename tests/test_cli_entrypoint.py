@@ -40,3 +40,18 @@ def test_ui_command_help_loads():
     assert result.exit_code == 0, result.output
     assert "--host" in result.output
     assert "--port" in result.output
+
+
+def test_guide_command_runs_successfully():
+    """The guide command should render and exit successfully."""
+    result = CliRunner().invoke(cli, ["guide"])
+    assert result.exit_code == 0, result.output
+    assert "Engram User Manual" in result.output
+
+
+def test_guide_command_with_sections():
+    """The guide command with specific sections should render and exit successfully."""
+    for section in ["concepts", "commands", "workflow", "troubleshooting"]:
+        result = CliRunner().invoke(cli, ["guide", section])
+        assert result.exit_code == 0, result.output
+        assert "Engram Guide" in result.output

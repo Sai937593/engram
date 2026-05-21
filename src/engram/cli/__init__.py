@@ -1,6 +1,15 @@
 """Engram CLI — Agentic persistent memory system."""
 
 import os
+import sys
+
+if sys.platform.startswith("win"):
+    for _stream in (sys.stdout, sys.stderr):
+        if _stream is not None and hasattr(_stream, "reconfigure"):
+            try:
+                _stream.reconfigure(errors="replace")
+            except Exception:
+                pass
 
 import click
 from rich.console import Console

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- fix(cli): fix UnicodeEncodeError in engram guide on legacy windows terminal.
 - feat(cli): add working tree safety checks to `engram start` preventing dirty state checkouts.
 - feat(cli): support dynamic Conventional Commit types and optional `-t`/`--type` flag in `engram finish`.
 - feat(cli): implement task dependency status propagation, list/next visualization, and CLI blocker enforcement.
