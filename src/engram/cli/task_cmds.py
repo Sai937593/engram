@@ -1,5 +1,6 @@
 """Task management commands."""
 
+import uuid
 from datetime import datetime
 
 import click
@@ -51,6 +52,46 @@ def resolve_task_dependency(value: str | None, project_id: str) -> str | None:
     return matching_ids[0]
 
 
+def check_dependency_cycle(task_id: str, depends_on_id: str | None, project_id: str) -> None:
+    """Check if adding depends_on_id as a dependency of task_id would create a cycle.
+
+    Raises:
+        click.ClickException: If a circular dependency is detected.
+    """
+    if not depends_on_id:
+        return
+
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT id, depends_on FROM tasks WHERE project_id = ?", (project_id,)
+    ).fetchall()
+    conn.close()
+
+    dep_map = {row["id"]: row["depends_on"] for row in rows}
+    dep_map[task_id] = depends_on_id
+
+    visited = set()
+    path = set()
+
+    def dfs(node: str) -> bool:
+        if node in path:
+            return True
+        if node in visited:
+            return False
+
+        path.add(node)
+        dep = dep_map.get(node)
+        if dep:
+            if dfs(dep):
+                return True
+        path.remove(node)
+        visited.add(node)
+        return False
+
+    if dfs(task_id):
+        raise click.ClickException("Circular dependency detected.")
+
+
 @cli_root.cli.group()
 def task():
     """Manage tasks."""
@@ -85,8 +126,10 @@ def task_add(
     """Add a new task to the current project."""
     p = cli_root.get_current_project()
     resolved_dep = None
+    task_id = uuid.uuid4().hex[:8]
     if depends_on:
         resolved_dep = resolve_task_dependency(depends_on, p.id)
+        check_dependency_cycle(task_id, resolved_dep, p.id)
 
     t = Task.create(
         project_id=p.id,
@@ -98,6 +141,7 @@ def task_add(
         acceptance=acceptance,
         phase=phase,
         depends_on=resolved_dep,
+        id=task_id,
     )
     cli_root.console.print(f"[green]Task created with ID:[/green] {t.id}")
 
@@ -196,6 +240,7 @@ def task_update(task_id: str, field: str, value: str) -> None:
         resolved_dep = resolve_task_dependency(value, t.project_id)
         if resolved_dep == task_id:
             raise click.ClickException("A task cannot depend on itself.")
+        check_dependency_cycle(task_id, resolved_dep, t.project_id)
         value = resolved_dep
 
     t.update(**{field: value})

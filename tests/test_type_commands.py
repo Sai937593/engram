@@ -381,3 +381,22 @@ def test_task_get_shows_depends_on(tmp_db, project, monkeypatch):
     res2 = runner.invoke(cli, ["task", "get", t_dep.id])
     assert res2.exit_code == 0, res2.output
     assert "Depends On: N/A" in res2.output
+
+
+def test_task_dependency_cycle_detection(tmp_db, project, monkeypatch):
+    """Circular dependencies are blocked and not written to SQLite."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    # 1. Create a chain: A depends_on B, B depends_on C.
+    t_c = Task.create(project_id=project.id, title="Task C")
+    t_b = Task.create(project_id=project.id, title="Task B", depends_on=t_c.id)
+    t_a = Task.create(project_id=project.id, title="Task A", depends_on=t_b.id)
+
+    # 2. Try to make C depend on A (creating cycle A -> B -> C -> A)
+    res = runner.invoke(cli, ["task", "update", t_c.id, "--field", "depends_on", "--value", t_a.id])
+    assert res.exit_code != 0
+    assert "Error: Circular dependency detected" in res.output
+
+    # Verify that the value was NOT updated in the database
+    t_c_refreshed = Task.get(t_c.id)
+    assert t_c_refreshed.depends_on is None
