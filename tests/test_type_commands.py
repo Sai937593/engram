@@ -514,3 +514,16 @@ def test_task_next_shows_implicit_blockers_count(tmp_db, project, monkeypatch) -
     assert res.exit_code == 0
     assert "All remaining tasks are blocked" in res.output
     assert "2 blocked" in res.output
+
+
+def test_task_list_shows_phase(tmp_db, project, monkeypatch) -> None:
+    """task list displays the Phase column with correct phase values."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    Task.create(project_id=project.id, title="Task A", phase="Phase Alpha")
+    Task.create(project_id=project.id, title="Task B", phase=None)
+
+    res = runner.invoke(cli, ["task", "list"])
+    assert res.exit_code == 0
+    assert "Phase Alpha" in res.output
+    assert "-" in res.output

@@ -241,6 +241,7 @@ def task_list(status: str | None) -> None:
     )
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title", style="white")
+    table.add_column("Phase", style="blue")
     table.add_column("Status", style="bold green")
     table.add_column("Priority", style="yellow")
     table.add_column("Depends On", style="magenta")
@@ -265,6 +266,7 @@ def task_list(status: str | None) -> None:
         table.add_row(
             t.id,
             t.title,
+            t.phase or "-",
             f"[{status_style}]{status_str}[/{status_style}]",
             f"[{priority_style}]{t.priority}[/{priority_style}]",
             t.depends_on or "-",
