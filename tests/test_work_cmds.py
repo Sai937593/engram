@@ -1,0 +1,209 @@
+"""Tests for engram start and finish CLI commands, including safety checks and dynamic commit types."""
+
+import pytest
+from click.testing import CliRunner
+
+from engram.cli import cli
+from engram.models.task import Task
+
+
+class MockCompletedProcess:
+    def __init__(self, returncode, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def make_runner_with_project(monkeypatch, tmp_db, project) -> CliRunner:
+    """Return a CliRunner with CWD patched to the project's repo path."""
+    monkeypatch.setattr("engram.cli.get_current_project", lambda: project)
+    return CliRunner()
+
+
+@pytest.fixture
+def mock_git(monkeypatch):
+    """Fixture to mock git command subprocess executions."""
+    commits = []
+    status_stdout = ""
+    branch_stdout = "main"
+
+    def mock_run(args, **kwargs):
+        # We handle specific mock scenarios
+        if args == ["git", "status", "--porcelain"]:
+            return MockCompletedProcess(0, stdout=mock_run.status_stdout)
+        elif args == ["git", "rev-parse", "--abbrev-ref", "HEAD"]:
+            return MockCompletedProcess(0, stdout=mock_run.branch_stdout)
+        elif len(args) > 1 and args[1] == "show-ref":
+            return MockCompletedProcess(0)  # Branch exists
+        elif len(args) > 1 and args[1] == "commit":
+            mock_run.commits.append(args)
+            return MockCompletedProcess(0, stdout="[somebranch 12345] commit ok")
+        elif len(args) > 1 and args[1] == "push":
+            return MockCompletedProcess(0)
+        return MockCompletedProcess(0)
+
+    mock_run.commits = commits
+    mock_run.status_stdout = status_stdout
+    mock_run.branch_stdout = branch_stdout
+
+    monkeypatch.setattr("subprocess.run", mock_run)
+    return mock_run
+
+
+# ---------------------------------------------------------------------------
+# engram start tests
+# ---------------------------------------------------------------------------
+
+
+def test_start_success_when_clean(tmp_db, project, mock_git, monkeypatch):
+    """engram start succeeds when working tree is clean."""
+    Task.create(project_id=project.id, title="Task 1", phase="Phase 1", status="todo")
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "Started task" in result.output
+
+    # Task should now be in-progress
+    in_progress = [t for t in Task.list_by_project(project.id) if t.status == "in-progress"]
+    assert len(in_progress) == 1
+    assert in_progress[0].title == "Task 1"
+
+
+def test_start_blocks_when_dirty_and_switching_branch(tmp_db, project, mock_git, monkeypatch):
+    """engram start blocks when working tree is dirty and we need to switch branches."""
+    # Create a task in Phase 1
+    Task.create(project_id=project.id, title="Task 1", phase="Phase 1", status="todo")
+
+    # Set mock git to be dirty and current branch to main
+    mock_git.status_stdout = " M src/cli/work_cmds.py\n"
+    mock_git.branch_stdout = "main"
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+
+    # Should raise SystemExit(1)
+    assert result.exit_code == 1
+    assert "Error: Git working tree is dirty" in result.output
+    assert "feat/phase-phase-1" in result.output
+
+    # Task should still be in todo status
+    tasks = Task.list_by_project(project.id)
+    assert tasks[0].status == "todo"
+
+
+def test_start_allows_when_dirty_on_same_branch(tmp_db, project, mock_git, monkeypatch):
+    """engram start allows resuming/starting when dirty if we are already on the target branch."""
+    Task.create(project_id=project.id, title="Task 1", phase="Phase 1", status="todo")
+
+    # Set mock git to be dirty but already on the target branch
+    mock_git.status_stdout = " M src/cli/work_cmds.py\n"
+    mock_git.branch_stdout = "feat/phase-phase-1"
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+
+    assert result.exit_code == 0
+    assert "Started task" in result.output
+
+
+# ---------------------------------------------------------------------------
+# engram finish tests
+# ---------------------------------------------------------------------------
+
+
+def test_finish_with_explicit_type(tmp_db, project, mock_git, monkeypatch):
+    """engram finish uses the type specified by the -t/--type flag."""
+    # Create an in-progress task
+    Task.create(
+        project_id=project.id, title="Fix database WAL mode", phase="Phase 2", status="in-progress"
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish", "-t", "fix"])
+
+    assert result.exit_code == 0
+    assert "Finishing task:" in result.output
+    assert len(mock_git.commits) == 1
+
+    # Verify commit message has fix type
+    commit_cmd = mock_git.commits[0]
+    commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
+    assert commit_msg.startswith("fix(phase-2): Fix database WAL mode")
+
+
+def test_finish_resolves_type_from_tags(tmp_db, project, mock_git, monkeypatch):
+    """engram finish auto-resolves type from task tags (e.g. bug -> fix)."""
+    # Create an in-progress task with a bug tag
+    Task.create(
+        project_id=project.id,
+        title="Crash when listing empty projects",
+        phase="Phase 3",
+        status="in-progress",
+        tags=["bug", "ui"],
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish"])
+
+    assert result.exit_code == 0
+    assert len(mock_git.commits) == 1
+
+    # Verify commit message has resolved 'fix' type from 'bug' tag
+    commit_cmd = mock_git.commits[0]
+    commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
+    assert commit_msg.startswith("fix(phase-3): Crash when listing empty projects")
+
+
+def test_finish_resolves_docs_type_from_tags(tmp_db, project, mock_git, monkeypatch):
+    """engram finish auto-resolves type from task tags (e.g. documentation -> docs)."""
+    Task.create(
+        project_id=project.id,
+        title="Update setup instructions",
+        phase="Phase 3",
+        status="in-progress",
+        tags=["documentation"],
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish"])
+
+    assert result.exit_code == 0
+    assert len(mock_git.commits) == 1
+
+    commit_cmd = mock_git.commits[0]
+    commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
+    assert commit_msg.startswith("docs(phase-3): Update setup instructions")
+
+
+def test_finish_falls_back_to_feat(tmp_db, project, mock_git, monkeypatch):
+    """engram finish falls back to 'feat' type if no tags match any conventional types."""
+    Task.create(
+        project_id=project.id,
+        title="Add settings page",
+        phase="Phase 4",
+        status="in-progress",
+        tags=["some-other-tag"],
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish"])
+
+    assert result.exit_code == 0
+    assert len(mock_git.commits) == 1
+
+    commit_cmd = mock_git.commits[0]
+    commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
+    assert commit_msg.startswith("feat(phase-4): Add settings page")
+
+
+def test_finish_rejects_invalid_type(tmp_db, project, mock_git, monkeypatch):
+    """engram finish blocks and rejects invalid commit types."""
+    Task.create(project_id=project.id, title="Refactor core db", status="in-progress")
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish", "-t", "invalidtype"])
+
+    assert result.exit_code == 1
+    assert "Error: Invalid commit type" in result.output
+    assert len(mock_git.commits) == 0
