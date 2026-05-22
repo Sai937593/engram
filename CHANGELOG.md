@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- docs: align public README and user manual with the current CLI and remove stale planning docs.
 - chore: prepare repository for public release, add MIT license, exclude unpolished UI, and write portfolio README.md
 - feat(cli): implement --all/-a option for 'engram task list' and improve empty states with helpful guidance.
 - feat(cli): 'engram task list' by default only shows todo tasks.
@@ -13,8 +14,3 @@
 - feat(cli): implement task dependency status propagation, list/next visualization, and CLI blocker enforcement.
 - feat(cli): implement DFS cycle detection for task dependencies to block circular relationships.
 - feat(cli): add `depends_on` support to task commands with partial/exact ID resolution.
-- fix(ui): fix fatal React crash due to mapping over `task.tags` instead of `task.tag_list`.
-- feat(workflow): add Codex workflow reference files.
-- fix(ui): make the local UI follow the latest project that launches `engram ui`.
-- feat(ui): add live read-only local inspection console.
-- fix(ui): keep status pills compact in dashboard cards.
