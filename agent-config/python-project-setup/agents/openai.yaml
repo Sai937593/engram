@@ -1,4 +1,0 @@
-interface:
-  display_name: "Python Project Setup"
-  short_description: "Baseline Python repo setup guidance"
-  default_prompt: "Use $python-project-setup to scaffold or repair this Python repository."
