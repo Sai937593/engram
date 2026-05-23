@@ -7,7 +7,7 @@ import click
 
 import engram.cli as cli_root
 from engram.context import get_task_context
-from engram.models.task import Task
+from engram.models.task import Task, get_effective_phase_title
 
 
 def slugify(text: str) -> str:
@@ -18,8 +18,9 @@ def slugify(text: str) -> str:
     return text.strip("-")
 
 
-def git_checkout_phase_branch(phase: str | None) -> None:
-    """Check out the git branch corresponding to the given phase, or a misc branch if None."""
+def git_checkout_phase_branch(t: Task) -> None:
+    """Check out the git branch corresponding to the given task's phase, or a misc branch if None."""
+    phase = get_effective_phase_title(t)
     if not phase:
         branch_name = "feat/misc"
     else:
@@ -95,7 +96,8 @@ def start():
         return
 
     # Check git status before branch checkout safely
-    target_branch = f"feat/phase-{slugify(t.phase)}" if t.phase else "feat/misc"
+    phase_title = get_effective_phase_title(t)
+    target_branch = f"feat/phase-{slugify(phase_title)}" if phase_title else "feat/misc"
     current_branch = get_current_branch()
     if current_branch != target_branch and is_working_tree_dirty():
         cli_root.console.print(
@@ -112,7 +114,7 @@ def start():
         cli_root.console.print(f"[green]Started task:[/green] {t.id}")
 
     # We have a task, check out phase branch
-    git_checkout_phase_branch(t.phase)
+    git_checkout_phase_branch(t)
 
     # Print the rich context
     context_str = get_task_context(t.id)

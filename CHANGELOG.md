@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(cli): update branch checkout logic to use effective phase title for tasks, resolving via first-class Phase and falling back to legacy phase or feat/misc.
 - test(cli): add comprehensive end-to-end regression tests covering the full task-phase integration lifecycle via CLI.
 - feat(cli): support updating task phase association via `phase_id` with project-scoped ID or unique title resolution, clear commands (`none`, `null`, `clear`), and backward-compatible legacy updates.
 - fix(cli): display effective phase titles in `engram task get` and `engram task list` using first-class phase lookup with legacy fallback.
