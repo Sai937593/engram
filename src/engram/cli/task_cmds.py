@@ -13,7 +13,7 @@ from engram.cli.phase_helpers import (
     resolve_phase_in_project,
 )
 from engram.db import get_db_connection
-from engram.models.task import Task
+from engram.models.task import Task, get_effective_phase_title
 
 VALID_TASK_FIELDS = {
     "title",
@@ -328,7 +328,7 @@ def task_list(status: str, show_all: bool, phase: str | None) -> None:
         table.add_row(
             t.id,
             t.title,
-            t.phase or "-",
+            get_effective_phase_title(t) or "-",
             f"[{status_style}]{status_str}[/{status_style}]",
             f"[{priority_style}]{t.priority}[/{priority_style}]",
             t.depends_on or "-",
@@ -402,7 +402,7 @@ def task_get(task_id: str) -> None:
     cli_root.console.print(f"[cyan]Status:[/cyan] {status_str}")
     cli_root.console.print(f"[cyan]Priority:[/cyan] {t.priority}")
     cli_root.console.print(f"[cyan]Depends On:[/cyan] {t.depends_on or 'N/A'}")
-    cli_root.console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
+    cli_root.console.print(f"[cyan]Phase:[/cyan] {get_effective_phase_title(t) or 'N/A'}")
     cli_root.console.print(f"[cyan]Description:[/cyan] {t.description or 'N/A'}")
     cli_root.console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{t.acceptance or 'N/A'}")
     cli_root.console.print(f"[cyan]Evidence / Notes:[/cyan]\n{t.evidence or 'N/A'}")
