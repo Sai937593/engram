@@ -328,3 +328,92 @@ def test_phase_update_title_preserves_project_normalized_uniqueness(
 
     assert result.exit_code != 0
     assert "already exists in this project" in result.output
+
+
+def test_phase_start_by_id_sets_selected_phase_active(tmp_db, project, monkeypatch) -> None:
+    """phase start should resolve by id and make the selected phase active."""
+    phase = Phase.create(project_id=project.id, title="Execution", status="planned")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "start", phase.id])
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "active"
+    assert "is now active" in result.output
+
+
+def test_phase_start_by_unique_normalized_title_sets_phase_active(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase start should resolve a unique normalized title within the current project."""
+    phase = Phase.create(project_id=project.id, title="  Build   API  ", status="planned")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "start", "build api"])
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "active"
+
+
+def test_phase_start_demotes_existing_active_phase_in_same_project(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase start should demote existing active phases in the same project to planned."""
+    old_active = Phase.create(project_id=project.id, title="Old Active", status="active")
+    another_active = Phase.create(project_id=project.id, title="Another Active", status="active")
+    target = Phase.create(project_id=project.id, title="Target", status="planned")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "start", target.id])
+
+    assert result.exit_code == 0, result.output
+    assert Phase.get(target.id).status == "active"
+    assert Phase.get(old_active.id).status == "planned"
+    assert Phase.get(another_active.id).status == "planned"
+
+    active_phases = [
+        phase for phase in Phase.list_by_project(project.id) if phase.status == "active"
+    ]
+    assert [phase.id for phase in active_phases] == [target.id]
+
+
+def test_phase_start_does_not_mutate_other_project_phases(tmp_db, project, monkeypatch) -> None:
+    """phase start should only change phase states in the current project."""
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    other_active = Phase.create(
+        project_id=other_project.id, title="External Active", status="active"
+    )
+    target = Phase.create(project_id=project.id, title="Target", status="planned")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "start", target.id])
+
+    assert result.exit_code == 0, result.output
+    assert Phase.get(target.id).status == "active"
+    assert Phase.get(other_active.id).status == "active"
+
+
+def test_phase_start_is_idempotent_when_phase_already_active(tmp_db, project, monkeypatch) -> None:
+    """phase start should be idempotent for repeated starts on the already-active phase."""
+    target = Phase.create(project_id=project.id, title="Target", status="active")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    first = runner.invoke(cli, ["phase", "start", target.id])
+    second = runner.invoke(cli, ["phase", "start", target.id])
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert Phase.get(target.id).status == "active"
+    assert "Demoted" not in second.output
+    active_phases = [
+        phase for phase in Phase.list_by_project(project.id) if phase.status == "active"
+    ]
+    assert [phase.id for phase in active_phases] == [target.id]

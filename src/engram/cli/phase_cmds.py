@@ -173,3 +173,22 @@ def phase_update(phase_ref: str, field: str | None, value: str | None) -> None:
 
     phase.update(**{field: update_value})
     cli_root.console.print(f"[green]Phase '{phase.id}' updated.[/green]")
+
+
+@phase.command(name="start")
+@click.argument("phase_ref")
+def phase_start(phase_ref: str) -> None:
+    """Start a phase by ID or unique title and make it the only active phase."""
+    project = cli_root.get_current_project()
+    phase = resolve_phase_in_project(phase_ref, project.id)
+
+    started_phase, demoted_count = Phase.start(phase.id)
+
+    cli_root.console.print(
+        f"[green]Phase '{started_phase.title}' ({started_phase.id}) is now active.[/green]"
+    )
+    if demoted_count:
+        noun = "phase" if demoted_count == 1 else "phases"
+        cli_root.console.print(
+            f"[yellow]Demoted {demoted_count} previously active {noun} to planned.[/yellow]"
+        )

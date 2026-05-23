@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(cli): add `engram phase start` with deterministic single-active-phase enforcement, same-project active-phase demotion, and idempotent activation coverage.
 - feat(cli): add `engram phase update` with mutable-field validation, status/order parsing checks, and project-scoped normalized title collision protection.
 - feat(cli): add `engram phase get` with shared project-scoped id/title resolution, full phase detail output, and ambiguity/missing lookup coverage.
 - feat(cli): add `engram phase list` with project-scoped ordered output and compact phase summary columns plus CLI coverage for empty/single/multi-phase listing.
