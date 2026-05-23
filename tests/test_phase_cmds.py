@@ -503,6 +503,89 @@ def test_phase_done_force_completes_when_unfinished_linked_tasks_remain(
     assert "override" in result.output
 
 
+def test_phase_cli_end_to_end_workflow_add_list_get_update_start_done(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase commands should work as one end-to-end workflow for the current project."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    add_result = runner.invoke(
+        cli,
+        [
+            "phase",
+            "add",
+            "Phase Alpha",
+            "--description",
+            "Initial milestone scope",
+            "--acceptance",
+            "All checks pass",
+        ],
+    )
+    assert add_result.exit_code == 0, add_result.output
+    created_match = re.search(r"Phase created with ID:\s*([a-f0-9]{8})", add_result.output)
+    assert created_match is not None
+    phase_id = created_match.group(1)
+
+    list_result = runner.invoke(cli, ["phase", "list"])
+    assert list_result.exit_code == 0, list_result.output
+    assert phase_id in list_result.output
+    assert "Phase Alpha" in list_result.output
+
+    get_result = runner.invoke(cli, ["phase", "get", phase_id])
+    assert get_result.exit_code == 0, get_result.output
+    assert f"ID: {phase_id}" in get_result.output
+    assert "Status: planned" in get_result.output
+
+    update_result = runner.invoke(
+        cli,
+        ["phase", "update", phase_id, "--field", "title", "--value", "Execution Ready"],
+    )
+    assert update_result.exit_code == 0, update_result.output
+
+    start_result = runner.invoke(cli, ["phase", "start", "execution ready"])
+    assert start_result.exit_code == 0, start_result.output
+    assert Phase.get(phase_id).status == "active"
+
+    done_result = runner.invoke(
+        cli,
+        ["phase", "done", phase_id, "--evidence", "Release checks completed"],
+    )
+    assert done_result.exit_code == 0, done_result.output
+    refreshed = Phase.get(phase_id)
+    assert refreshed is not None
+    assert refreshed.status == "done"
+    assert refreshed.evidence == "Release checks completed"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["phase", "get", "phase-id"],
+        ["phase", "update", "phase-id", "--field", "status", "--value", "done"],
+        ["phase", "start", "phase-id"],
+        ["phase", "done", "phase-id", "--evidence", "Cross-project completion attempt"],
+    ],
+)
+def test_phase_commands_reject_cross_project_phase_refs(
+    tmp_db, project, monkeypatch, args: list[str]
+) -> None:
+    """phase get/update/start/done should reject phase IDs from another project."""
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    foreign_phase = Phase.create(project_id=other_project.id, title="Foreign", status="active")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    resolved_args = [foreign_phase.id if token == "phase-id" else token for token in args]
+    result = runner.invoke(cli, resolved_args)
+
+    assert result.exit_code != 0
+    assert f"Phase '{foreign_phase.id}' not found in this project." in result.output
+    assert Phase.get(foreign_phase.id).status == "active"
+
+
 def test_phase_done_requires_evidence(tmp_db, project, monkeypatch) -> None:
     """phase done should require evidence input."""
     phase = Phase.create(project_id=project.id, title="Execution", status="active")
