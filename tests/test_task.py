@@ -1,5 +1,8 @@
 """Tests for Task model including status lifecycle and priority ordering."""
 
+import sqlite3
+
+from engram.db import get_db_connection, init_db
 from engram.models.task import Task
 
 
@@ -75,7 +78,6 @@ def test_delete_task(task):
 
 def test_db_migration_completed_to_done(tmp_db):
     """Verify the completed → done migration runs correctly."""
-    from engram.db import get_db_connection
     from engram.models.project import Project
 
     p = Project.create("mig-proj", "Mig Project", repo_paths=["/tmp/mig"])
@@ -88,8 +90,89 @@ def test_db_migration_completed_to_done(tmp_db):
     conn.commit()
     conn.close()
     # Re-run init_db to trigger the migration
-    from engram.db import init_db
-
     init_db(tmp_db)
     t = Task.get("t-legacy")
     assert t.status == "done"
+
+
+def test_init_db_creates_phases_schema(tmp_db) -> None:
+    conn = get_db_connection(tmp_db)
+    phase_columns = {row["name"] for row in conn.execute("PRAGMA table_info(phases)").fetchall()}
+    task_columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    conn.close()
+
+    assert {
+        "id",
+        "project_id",
+        "title",
+        "description",
+        "status",
+        "order_index",
+        "acceptance",
+        "evidence",
+        "created_at",
+        "updated_at",
+    }.issubset(phase_columns)
+    assert "phase_id" in task_columns
+
+
+def test_init_db_migrates_legacy_tasks_with_no_phase_id(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "legacy_memory.db"
+    legacy_conn = sqlite3.connect(db_path)
+    legacy_conn.execute("""
+    CREATE TABLE projects (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        summary     TEXT,
+        status      TEXT DEFAULT 'active',
+        repo_paths  TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    legacy_conn.execute("""
+    CREATE TABLE tasks (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL REFERENCES projects(id),
+        title       TEXT NOT NULL,
+        description TEXT,
+        status      TEXT DEFAULT 'todo',
+        priority    TEXT DEFAULT 'medium',
+        phase       TEXT,
+        acceptance  TEXT,
+        evidence    TEXT,
+        tags        TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    legacy_conn.execute(
+        "INSERT INTO projects (id, name, repo_paths) VALUES ('legacy-proj', 'Legacy', '[]')"
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO tasks (id, project_id, title, status, phase)
+        VALUES ('legacy-task', 'legacy-proj', 'Legacy Task', 'todo', 'Phase Alpha')
+        """
+    )
+    legacy_conn.commit()
+    legacy_conn.close()
+
+    init_db(db_path)
+    init_db(db_path)
+
+    monkeypatch.setattr("engram.models.task.get_db_connection", lambda: get_db_connection(db_path))
+    task = Task.get("legacy-task")
+    assert task is not None
+    assert task.title == "Legacy Task"
+    assert task.phase == "Phase Alpha"
+
+    conn = get_db_connection(db_path)
+    task_columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    phase_columns = {row["name"] for row in conn.execute("PRAGMA table_info(phases)").fetchall()}
+    phase_id = conn.execute("SELECT phase_id FROM tasks WHERE id = 'legacy-task'").fetchone()[0]
+    conn.close()
+
+    assert "phase_id" in task_columns
+    assert {"project_id", "title", "status", "order_index"}.issubset(phase_columns)
+    assert phase_id is None

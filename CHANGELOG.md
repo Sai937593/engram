@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(db): add first-class phases schema and idempotent nullable `tasks.phase_id` migration.
 - docs: align public README and user manual with the current CLI and remove stale planning docs.
 - chore: prepare repository for public release, add MIT license, exclude unpolished UI, and write portfolio README.md
 - feat(cli): implement --all/-a option for 'engram task list' and improve empty states with helpful guidance.

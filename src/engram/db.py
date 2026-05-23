@@ -16,6 +16,11 @@ def get_db_connection(db_path=None):
     return conn
 
 
+def _column_exists(cursor: sqlite3.Cursor, table_name: str, column_name: str) -> bool:
+    rows = cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return any(row["name"] == column_name for row in rows)
+
+
 def init_db(db_path=None):
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
@@ -38,6 +43,7 @@ def init_db(db_path=None):
     CREATE TABLE IF NOT EXISTS tasks (
         id          TEXT PRIMARY KEY,
         project_id  TEXT NOT NULL REFERENCES projects(id),
+        phase_id    TEXT REFERENCES phases(id),
         title       TEXT NOT NULL,
         description TEXT,
         status      TEXT DEFAULT 'todo',
@@ -52,11 +58,27 @@ def init_db(db_path=None):
     )
     """)
 
-    # Migration: add depends_on to tasks if missing (for existing DBs)
-    try:
+    # Phases
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS phases (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL REFERENCES projects(id),
+        title       TEXT NOT NULL,
+        description TEXT,
+        status      TEXT DEFAULT 'planned',
+        order_index INTEGER DEFAULT 0,
+        acceptance  TEXT,
+        evidence    TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+
+    # Migrations: add missing columns to existing tasks DBs
+    if not _column_exists(cursor, "tasks", "depends_on"):
         cursor.execute("ALTER TABLE tasks ADD COLUMN depends_on TEXT REFERENCES tasks(id)")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    if not _column_exists(cursor, "tasks", "phase_id"):
+        cursor.execute("ALTER TABLE tasks ADD COLUMN phase_id TEXT REFERENCES phases(id)")
 
     # Memories
     cursor.execute("""
