@@ -195,3 +195,18 @@ class Task:
         conn.commit()
         conn.close()
         AuditLog.log("tasks", self.id, "delete")
+
+
+def get_effective_phase_title(task: Task) -> str | None:
+    """Return the workflow/display phase title for a task across legacy and first-class phases."""
+    if task.phase_id:
+        from engram.models.phase import Phase
+
+        phase = Phase.get(task.phase_id)
+        if phase:
+            return phase.title
+
+    if isinstance(task.phase, str) and task.phase.strip():
+        return task.phase
+
+    return None

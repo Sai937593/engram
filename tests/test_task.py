@@ -3,7 +3,8 @@
 import sqlite3
 
 from engram.db import get_db_connection, init_db
-from engram.models.task import Task
+from engram.models.phase import Phase
+from engram.models.task import Task, get_effective_phase_title
 
 
 def test_create_task(project):
@@ -81,6 +82,46 @@ def test_update_task_phase_id(task):
     task.update(phase_id="phase-updated")
     refreshed = Task.get(task.id)
     assert refreshed.phase_id == "phase-updated"
+
+
+def test_get_effective_phase_title_for_future_branch_labels_prefers_first_class_phase(project):
+    phase = Phase.create(project_id=project.id, title="Phase Roadmap")
+    task = Task.create(
+        project_id=project.id,
+        title="Task with both phase fields",
+        phase="Legacy Phase Text",
+        phase_id=phase.id,
+    )
+
+    assert get_effective_phase_title(task) == "Phase Roadmap"
+
+
+def test_get_effective_phase_title_for_future_commit_scopes_falls_back_to_legacy_phase(project):
+    task = Task.create(
+        project_id=project.id,
+        title="Legacy phase task",
+        phase="Phase Legacy",
+        phase_id=None,
+    )
+
+    assert get_effective_phase_title(task) == "Phase Legacy"
+
+
+def test_get_effective_phase_title_returns_none_for_unphased_task(project):
+    task = Task.create(project_id=project.id, title="Unphased task", phase=None, phase_id=None)
+
+    assert get_effective_phase_title(task) is None
+
+
+def test_get_effective_phase_title_handles_stale_phase_id_with_no_legacy_phase(project):
+    task = Task.create(
+        project_id=project.id,
+        title="Stale phase pointer",
+        phase=None,
+        phase_id="missing-phase-id",
+    )
+
+    assert get_effective_phase_title(task) is None
 
 
 def test_get_next_respects_priority(project):
