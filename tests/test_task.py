@@ -116,7 +116,7 @@ def test_init_db_creates_phases_schema(tmp_db) -> None:
     assert "phase_id" in task_columns
 
 
-def test_init_db_migrates_legacy_tasks_with_no_phase_id(tmp_path, monkeypatch) -> None:
+def test_init_db_backfills_legacy_task_phase_strings(tmp_path) -> None:
     db_path = tmp_path / "legacy_memory.db"
     legacy_conn = sqlite3.connect(db_path)
     legacy_conn.execute("""
@@ -147,12 +147,45 @@ def test_init_db_migrates_legacy_tasks_with_no_phase_id(tmp_path, monkeypatch) -
     )
     """)
     legacy_conn.execute(
-        "INSERT INTO projects (id, name, repo_paths) VALUES ('legacy-proj', 'Legacy', '[]')"
+        "INSERT INTO projects (id, name, repo_paths) VALUES ('legacy-proj-1', 'Legacy 1', '[]')"
+    )
+    legacy_conn.execute(
+        "INSERT INTO projects (id, name, repo_paths) VALUES ('legacy-proj-2', 'Legacy 2', '[]')"
     )
     legacy_conn.execute(
         """
         INSERT INTO tasks (id, project_id, title, status, phase)
-        VALUES ('legacy-task', 'legacy-proj', 'Legacy Task', 'todo', 'Phase Alpha')
+        VALUES ('legacy-task-1', 'legacy-proj-1', 'Legacy Task 1', 'todo', ' Phase Alpha ')
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO tasks (id, project_id, title, status, phase)
+        VALUES ('legacy-task-2', 'legacy-proj-1', 'Legacy Task 2', 'todo', 'phase   alpha')
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO tasks (id, project_id, title, status, phase)
+        VALUES ('legacy-task-3', 'legacy-proj-1', 'Legacy Task 3', 'todo', '')
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO tasks (id, project_id, title, status, phase)
+        VALUES ('legacy-task-4', 'legacy-proj-1', 'Legacy Task 4', 'todo', NULL)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO tasks (id, project_id, title, status, phase)
+        VALUES ('legacy-task-5', 'legacy-proj-2', 'Legacy Task 5', 'todo', 'Phase Alpha')
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO tasks (id, project_id, title, status, phase)
+        VALUES ('legacy-task-6', 'legacy-proj-2', 'Legacy Task 6', 'todo', 'Phase Beta')
         """
     )
     legacy_conn.commit()
@@ -161,18 +194,41 @@ def test_init_db_migrates_legacy_tasks_with_no_phase_id(tmp_path, monkeypatch) -
     init_db(db_path)
     init_db(db_path)
 
-    monkeypatch.setattr("engram.models.task.get_db_connection", lambda: get_db_connection(db_path))
-    task = Task.get("legacy-task")
-    assert task is not None
-    assert task.title == "Legacy Task"
-    assert task.phase == "Phase Alpha"
-
     conn = get_db_connection(db_path)
     task_columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     phase_columns = {row["name"] for row in conn.execute("PRAGMA table_info(phases)").fetchall()}
-    phase_id = conn.execute("SELECT phase_id FROM tasks WHERE id = 'legacy-task'").fetchone()[0]
+    phase_rows = conn.execute(
+        """
+        SELECT project_id, title
+        FROM phases
+        ORDER BY project_id, title
+        """
+    ).fetchall()
+    phase_ids = dict(conn.execute("SELECT id, project_id || ':' || title FROM phases").fetchall())
+    task_phase_rows = dict(
+        conn.execute("SELECT id, phase_id FROM tasks WHERE id LIKE 'legacy-task-%'").fetchall()
+    )
+    task_legacy_phase_rows = dict(
+        conn.execute(
+            "SELECT id, phase FROM tasks WHERE id IN ('legacy-task-1', 'legacy-task-2')"
+        ).fetchall()
+    )
     conn.close()
 
     assert "phase_id" in task_columns
     assert {"project_id", "title", "status", "order_index"}.issubset(phase_columns)
-    assert phase_id is None
+    assert len(phase_rows) == 3
+    assert [tuple(row) for row in phase_rows] == [
+        ("legacy-proj-1", "Phase Alpha"),
+        ("legacy-proj-2", "Phase Alpha"),
+        ("legacy-proj-2", "Phase Beta"),
+    ]
+    assert task_phase_rows["legacy-task-1"] == task_phase_rows["legacy-task-2"]
+    assert task_phase_rows["legacy-task-1"] != task_phase_rows["legacy-task-5"]
+    assert task_phase_rows["legacy-task-3"] is None
+    assert task_phase_rows["legacy-task-4"] is None
+    assert task_phase_rows["legacy-task-5"] is not None
+    assert task_phase_rows["legacy-task-6"] is not None
+    assert task_legacy_phase_rows["legacy-task-1"] == " Phase Alpha "
+    assert task_legacy_phase_rows["legacy-task-2"] == "phase   alpha"
+    assert all(phase_id for phase_id in phase_ids.keys())
