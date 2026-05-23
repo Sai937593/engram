@@ -490,7 +490,7 @@ def task_next() -> None:
             status_str = f"{eff_status} (dep)"
         cli_root.console.print(f"[cyan]Status:[/cyan] {status_str}")
         cli_root.console.print(f"[cyan]Priority:[/cyan] {t.priority}")
-        cli_root.console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
+        cli_root.console.print(f"[cyan]Phase:[/cyan] {get_effective_phase_title(t) or 'N/A'}")
         cli_root.console.print(f"[cyan]Description:[/cyan] {t.description or 'N/A'}")
         cli_root.console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{t.acceptance or 'N/A'}")
         return

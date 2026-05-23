@@ -524,6 +524,61 @@ def test_start_prioritizes_active_phase_todo_over_other_in_progress(
     assert t_active_todo.id in result.output
 
 
+def test_start_prioritizes_legacy_in_progress_matching_active_phase(
+    tmp_db, project, mock_git, monkeypatch
+):
+    """engram start treats legacy phase text as active-phase membership when phase_id is missing."""
+    phase_1 = Phase.create(project_id=project.id, title="Phase 1", status="active")
+    phase_2 = Phase.create(project_id=project.id, title="Phase 2", status="planned")
+
+    Task.create(
+        project_id=project.id,
+        title="Other In-Progress",
+        phase_id=phase_2.id,
+        status="in-progress",
+    )
+    t_legacy_active = Task.create(
+        project_id=project.id,
+        title="Legacy Active In-Progress",
+        phase=phase_1.title,
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "Resuming in-progress task:" in result.output
+    assert t_legacy_active.id in result.output
+
+
+def test_start_prefers_unphased_project_task_before_other_phase_todo(
+    tmp_db, project, mock_git, monkeypatch
+):
+    """When the active phase has no actionable work, start checks unphased work before other phases."""
+    Phase.create(project_id=project.id, title="Phase 1", status="active")
+    phase_2 = Phase.create(project_id=project.id, title="Phase 2", status="planned")
+
+    Task.create(
+        project_id=project.id,
+        title="Other Phase Critical",
+        phase_id=phase_2.id,
+        status="todo",
+        priority="critical",
+    )
+    t_unphased = Task.create(
+        project_id=project.id,
+        title="Unphased Project Task",
+        status="todo",
+        priority="medium",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "Started task:" in result.output
+    assert t_unphased.id in result.output
+
+
 def test_start_falls_back_to_other_in_progress(tmp_db, project, mock_git, monkeypatch):
     """engram start falls back to other phase's in-progress tasks if no tasks in active phase."""
     _phase_1 = Phase.create(project_id=project.id, title="Phase 1", status="active")

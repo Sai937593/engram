@@ -6,7 +6,9 @@ import subprocess
 import click
 
 import engram.cli as cli_root
+from engram.cli.phase_helpers import normalize_phase_title
 from engram.context import get_task_context
+from engram.models.phase import Phase
 from engram.models.task import Task, get_effective_phase_title
 
 
@@ -57,54 +59,67 @@ def get_current_branch() -> str:
     return res.stdout.strip()
 
 
+def _task_matches_phase(task: Task, phase: Phase) -> bool:
+    """Return whether a task is linked to a phase through first-class or legacy data."""
+    if task.phase_id == phase.id:
+        return True
+    if task.phase_id:
+        return False
+    return normalize_phase_title(task.phase) == normalize_phase_title(phase.title)
+
+
 @cli_root.cli.command(name="start")
 def start():
     """Start the next task in the workflow."""
     p = cli_root.get_current_project()
 
-    # Fetch the active phase
-    from engram.models.phase import Phase
-
     phases = Phase.list_by_project(p.id)
     active_phase = next((ph for ph in phases if ph.status == "active"), None)
-    active_phase_id = active_phase.id if active_phase else None
 
     # Fetch all tasks in the project to check in-progress states
     tasks = Task.list_by_project(p.id)
 
     # 1. In-progress tasks from the active phase
     in_progress_active = []
-    if active_phase_id:
+    if active_phase:
         in_progress_active = [
             task
             for task in tasks
-            if task.status == "in-progress" and task.phase_id == active_phase_id
+            if task.status == "in-progress" and _task_matches_phase(task, active_phase)
         ]
 
     is_resuming = False
+    t = None
 
     if in_progress_active:
         t = in_progress_active[0]
         is_resuming = True
-    else:
-        # Get next task, passing active_phase_id
-        next_t = Task.get_next(p.id, active_phase_id=active_phase_id)
-
+    elif active_phase:
         # 2. Actionable tasks from the active phase
-        if next_t and active_phase_id and next_t.phase_id == active_phase_id:
-            t = next_t
-            is_resuming = t.status == "in-progress"
-        else:
-            # 3. Other in-progress tasks in the project
+        t = Task.get_next_for_phase(p.id, active_phase.id, active_phase.title)
+
+        if not t:
+            # 3. Project-level actionable tasks without any phase
+            t = Task.get_next_unphased(p.id)
+
+        if not t:
+            # 4. Other in-progress tasks in the project
             in_progress_any = [task for task in tasks if task.status == "in-progress"]
             if in_progress_any:
                 t = in_progress_any[0]
                 is_resuming = True
-            else:
-                # 4. Fallback to project-level task
-                t = next_t
-                if t:
-                    is_resuming = t.status == "in-progress"
+
+        if not t:
+            # 5. Existing global next-task behavior
+            t = Task.get_next(p.id)
+    else:
+        next_t = Task.get_next(p.id)
+        in_progress_any = [task for task in tasks if task.status == "in-progress"]
+        if in_progress_any:
+            t = in_progress_any[0]
+            is_resuming = True
+        else:
+            t = next_t
 
     if not t:
         # No task available

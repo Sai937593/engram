@@ -173,3 +173,18 @@ def test_task_update_legacy_phase_unaffected(tmp_db, project, monkeypatch) -> No
     refreshed = Task.get(task.id)
     assert refreshed.phase_id is None
     assert refreshed.phase == "Legacy Sweep"
+
+
+def test_task_next_shows_effective_phase_title_for_phase_id_task(
+    tmp_db, project, monkeypatch
+) -> None:
+    """task next should display the joined phase title for first-class phase_id tasks."""
+    phase = Phase.create(project_id=project.id, title="Phase Roadmap")
+    Task.create(project_id=project.id, title="Next Task", phase_id=phase.id, priority="high")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["task", "next"])
+
+    assert result.exit_code == 0, result.output
+    assert "Title: Next Task" in result.output
+    assert "Phase: Phase Roadmap" in result.output

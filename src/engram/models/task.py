@@ -1,7 +1,17 @@
 import uuid
+from typing import Any
 
 from engram.db import get_db_connection
 from engram.models.audit import AuditLog
+
+PRIORITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _normalize_phase_title(phase: str | None) -> str:
+    """Return a whitespace-normalized phase key for compatibility matching."""
+    if phase is None:
+        return ""
+    return " ".join(phase.split()).casefold()
 
 
 class Task:
@@ -143,6 +153,66 @@ class Task:
         if row:
             return cls.from_row(row)
         return None
+
+    @classmethod
+    def _list_actionable_todo_rows(cls, project_id: str) -> list[Any]:
+        """Return todo task rows whose dependencies are satisfied."""
+        conn = get_db_connection()
+        rows = conn.execute(
+            """
+            SELECT t1.*, t2.status AS dependency_status
+            FROM tasks t1
+            LEFT JOIN tasks t2 ON t1.depends_on = t2.id
+            WHERE t1.project_id = ?
+              AND t1.status = 'todo'
+              AND (t1.depends_on IS NULL OR t2.status = 'done')
+            """,
+            (project_id,),
+        ).fetchall()
+        conn.close()
+        return rows
+
+    @classmethod
+    def _select_next_from_rows(cls, rows: list[Any]) -> "Task | None":
+        """Select the highest-priority row using the same ordering as get_next."""
+        if not rows:
+            return None
+
+        ordered_rows = sorted(
+            rows,
+            key=lambda row: (
+                PRIORITY_RANK.get(row["priority"], 4),
+                row["created_at"] or "",
+            ),
+        )
+        return cls.from_row(ordered_rows[0])
+
+    @classmethod
+    def get_next_for_phase(
+        cls,
+        project_id: str,
+        phase_id: str,
+        phase_title: str,
+    ) -> "Task | None":
+        """Return the next actionable task linked to a phase by phase_id or legacy title."""
+        normalized_title = _normalize_phase_title(phase_title)
+        rows = [
+            row
+            for row in cls._list_actionable_todo_rows(project_id)
+            if row["phase_id"] == phase_id
+            or (not row["phase_id"] and _normalize_phase_title(row["phase"]) == normalized_title)
+        ]
+        return cls._select_next_from_rows(rows)
+
+    @classmethod
+    def get_next_unphased(cls, project_id: str) -> "Task | None":
+        """Return the next actionable task with no first-class or legacy phase."""
+        rows = [
+            row
+            for row in cls._list_actionable_todo_rows(project_id)
+            if not row["phase_id"] and not _normalize_phase_title(row["phase"])
+        ]
+        return cls._select_next_from_rows(rows)
 
     @classmethod
     def count_by_status(cls, project_id: str) -> dict:
