@@ -20,6 +20,32 @@ def test_create_task_with_tags(project):
     assert "testing" in t.tags
 
 
+def test_create_task_persists_phase_id_without_legacy_phase(project, tmp_db):
+    t = Task.create(project_id=project.id, title="Task with phase id", phase_id="phase-123")
+    assert t.phase is None
+    assert t.phase_id == "phase-123"
+
+    conn = get_db_connection(tmp_db)
+    row = conn.execute("SELECT phase, phase_id FROM tasks WHERE id = ?", (t.id,)).fetchone()
+    conn.close()
+
+    assert row["phase"] is None
+    assert row["phase_id"] == "phase-123"
+
+
+def test_create_task_with_legacy_phase_remains_compatible(project, tmp_db):
+    t = Task.create(project_id=project.id, title="Legacy phase task", phase="Phase Alpha")
+
+    conn = get_db_connection(tmp_db)
+    row = conn.execute("SELECT phase, phase_id FROM tasks WHERE id = ?", (t.id,)).fetchone()
+    conn.close()
+
+    assert t.phase == "Phase Alpha"
+    assert t.phase_id is None
+    assert row["phase"] == "Phase Alpha"
+    assert row["phase_id"] is None
+
+
 def test_get_task(task):
     fetched = Task.get(task.id)
     assert fetched is not None
@@ -49,6 +75,12 @@ def test_update_task_evidence(task):
     task.update(evidence="All tests passed.")
     refreshed = Task.get(task.id)
     assert refreshed.evidence == "All tests passed."
+
+
+def test_update_task_phase_id(task):
+    task.update(phase_id="phase-updated")
+    refreshed = Task.get(task.id)
+    assert refreshed.phase_id == "phase-updated"
 
 
 def test_get_next_respects_priority(project):

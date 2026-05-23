@@ -14,6 +14,7 @@ class Task:
         status="todo",
         priority="medium",
         phase=None,
+        phase_id=None,
         depends_on=None,
         acceptance=None,
         evidence=None,
@@ -26,6 +27,7 @@ class Task:
         self.status = status
         self.priority = priority
         self.phase = phase
+        self.phase_id = phase_id
         self.depends_on = depends_on
         self.acceptance = acceptance
         self.evidence = evidence
@@ -40,6 +42,7 @@ class Task:
         status="todo",
         priority="medium",
         phase=None,
+        phase_id=None,
         depends_on=None,
         acceptance=None,
         tags=None,
@@ -51,8 +54,8 @@ class Task:
         conn = get_db_connection()
         conn.execute(
             """
-            INSERT INTO tasks (id, project_id, title, description, status, priority, phase, depends_on, acceptance, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (id, project_id, title, description, status, priority, phase, phase_id, depends_on, acceptance, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 id,
@@ -62,6 +65,7 @@ class Task:
                 status,
                 priority,
                 phase,
+                phase_id,
                 depends_on,
                 acceptance,
                 ",".join(tags or []),
@@ -80,6 +84,7 @@ class Task:
             status,
             priority,
             phase,
+            phase_id,
             depends_on,
             acceptance,
             None,
@@ -144,6 +149,7 @@ class Task:
             row["status"],
             row["priority"],
             row["phase"],
+            row["phase_id"],
             row["depends_on"],
             row["acceptance"],
             row["evidence"],
