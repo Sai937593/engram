@@ -1,4 +1,4 @@
-# Engram Phase–Task Hierarchy Design Spec
+# Engram Phase-Task Hierarchy Design Spec
 
 ## 1. Purpose
 
@@ -8,8 +8,8 @@ The goal is to make Engram's project workflow more structured:
 
 ```text
 Project
-  └── Phase
-        └── Task
+  -> Phase
+       -> Task
 ```
 
 This should be implemented before the memory retrieval redesign, because retrieval and startup context will benefit from having a clear active phase and task structure.
@@ -68,7 +68,11 @@ blocked
 cancelled
 ```
 
-Only one phase should usually be active per project, but the system does not need to enforce this strictly in the first version unless implementation is simple.
+Version 1 should enforce at most one active phase per project through `engram phase start`. Starting a phase should either demote any currently active phase back to `planned` or reject the command unless an explicit override is provided. The preferred default is to demote the previous active phase to `planned`, because this keeps `engram start` deterministic.
+
+Phase titles should be unique per project after normalization, unless an implementation constraint makes this impractical. Commands that accept `phase_id_or_name` must reject ambiguous name matches rather than guessing.
+
+`order_index` is assigned as `max(order_index) + 1` within the project by default. Phase listing should primarily follow `order_index`, with optional status filtering rather than surprising implicit reordering.
 
 ### Task
 
@@ -100,6 +104,17 @@ done
 blocked
 cancelled
 ```
+
+During migration, tasks may still carry the legacy `phase` string. New behavior should use an effective phase-title helper:
+
+```text
+effective_phase_title(task) =
+  joined Phase.title if task.phase_id is set
+  else legacy task.phase if present
+  else None
+```
+
+This helper preserves branch naming, commit scopes, task output, and compatibility while the old field is deprecated.
 
 ## 4. Relationship Rules
 
@@ -135,6 +150,8 @@ A phase should not represent:
 - a memory category
 - a substitute for project-level constraints
 ```
+
+`phase done` should not silently mark a phase complete while active work remains. Version 1 should either reject completion when non-cancelled tasks are not done, or require an explicit `--force` option. The default should be rejection with a clear list/count of remaining tasks.
 
 ## 6. Task Responsibilities
 
@@ -185,7 +202,7 @@ source_phase_id
 source_task_id
 ```
 
-This allows a memory to be created during a phase without becoming a separate “phase memory.”
+This allows a memory to be created during a phase without becoming a separate "phase memory."
 
 ## 8. Startup Context Impact
 
@@ -205,7 +222,7 @@ Example future output:
 
 ```text
 Project:
-Engram — local-first memory system for coding agents.
+Engram - local-first memory system for coding agents.
 
 Current phase:
 Startup context redesign
@@ -222,10 +239,10 @@ Recommended new commands:
 ```bash
 engram phase add "<title>" [--description TEXT] [--status planned|active|done|blocked|cancelled] [--acceptance TEXT]
 engram phase list [--all]
-engram phase get <phase_id>
-engram phase start <phase_id>
-engram phase done <phase_id> --evidence "<proof>"
-engram phase update <phase_id> --field <field> --value <value>
+engram phase get <phase_id_or_name>
+engram phase start <phase_id_or_name>
+engram phase done <phase_id_or_name> --evidence "<proof>" [--force]
+engram phase update <phase_id_or_name> --field <field> --value <value>
 ```
 
 Task commands should support phase association:
@@ -233,10 +250,19 @@ Task commands should support phase association:
 ```bash
 engram task add "<title>" --phase <phase_id_or_name>
 engram task list --phase <phase_id_or_name>
-engram task update <task_id> --field phase_id --value <phase_id>
+engram task update <task_id> --field phase_id --value <phase_id_or_name>
 ```
 
 Existing task behavior should remain backward compatible during migration.
+
+Name resolution rules:
+
+```text
+- Exact phase id matches win.
+- Exact normalized title matches are accepted if unique within the project.
+- Prefix/partial matches may be supported only if unique.
+- Ambiguous matches must fail with a clear error.
+```
 
 ## 10. `engram start` Behavior
 
@@ -244,7 +270,7 @@ Initial phase-aware behavior:
 
 ```text
 1. Resolve current project.
-2. Find active phase.
+2. Find the single active phase, if any.
 3. If active phase exists, select next actionable task from that phase.
 4. If no active phase exists, fall back to existing task-next behavior.
 5. Mark selected task as in-progress if `start` currently mutates task state.
@@ -254,10 +280,13 @@ Initial phase-aware behavior:
 Selection priority:
 
 ```text
-active phase tasks first
+in-progress task in the active phase
+then actionable active-phase tasks
 then project-level actionable tasks without phase
 then existing global task next behavior
 ```
+
+Branch names, finish commit scopes, and phase-complete checks should use the effective phase title during compatibility. Once legacy `task.phase` is removed, they should derive from the joined `Phase.title`.
 
 ## 11. Migration Strategy
 
@@ -267,13 +296,26 @@ Migration plan:
 
 ```text
 1. Create phases table.
-2. Read distinct non-empty task.phase values.
-3. Create one phase per distinct phase string per project.
-4. Backfill task.phase_id based on old task.phase.
-5. Keep old task.phase temporarily for compatibility.
-6. Mark old task.phase as deprecated.
-7. Later remove or ignore old task.phase after commands fully use phase_id.
+2. Add nullable task.phase_id.
+3. Read distinct non-empty task.phase values per project.
+4. Create one phase per distinct normalized phase string per project.
+5. Backfill task.phase_id based on old task.phase.
+6. Keep old task.phase temporarily for compatibility.
+7. Mark old task.phase as deprecated in code/docs.
+8. Later remove or ignore old task.phase after commands fully use phase_id.
 ```
+
+Migration requirements:
+
+```text
+- Idempotent: repeated init/migration runs must not duplicate phases.
+- Lossless: no task loses its legacy phase text.
+- Project-scoped: identical phase names in different projects create separate phases.
+- Safe for empty/null legacy phase values.
+- Covered by migration tests before changing `engram start`.
+```
+
+This migration/compatibility layer should be implemented before broad CLI behavior changes, because current branch naming, finish behavior, task output, and tests depend on legacy `task.phase`.
 
 ## 12. Non-Goals
 
@@ -295,9 +337,11 @@ The design is successful if:
 
 ```text
 - phases are first-class entities
+- at most one active phase is selected per project
 - tasks can be grouped under phases
+- legacy task.phase metadata is migrated safely and remains readable during compatibility
 - `engram start` can prefer tasks from the active phase
-- old task phase metadata can be migrated safely
+- branch naming and finish behavior remain stable during migration
 - the model remains simple enough for CLI usage
 - future memory retrieval can use project + phase + task context cleanly
 ```
