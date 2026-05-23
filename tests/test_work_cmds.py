@@ -307,3 +307,61 @@ def test_start_checkout_handles_no_phase_gracefully(tmp_db, project, mock_git, m
     # Verify that the checkout branch targets 'feat/misc'
     checkouts = [c for c in mock_git.calls if c[0:2] == ["git", "checkout"]]
     assert any("feat/misc" in cmd for cmd in checkouts)
+
+
+def test_finish_commit_uses_first_class_phase_title(tmp_db, project, mock_git, monkeypatch):
+    """engram finish uses the first-class phase title if linked via phase_id."""
+    phase = Phase.create(project_id=project.id, title="Phase Roadmap")
+    Task.create(
+        project_id=project.id,
+        title="Refactor core db",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish", "-t", "feat"])
+
+    assert result.exit_code == 0
+    assert len(mock_git.commits) == 1
+    commit_cmd = mock_git.commits[0]
+    commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
+    assert commit_msg.startswith("feat(phase-roadmap): Refactor core db")
+
+
+def test_finish_commit_falls_back_to_legacy_phase_title(tmp_db, project, mock_git, monkeypatch):
+    """engram finish falls back to the legacy phase title if phase_id is missing."""
+    Task.create(
+        project_id=project.id,
+        title="Refactor core db",
+        phase="Phase Legacy",
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish", "-t", "feat"])
+
+    assert result.exit_code == 0
+    assert len(mock_git.commits) == 1
+    commit_cmd = mock_git.commits[0]
+    commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
+    assert commit_msg.startswith("feat(phase-legacy): Refactor core db")
+
+
+def test_finish_commit_handles_no_phase_gracefully(tmp_db, project, mock_git, monkeypatch):
+    """engram finish uses 'misc' if the task has no phase info."""
+    Task.create(
+        project_id=project.id,
+        title="Refactor core db",
+        phase=None,
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish", "-t", "feat"])
+
+    assert result.exit_code == 0
+    assert len(mock_git.commits) == 1
+    commit_cmd = mock_git.commits[0]
+    commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
+    assert commit_msg.startswith("feat(misc): Refactor core db")

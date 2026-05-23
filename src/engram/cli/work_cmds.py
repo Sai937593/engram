@@ -189,7 +189,9 @@ def finish(commit_type):
     # Git operations
     subprocess.run(["git", "add", "-A"], check=False)
 
-    commit_msg = f"{resolved_type}({slugify(t.phase) or 'misc'}): {t.title} [{t.id}]"
+    commit_msg = (
+        f"{resolved_type}({slugify(get_effective_phase_title(t)) or 'misc'}): {t.title} [{t.id}]"
+    )
     commit_res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True)
 
     if commit_res.returncode != 0:
