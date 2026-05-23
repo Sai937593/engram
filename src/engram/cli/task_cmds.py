@@ -23,6 +23,7 @@ VALID_TASK_FIELDS = {
     "tags",
     "acceptance",
     "phase",
+    "phase_id",
     "evidence",
     "depends_on",
 }
@@ -379,6 +380,16 @@ def task_update(task_id: str, field: str, value: str) -> None:
             raise click.ClickException("A task cannot depend on itself.")
         check_dependency_cycle(task_id, resolved_dep, t.project_id)
         value = resolved_dep
+    elif field == "phase_id":
+        if value.lower() in ("none", "null", "clear"):
+            t.update(phase_id=None, phase=None)
+            cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
+            return
+        else:
+            resolved_phase = resolve_phase_in_project(value, t.project_id)
+            t.update(phase_id=resolved_phase.id, phase=resolved_phase.title)
+            cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
+            return
 
     t.update(**{field: value})
     cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
