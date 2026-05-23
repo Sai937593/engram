@@ -83,3 +83,61 @@ def test_task_context_shows_legacy_phase_info(project):
     ctx = get_task_context(t.id)
     assert "## PHASE" in ctx
     assert "Phase: Phase Legacy" in ctx
+
+
+def test_compact_text():
+    from engram.context import _compact_text
+
+    # None and empty
+    assert _compact_text(None) == ""
+    assert _compact_text("") == ""
+
+    # Normal short ASCII
+    assert _compact_text("Hello World") == "Hello World"
+
+    # Unicode replacement
+    assert _compact_text("Hello \u2665 World") == "Hello ? World"
+
+    # Truncation
+    long_str = "a" * 200
+    truncated = _compact_text(long_str, max_chars=50)
+    assert len(truncated) == 50
+    assert truncated.endswith("...")
+    assert truncated == "a" * 47 + "..."
+
+    # Truncation with very small max_chars
+    assert _compact_text("abcdef", max_chars=3) == "..."
+
+
+def test_task_context_shows_compact_phase_details(project):
+    from engram.models.phase import Phase
+
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Custom",
+        description="Deliver \u2605 star products: " + ("x" * 200),
+        status="active",
+        acceptance="Acceptance criteria is very long: " + ("y" * 200),
+        evidence="Evidence that we delivered: " + ("z" * 200),
+    )
+    t = Task.create(
+        project_id=project.id,
+        title="Task in detailed phase",
+        phase_id=phase.id,
+    )
+    ctx = get_task_context(t.id)
+
+    assert "## PHASE" in ctx
+    assert "Phase: Phase Custom (Status: active)" in ctx
+
+    # Goal should show "?" instead of "\u2605", and be truncated at 150 chars total
+    # "Goal: " takes 6 chars. 150 limit on _compact_text. Total line limit around 156.
+    assert "Goal: Deliver ? star products: " in ctx
+    assert "..." in ctx
+    assert len(ctx.split("Goal: ")[1].split("\n")[0]) == 150
+
+    # Acceptance should be truncated and ASCII-safe
+    assert "Acceptance: Acceptance criteria is very long: " in ctx
+
+    # Evidence should be truncated and ASCII-safe
+    assert "Evidence: Evidence that we delivered: " in ctx
