@@ -150,6 +150,45 @@ engram project list
 
 Inspect or update project metadata. Valid statuses are `active`, `paused`, and `archived`.
 
+### Phase Management
+
+```bash
+engram phase add "<Title>" [--description TEXT] [--status STATUS]
+                         [--acceptance TEXT] [--order-index INTEGER]
+```
+
+Add a phase to the current project. The default status is `planned`. Valid statuses are `planned`, `active`, `done`, `blocked`, and `cancelled`.
+
+```bash
+engram phase list
+```
+
+List all phases for the current project.
+
+```bash
+engram phase get <phase_ref>
+```
+
+Show full details for a phase by ID or unique title.
+
+```bash
+engram phase start <phase_ref>
+```
+
+Start a phase by ID or unique title and make it the only active phase. Any other active phase in the project is automatically set back to `planned`.
+
+```bash
+engram phase update <phase_ref> --field <field> --value <value>
+```
+
+Update a mutable phase field by ID or unique title. Common fields are `title`, `description`, `status`, `acceptance`, and `order_index`.
+
+```bash
+engram phase done <phase_ref> --evidence "<proof>" [--force]
+```
+
+Mark a phase as done with completion evidence. This requires completing all linked tasks, unless `--force` is provided to override the completion guard.
+
 ### Exports
 
 ```bash

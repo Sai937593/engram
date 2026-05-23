@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- docs: document all 6 engram phase CLI commands in USER_MANUAL.md.
 - test(cli): add formatting tests for Phase 6 context builder to verify readability, truncation, stability, and compactness.
 - feat(cli): conditionally include truncated phase evidence summary in task context.
 - feat(cli): include compact phase goal and acceptance criteria summary in task context.
