@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(cli): add `engram phase list` with project-scoped ordered output and compact phase summary columns plus CLI coverage for empty/single/multi-phase listing.
 - feat(cli): implement `engram phase add` with project-scoped normalized duplicate-title validation and automatic per-project order indexing.
 - feat(cli): add shared phase title normalization and project-scoped phase resolver helpers with ambiguity/missing-case coverage.
 - feat(cli): add dedicated `engram phase` command group registration plus CLI entrypoint tests for root discovery and `phase --help` loading.

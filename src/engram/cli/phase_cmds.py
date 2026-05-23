@@ -1,6 +1,7 @@
 """Phase command group registration."""
 
 import click
+from rich.table import Table
 
 import engram.cli as cli_root
 from engram.cli.phase_helpers import normalize_phase_title
@@ -51,3 +52,56 @@ def phase_add(
         acceptance=acceptance,
     )
     cli_root.console.print(f"[green]Phase created with ID:[/green] {created_phase.id}")
+
+
+def _compact_phase_summary(phase: Phase) -> str:
+    summary_source = phase.description or phase.acceptance
+    if not summary_source:
+        return "-"
+
+    compact = " ".join(summary_source.split())
+    max_len = 72
+    if len(compact) <= max_len:
+        return compact
+    return compact[: max_len - 1] + "..."
+
+
+@phase.command(name="list")
+def phase_list() -> None:
+    """List phases for the current project."""
+    project = cli_root.get_current_project()
+    phases = Phase.list_by_project(project.id)
+
+    if not phases:
+        cli_root.console.print("[yellow]No phases defined for this project.[/yellow]")
+        return
+
+    table = Table(
+        title=f"Phases for Project: {project.name}",
+        header_style="bold green",
+        border_style="green",
+    )
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Title", style="white")
+    table.add_column("Status", style="bold green")
+    table.add_column("Order", style="yellow", justify="right")
+    table.add_column("Summary", style="blue")
+
+    for phase_item in phases:
+        status_style = "green"
+        if phase_item.status in {"blocked", "cancelled"}:
+            status_style = "red" if phase_item.status == "blocked" else "dim white"
+        elif phase_item.status == "done":
+            status_style = "blue"
+        elif phase_item.status == "active":
+            status_style = "yellow"
+
+        table.add_row(
+            phase_item.id,
+            phase_item.title,
+            f"[{status_style}]{phase_item.status}[/{status_style}]",
+            str(phase_item.order_index),
+            _compact_phase_summary(phase_item),
+        )
+
+    cli_root.console.print(table)

@@ -1,4 +1,4 @@
-"""CLI tests for `engram phase add`."""
+"""CLI tests for `engram phase` commands."""
 
 import os
 import re
@@ -104,3 +104,69 @@ def test_phase_add_allows_same_title_in_another_project(tmp_db, project, monkeyp
     assert result.exit_code == 0, result.output
     phases = Phase.list_by_project(project.id)
     assert any(phase.title == "phase   alpha" for phase in phases)
+
+
+def test_phase_list_empty_project(tmp_db, project, monkeypatch) -> None:
+    """phase list should show guidance when the current project has no phases."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "No phases defined for this project." in result.output
+
+
+def test_phase_list_single_phase_shows_compact_fields(tmp_db, project, monkeypatch) -> None:
+    """phase list should show id/title/status/order with compact summary text."""
+    created = Phase.create(
+        project_id=project.id,
+        title="Phase Alpha",
+        status="active",
+        order_index=3,
+        description="Ship milestone one for onboarding experience",
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert created.id in result.output
+    assert "Phase Alpha" in result.output
+    assert "active" in result.output
+    assert "3" in result.output
+    assert "Ship milestone one for onboarding" in result.output
+    assert "experience" in result.output
+
+
+def test_phase_list_orders_by_order_index_then_creation_order(tmp_db, project, monkeypatch) -> None:
+    """phase list should use deterministic ordering by index then creation order."""
+    first_same_index = Phase.create(project_id=project.id, title="Build", order_index=1)
+    Phase.create(project_id=project.id, title="Plan", order_index=0)
+    second_same_index = Phase.create(project_id=project.id, title="Verify", order_index=1)
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "list"])
+
+    assert result.exit_code == 0, result.output
+    plan_pos = result.output.index("Plan")
+    first_pos = result.output.index(first_same_index.title)
+    second_pos = result.output.index(second_same_index.title)
+    assert plan_pos < first_pos < second_pos
+
+
+def test_phase_list_only_shows_current_project_phases(tmp_db, project, monkeypatch) -> None:
+    """phase list should only include phases from the current resolved project."""
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    Phase.create(project_id=project.id, title="Current Project Phase")
+    Phase.create(project_id=other_project.id, title="Other Project Phase")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "Current Project Phase" in result.output
+    assert "Other Project Phase" not in result.output
