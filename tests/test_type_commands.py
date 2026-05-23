@@ -7,6 +7,7 @@ from click.testing import CliRunner
 
 from engram.cli import cli
 from engram.models.memory import Memory
+from engram.models.phase import Phase
 from engram.models.task import Task
 
 # ---------------------------------------------------------------------------
@@ -383,6 +384,34 @@ def test_task_get_shows_depends_on(tmp_db, project, monkeypatch):
     assert "Depends On: N/A" in res2.output
 
 
+def test_task_get_shows_effective_phase_title(tmp_db, project, monkeypatch) -> None:
+    """task get resolves phase display via effective phase title rules."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    phase = Phase.create(project_id=project.id, title="Phase Alpha")
+
+    explicit = Task.create(
+        project_id=project.id,
+        title="Task Explicit",
+        phase_id=phase.id,
+        phase="Legacy Should Not Show",
+    )
+    legacy = Task.create(project_id=project.id, title="Task Legacy", phase="Phase Legacy")
+    unphased = Task.create(project_id=project.id, title="Task Unphased")
+
+    explicit_res = runner.invoke(cli, ["task", "get", explicit.id])
+    assert explicit_res.exit_code == 0, explicit_res.output
+    assert "Phase: Phase Alpha" in explicit_res.output
+    assert "Legacy Should Not Show" not in explicit_res.output
+
+    legacy_res = runner.invoke(cli, ["task", "get", legacy.id])
+    assert legacy_res.exit_code == 0, legacy_res.output
+    assert "Phase: Phase Legacy" in legacy_res.output
+
+    unphased_res = runner.invoke(cli, ["task", "get", unphased.id])
+    assert unphased_res.exit_code == 0, unphased_res.output
+    assert "Phase: N/A" in unphased_res.output
+
+
 def test_task_dependency_cycle_detection(tmp_db, project, monkeypatch):
     """Circular dependencies are blocked and not written to SQLite."""
     runner = make_runner_with_project(monkeypatch, tmp_db, project)
@@ -516,16 +545,25 @@ def test_task_next_shows_implicit_blockers_count(tmp_db, project, monkeypatch) -
     assert "2 blocked" in res.output
 
 
-def test_task_list_shows_phase(tmp_db, project, monkeypatch) -> None:
-    """task list displays the Phase column with correct phase values."""
+def test_task_list_shows_effective_phase(tmp_db, project, monkeypatch) -> None:
+    """task list displays phase values using effective phase title rules."""
     runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    phase = Phase.create(project_id=project.id, title="Phase Alpha")
 
-    Task.create(project_id=project.id, title="Task A", phase="Phase Alpha")
-    Task.create(project_id=project.id, title="Task B", phase=None)
+    Task.create(
+        project_id=project.id,
+        title="Task A",
+        phase_id=phase.id,
+        phase="Legacy Should Not Show",
+    )
+    Task.create(project_id=project.id, title="Task B", phase="Phase Legacy")
+    Task.create(project_id=project.id, title="Task C", phase=None)
 
-    res = runner.invoke(cli, ["task", "list"])
+    res = runner.invoke(cli, ["task", "list", "--status", "all"])
     assert res.exit_code == 0
     assert "Phase Alpha" in res.output
+    assert "Phase Legacy" in res.output
+    assert "Legacy Should Not Show" not in res.output
     assert "-" in res.output
 
 
@@ -590,3 +628,93 @@ def test_task_list_all_completed_guidance(tmp_db, project, monkeypatch) -> None:
     assert res.exit_code == 0
     assert "All tasks complete" in res.output
     assert "engram task add" in res.output
+
+
+def test_task_list_phase_filter_by_id_includes_legacy_matches_only(
+    tmp_db, project, monkeypatch
+) -> None:
+    """task list --phase filters by phase_id and includes matching legacy-only tasks."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    alpha = Phase.create(project_id=project.id, title="Phase Alpha")
+    beta = Phase.create(project_id=project.id, title="Phase Beta")
+
+    Task.create(project_id=project.id, title="AlphaMain", phase_id=alpha.id, phase=alpha.title)
+    Task.create(project_id=project.id, title="AlphaLegacy", phase="  phase   alpha ")
+    Task.create(project_id=project.id, title="BetaExplicit", phase_id=beta.id, phase=alpha.title)
+    Task.create(project_id=project.id, title="NoPhase")
+
+    res = runner.invoke(cli, ["task", "list", "--status", "all", "--phase", alpha.id])
+
+    assert res.exit_code == 0, res.output
+    assert "AlphaMain" in res.output
+    assert "AlphaLegacy" in res.output
+    assert "BetaExplicit" not in res.output
+    assert "NoPhase" not in res.output
+
+
+def test_task_list_phase_filter_by_unique_title_combines_with_status_and_all(
+    tmp_db, project, monkeypatch
+) -> None:
+    """task list --phase title combines correctly with --status and --all."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    alpha = Phase.create(project_id=project.id, title="Phase Alpha")
+
+    Task.create(
+        project_id=project.id,
+        title="Alpha todo",
+        status="todo",
+        phase_id=alpha.id,
+        phase=alpha.title,
+    )
+    Task.create(
+        project_id=project.id,
+        title="Alpha done",
+        status="done",
+        phase_id=alpha.id,
+        phase=alpha.title,
+    )
+    Task.create(project_id=project.id, title="Other todo", status="todo", phase="Phase Beta")
+
+    res_default = runner.invoke(cli, ["task", "list", "--phase", "  phase alpha  "])
+    assert res_default.exit_code == 0, res_default.output
+    assert "Alpha todo" in res_default.output
+    assert "Alpha done" not in res_default.output
+    assert "Other todo" not in res_default.output
+
+    res_all = runner.invoke(cli, ["task", "list", "--phase", "phase alpha", "--all"])
+    assert res_all.exit_code == 0, res_all.output
+    assert "Alpha todo" in res_all.output
+    assert "Alpha done" in res_all.output
+    assert "Other todo" not in res_all.output
+
+    res_done = runner.invoke(cli, ["task", "list", "--phase", "phase alpha", "--status", "done"])
+    assert res_done.exit_code == 0, res_done.output
+    assert "Alpha done" in res_done.output
+    assert "Alpha todo" not in res_done.output
+    assert "Other todo" not in res_done.output
+
+
+def test_task_list_phase_filter_rejects_missing_phase_reference(
+    tmp_db, project, monkeypatch
+) -> None:
+    """task list --phase errors clearly when the phase reference is missing."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    res = runner.invoke(cli, ["task", "list", "--phase", "missing-phase"])
+
+    assert res.exit_code != 0
+    assert "Phase 'missing-phase' not found in this project." in res.output
+
+
+def test_task_list_phase_filter_rejects_ambiguous_phase_title(tmp_db, project, monkeypatch) -> None:
+    """task list --phase errors clearly when normalized title lookup is ambiguous."""
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    first = Phase.create(project_id=project.id, title="Phase Alpha")
+    second = Phase.create(project_id=project.id, title="  phase   alpha ")
+
+    res = runner.invoke(cli, ["task", "list", "--phase", "phase alpha"])
+
+    assert res.exit_code != 0
+    assert "Ambiguous phase 'phase alpha'" in res.output
+    assert first.id in res.output
+    assert second.id in res.output

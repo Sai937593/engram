@@ -7,8 +7,13 @@ import click
 from rich.table import Table
 
 import engram.cli as cli_root
+from engram.cli.phase_helpers import (
+    normalize_phase_title,
+    resolve_phase_for_task_add,
+    resolve_phase_in_project,
+)
 from engram.db import get_db_connection
-from engram.models.task import Task
+from engram.models.task import Task, get_effective_phase_title
 
 VALID_TASK_FIELDS = {
     "title",
@@ -18,6 +23,7 @@ VALID_TASK_FIELDS = {
     "tags",
     "acceptance",
     "phase",
+    "phase_id",
     "evidence",
     "depends_on",
 }
@@ -161,10 +167,14 @@ def task_add(
     """Add a new task to the current project."""
     p = cli_root.get_current_project()
     resolved_dep = None
+    resolved_phase = phase
+    resolved_phase_id = None
     task_id = uuid.uuid4().hex[:8]
     if depends_on:
         resolved_dep = resolve_task_dependency(depends_on, p.id)
         check_dependency_cycle(task_id, resolved_dep, p.id)
+    if phase is not None:
+        resolved_phase, resolved_phase_id = resolve_phase_for_task_add(phase, p.id)
 
     t = Task.create(
         project_id=p.id,
@@ -174,7 +184,8 @@ def task_add(
         status=status,
         tags=tags.split(",") if tags else [],
         acceptance=acceptance,
-        phase=phase,
+        phase=resolved_phase,
+        phase_id=resolved_phase_id,
         depends_on=resolved_dep,
         id=task_id,
     )
@@ -237,10 +248,23 @@ def task_start(task_id: str) -> None:
     is_flag=True,
     help="Show all tasks regardless of status (equivalent to --status all)",
 )
-def task_list(status: str, show_all: bool) -> None:
+@click.option("--phase", help="Filter tasks to a phase ID or unique phase title")
+def task_list(status: str, show_all: bool, phase: str | None) -> None:
     """List tasks for the current project."""
     p = cli_root.get_current_project()
     tasks = Task.list_by_project(p.id)
+    if phase is not None:
+        resolved_phase = resolve_phase_in_project(phase, p.id)
+        resolved_phase_title = normalize_phase_title(resolved_phase.title)
+        tasks = [
+            task
+            for task in tasks
+            if (
+                (task.phase_id == resolved_phase.id)
+                if task.phase_id
+                else normalize_phase_title(task.phase) == resolved_phase_title
+            )
+        ]
     if show_all:
         status = "all"
     if status.lower() != "all":
@@ -305,7 +329,7 @@ def task_list(status: str, show_all: bool) -> None:
         table.add_row(
             t.id,
             t.title,
-            t.phase or "-",
+            get_effective_phase_title(t) or "-",
             f"[{status_style}]{status_str}[/{status_style}]",
             f"[{priority_style}]{t.priority}[/{priority_style}]",
             t.depends_on or "-",
@@ -356,6 +380,16 @@ def task_update(task_id: str, field: str, value: str) -> None:
             raise click.ClickException("A task cannot depend on itself.")
         check_dependency_cycle(task_id, resolved_dep, t.project_id)
         value = resolved_dep
+    elif field == "phase_id":
+        if value.lower() in ("none", "null", "clear"):
+            t.update(phase_id=None, phase=None)
+            cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
+            return
+        else:
+            resolved_phase = resolve_phase_in_project(value, t.project_id)
+            t.update(phase_id=resolved_phase.id, phase=resolved_phase.title)
+            cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
+            return
 
     t.update(**{field: value})
     cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
@@ -379,7 +413,7 @@ def task_get(task_id: str) -> None:
     cli_root.console.print(f"[cyan]Status:[/cyan] {status_str}")
     cli_root.console.print(f"[cyan]Priority:[/cyan] {t.priority}")
     cli_root.console.print(f"[cyan]Depends On:[/cyan] {t.depends_on or 'N/A'}")
-    cli_root.console.print(f"[cyan]Phase:[/cyan] {t.phase or 'N/A'}")
+    cli_root.console.print(f"[cyan]Phase:[/cyan] {get_effective_phase_title(t) or 'N/A'}")
     cli_root.console.print(f"[cyan]Description:[/cyan] {t.description or 'N/A'}")
     cli_root.console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{t.acceptance or 'N/A'}")
     cli_root.console.print(f"[cyan]Evidence / Notes:[/cyan]\n{t.evidence or 'N/A'}")
