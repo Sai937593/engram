@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): conditionally include truncated phase evidence summary in task context.
 - feat(cli): include compact phase goal and acceptance criteria summary in task context.
 - feat(cli): implement compact text utility for phase context formatting to safely truncate goals/descriptions/evidence while ensuring ASCII safety on legacy Windows consoles.
 - test(model): add tests for active phase preference and project fallback in `Task.get_next` and `engram start`.
