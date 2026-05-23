@@ -61,15 +61,52 @@ def get_current_branch() -> str:
 def start():
     """Start the next task in the workflow."""
     p = cli_root.get_current_project()
-    t = Task.get_next(p.id)
 
-    # Are there any in-progress tasks we should resume?
+    # Fetch the active phase
+    from engram.models.phase import Phase
+
+    phases = Phase.list_by_project(p.id)
+    active_phase = next((ph for ph in phases if ph.status == "active"), None)
+    active_phase_id = active_phase.id if active_phase else None
+
+    # Fetch all tasks in the project to check in-progress states
     tasks = Task.list_by_project(p.id)
-    in_progress = [task for task in tasks if task.status == "in-progress"]
 
-    if in_progress:
-        t = in_progress[0]
-    elif not t:
+    # 1. In-progress tasks from the active phase
+    in_progress_active = []
+    if active_phase_id:
+        in_progress_active = [
+            task
+            for task in tasks
+            if task.status == "in-progress" and task.phase_id == active_phase_id
+        ]
+
+    is_resuming = False
+
+    if in_progress_active:
+        t = in_progress_active[0]
+        is_resuming = True
+    else:
+        # Get next task, passing active_phase_id
+        next_t = Task.get_next(p.id, active_phase_id=active_phase_id)
+
+        # 2. Actionable tasks from the active phase
+        if next_t and active_phase_id and next_t.phase_id == active_phase_id:
+            t = next_t
+            is_resuming = t.status == "in-progress"
+        else:
+            # 3. Other in-progress tasks in the project
+            in_progress_any = [task for task in tasks if task.status == "in-progress"]
+            if in_progress_any:
+                t = in_progress_any[0]
+                is_resuming = True
+            else:
+                # 4. Fallback to project-level task
+                t = next_t
+                if t:
+                    is_resuming = t.status == "in-progress"
+
+    if not t:
         # No task available
         counts = Task.count_by_status(p.id)
         total = sum(counts.values())
@@ -107,7 +144,7 @@ def start():
         cli_root.console.print("Please commit or stash your changes before starting a task.")
         raise SystemExit(1)
 
-    if in_progress:
+    if is_resuming:
         cli_root.console.print(f"[yellow]Resuming in-progress task:[/yellow] {t.id}")
     else:
         t.update(status="in-progress")

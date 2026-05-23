@@ -464,3 +464,87 @@ def test_finish_phase_complete_with_other_phase_todo(tmp_db, project, mock_git, 
 
     assert result.exit_code == 0
     assert "Phase Complete!" in result.output
+
+
+def test_start_prioritizes_active_phase_in_progress(tmp_db, project, mock_git, monkeypatch):
+    """engram start prioritizes in-progress tasks from the active phase over other tasks."""
+    phase_1 = Phase.create(project_id=project.id, title="Phase 1", status="active")
+    phase_2 = Phase.create(project_id=project.id, title="Phase 2", status="planned")
+
+    t_active_ip = Task.create(
+        project_id=project.id,
+        title="Active In-Progress",
+        phase_id=phase_1.id,
+        status="in-progress",
+    )
+    Task.create(
+        project_id=project.id,
+        title="Active Todo",
+        phase_id=phase_1.id,
+        status="todo",
+    )
+    Task.create(
+        project_id=project.id,
+        title="Other In-Progress",
+        phase_id=phase_2.id,
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "Resuming in-progress task:" in result.output
+    assert t_active_ip.id in result.output
+
+
+def test_start_prioritizes_active_phase_todo_over_other_in_progress(
+    tmp_db, project, mock_git, monkeypatch
+):
+    """engram start prioritizes todo tasks from the active phase over in-progress tasks from other phases."""
+    phase_1 = Phase.create(project_id=project.id, title="Phase 1", status="active")
+    phase_2 = Phase.create(project_id=project.id, title="Phase 2", status="planned")
+
+    t_active_todo = Task.create(
+        project_id=project.id,
+        title="Active Todo",
+        phase_id=phase_1.id,
+        status="todo",
+    )
+    Task.create(
+        project_id=project.id,
+        title="Other In-Progress",
+        phase_id=phase_2.id,
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "Started task:" in result.output
+    assert t_active_todo.id in result.output
+
+
+def test_start_falls_back_to_other_in_progress(tmp_db, project, mock_git, monkeypatch):
+    """engram start falls back to other phase's in-progress tasks if no tasks in active phase."""
+    _phase_1 = Phase.create(project_id=project.id, title="Phase 1", status="active")
+    phase_2 = Phase.create(project_id=project.id, title="Phase 2", status="planned")
+
+    t_other_ip = Task.create(
+        project_id=project.id,
+        title="Other In-Progress",
+        phase_id=phase_2.id,
+        status="in-progress",
+    )
+    Task.create(
+        project_id=project.id,
+        title="Other Todo",
+        phase_id=phase_2.id,
+        status="todo",
+        priority="critical",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "Resuming in-progress task:" in result.output
+    assert t_other_ip.id in result.output
