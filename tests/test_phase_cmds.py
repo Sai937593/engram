@@ -3,6 +3,7 @@
 import os
 import re
 
+import pytest
 from click.testing import CliRunner
 
 from engram.cli import cli
@@ -233,3 +234,97 @@ def test_phase_get_reports_missing_phase(tmp_db, project, monkeypatch) -> None:
 
     assert result.exit_code != 0
     assert "Phase 'phase zeta' not found in this project." in result.output
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_attr"),
+    [
+        ("title", "Refined Phase", "Refined Phase"),
+        ("description", "Rewritten summary", "Rewritten summary"),
+        ("status", "active", "active"),
+        ("order_index", "12", 12),
+        ("acceptance", "All checks pass", "All checks pass"),
+        ("evidence", "CLI output attached", "CLI output attached"),
+    ],
+)
+def test_phase_update_supports_all_mutable_fields(
+    tmp_db, project, monkeypatch, field: str, value: str, expected_attr: str | int
+) -> None:
+    """phase update should apply updates for every mutable phase field."""
+    created = Phase.create(
+        project_id=project.id,
+        title="Initial Phase",
+        description="Old summary",
+        status="planned",
+        order_index=1,
+        acceptance="Old acceptance",
+        evidence="Old evidence",
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "update", created.id, "--field", field, "--value", value])
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(created.id)
+    assert refreshed is not None
+    assert getattr(refreshed, field) == expected_attr
+    assert f"Phase '{created.id}' updated." in result.output
+
+
+def test_phase_update_rejects_unknown_field(tmp_db, project, monkeypatch) -> None:
+    """phase update should fail clearly when a field is not mutable."""
+    created = Phase.create(project_id=project.id, title="Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", created.id, "--field", "project_id", "--value", "other"],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown field 'project_id'" in result.output
+
+
+def test_phase_update_rejects_invalid_status(tmp_db, project, monkeypatch) -> None:
+    """phase update should fail clearly on unsupported status values."""
+    created = Phase.create(project_id=project.id, title="Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", created.id, "--field", "status", "--value", "todo"],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid status 'todo'" in result.output
+
+
+def test_phase_update_rejects_non_integer_order_index(tmp_db, project, monkeypatch) -> None:
+    """phase update should fail when order_index cannot be parsed as an integer."""
+    created = Phase.create(project_id=project.id, title="Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", created.id, "--field", "order_index", "--value", "first"],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid order_index 'first'" in result.output
+
+
+def test_phase_update_title_preserves_project_normalized_uniqueness(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase update should reject a title that collides by normalized value in the same project."""
+    created = Phase.create(project_id=project.id, title="Build")
+    Phase.create(project_id=project.id, title="Phase Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", created.id, "--field", "title", "--value", "  phase   alpha "],
+    )
+
+    assert result.exit_code != 0
+    assert "already exists in this project" in result.output

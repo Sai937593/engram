@@ -7,6 +7,9 @@ import engram.cli as cli_root
 from engram.cli.phase_helpers import normalize_phase_title, resolve_phase_in_project
 from engram.models.phase import Phase
 
+VALID_PHASE_FIELDS = {"title", "description", "status", "order_index", "acceptance", "evidence"}
+VALID_PHASE_STATUSES = {"planned", "active", "done", "blocked", "cancelled"}
+
 
 @cli_root.cli.group()
 def phase() -> None:
@@ -121,3 +124,52 @@ def phase_get(phase_ref: str) -> None:
     cli_root.console.print(f"[cyan]Description:[/cyan] {phase.description or 'N/A'}")
     cli_root.console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{phase.acceptance or 'N/A'}")
     cli_root.console.print(f"[cyan]Evidence / Notes:[/cyan]\n{phase.evidence or 'N/A'}")
+
+
+@phase.command(name="update")
+@click.argument("phase_ref")
+@click.option("--field", help="Field to update")
+@click.option("--value", help="New value for the field")
+def phase_update(phase_ref: str, field: str | None, value: str | None) -> None:
+    """Update a mutable phase field by ID or unique title."""
+    project = cli_root.get_current_project()
+    phase = resolve_phase_in_project(phase_ref, project.id)
+
+    if not field or value is None:
+        raise click.ClickException("Please provide both --field and --value.")
+
+    if field not in VALID_PHASE_FIELDS:
+        valid_fields = ", ".join(sorted(VALID_PHASE_FIELDS))
+        raise click.ClickException(f"Unknown field '{field}'. Valid fields: {valid_fields}")
+
+    update_value: str | int = value
+    if field == "status":
+        if value not in VALID_PHASE_STATUSES:
+            valid_statuses = ", ".join(sorted(VALID_PHASE_STATUSES))
+            raise click.ClickException(
+                f"Invalid status '{value}'. Valid statuses: {valid_statuses}"
+            )
+    elif field == "order_index":
+        try:
+            update_value = int(value)
+        except ValueError as exc:
+            raise click.ClickException(
+                f"Invalid order_index '{value}'. Provide an integer value."
+            ) from exc
+    elif field == "title":
+        normalized_candidate = normalize_phase_title(value)
+        if not normalized_candidate:
+            raise click.ClickException("Phase title cannot be empty.")
+
+        for existing_phase in Phase.list_by_project(project.id):
+            if existing_phase.id == phase.id:
+                continue
+            if normalize_phase_title(existing_phase.title) == normalized_candidate:
+                raise click.ClickException(
+                    f"Phase title '{value}' already exists in this project as "
+                    f"'{existing_phase.title}' ({existing_phase.id})."
+                )
+        update_value = value.strip()
+
+    phase.update(**{field: update_value})
+    cli_root.console.print(f"[green]Phase '{phase.id}' updated.[/green]")
