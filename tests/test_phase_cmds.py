@@ -362,6 +362,30 @@ def test_phase_update_title_preserves_project_normalized_uniqueness(
     assert "already exists in this project" in result.output
 
 
+def test_phase_update_title_allows_same_normalized_title_in_other_project(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase update title should allow normalized collisions that exist only in other projects."""
+    editable = Phase.create(project_id=project.id, title="Build")
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    Phase.create(project_id=other_project.id, title="Phase Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", editable.id, "--field", "title", "--value", "  phase   alpha  "],
+    )
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(editable.id)
+    assert refreshed is not None
+    assert refreshed.title == "phase   alpha"
+
+
 def test_phase_update_status_active_demotes_existing_active_phase_in_same_project(
     tmp_db, project, monkeypatch
 ) -> None:
@@ -392,6 +416,33 @@ def test_phase_update_status_active_demotes_existing_active_phase_in_same_projec
         phase for phase in Phase.list_by_project(project.id) if phase.status == "active"
     ]
     assert [phase.id for phase in active_phases] == [target.id]
+
+
+def test_phase_update_done_phase_description_is_handled_gracefully(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase update should handle updates on a done phase without crashing."""
+    completed = Phase.create(project_id=project.id, title="Release", status="done")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            "phase",
+            "update",
+            completed.id,
+            "--field",
+            "description",
+            "--value",
+            "Post-release audit closed with no regressions.",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(completed.id)
+    assert refreshed is not None
+    assert refreshed.status == "done"
+    assert refreshed.description == "Post-release audit closed with no regressions."
 
 
 def test_phase_start_by_id_sets_selected_phase_active(tmp_db, project, monkeypatch) -> None:
