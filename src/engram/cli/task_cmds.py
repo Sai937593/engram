@@ -7,6 +7,7 @@ import click
 from rich.table import Table
 
 import engram.cli as cli_root
+from engram.cli.phase_helpers import resolve_phase_for_task_add
 from engram.db import get_db_connection
 from engram.models.task import Task
 
@@ -161,10 +162,14 @@ def task_add(
     """Add a new task to the current project."""
     p = cli_root.get_current_project()
     resolved_dep = None
+    resolved_phase = phase
+    resolved_phase_id = None
     task_id = uuid.uuid4().hex[:8]
     if depends_on:
         resolved_dep = resolve_task_dependency(depends_on, p.id)
         check_dependency_cycle(task_id, resolved_dep, p.id)
+    if phase is not None:
+        resolved_phase, resolved_phase_id = resolve_phase_for_task_add(phase, p.id)
 
     t = Task.create(
         project_id=p.id,
@@ -174,7 +179,8 @@ def task_add(
         status=status,
         tags=tags.split(",") if tags else [],
         acceptance=acceptance,
-        phase=phase,
+        phase=resolved_phase,
+        phase_id=resolved_phase_id,
         depends_on=resolved_dep,
         id=task_id,
     )
