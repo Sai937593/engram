@@ -53,6 +53,7 @@ def get_current_project() -> Project:
 # each module calls cli.add_command / cli.group on import.
 from engram.cli import context_cmds as _context_cmds  # noqa: E402, F401
 from engram.cli import memory_cmds as _memory_cmds  # noqa: E402, F401
+from engram.cli import phase_cmds as _phase_cmds  # noqa: E402, F401
 from engram.cli import project_cmds as _project_cmds  # noqa: E402, F401
 from engram.cli import task_cmds as _task_cmds  # noqa: E402, F401
 from engram.cli import utils_cmds as _utils_cmds  # noqa: E402, F401

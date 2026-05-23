@@ -26,6 +26,7 @@ def test_console_entrypoint_command_surface_loads():
         "decision",
         "export",
         "memory",
+        "phase",
         "project",
         "task",
     ]:
@@ -45,3 +46,11 @@ def test_guide_command_with_sections():
         result = CliRunner().invoke(cli, ["guide", section])
         assert result.exit_code == 0, result.output
         assert "Engram Guide" in result.output
+
+
+def test_phase_group_help_loads():
+    """The phase command group should load and render help text."""
+    result = CliRunner().invoke(cli, ["phase", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "Manage phases." in result.output
