@@ -9,6 +9,7 @@ from click.testing import CliRunner
 from engram.cli import cli
 from engram.models.phase import Phase
 from engram.models.project import Project
+from engram.models.task import Task
 
 
 def make_runner_with_project(monkeypatch, project) -> CliRunner:
@@ -417,3 +418,97 @@ def test_phase_start_is_idempotent_when_phase_already_active(tmp_db, project, mo
         phase for phase in Phase.list_by_project(project.id) if phase.status == "active"
     ]
     assert [phase.id for phase in active_phases] == [target.id]
+
+
+def test_phase_done_marks_phase_done_when_linked_tasks_are_done_or_cancelled(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase done should succeed when linked tasks are only done/cancelled and evidence is provided."""
+    phase = Phase.create(project_id=project.id, title="Release", status="active")
+    Task.create(project_id=project.id, title="Task Done", status="done", phase_id=phase.id)
+    Task.create(
+        project_id=project.id, title="Legacy Cancelled", status="cancelled", phase="  release  "
+    )
+    Task.create(project_id=project.id, title="Other Phase Task", status="todo", phase="Planning")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "done", phase.id, "--evidence", "All release checks and QA validations passed"],
+    )
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "done"
+    assert refreshed.evidence == "All release checks and QA validations passed"
+    assert "marked as done" in result.output
+
+
+def test_phase_done_rejects_when_unfinished_linked_tasks_remain(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase done should fail by default if linked tasks are todo/in-progress/blocked."""
+    phase = Phase.create(project_id=project.id, title="Execution", status="active")
+    todo_task = Task.create(
+        project_id=project.id, title="Todo Task", status="todo", phase_id=phase.id
+    )
+    blocked_task = Task.create(
+        project_id=project.id,
+        title="Legacy Blocked",
+        status="blocked",
+        phase="execution",
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "done", phase.id, "--evidence", "Attempted completion evidence"],
+    )
+
+    assert result.exit_code != 0
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "active"
+    assert todo_task.id in result.output
+    assert blocked_task.id in result.output
+    assert "Use --force to override" in result.output
+
+
+def test_phase_done_force_completes_when_unfinished_linked_tasks_remain(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase done --force should complete anyway and record evidence."""
+    phase = Phase.create(project_id=project.id, title="Execution", status="active")
+    Task.create(project_id=project.id, title="Incomplete", status="in-progress", phase_id=phase.id)
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            "phase",
+            "done",
+            phase.id,
+            "--force",
+            "--evidence",
+            "Forcing closure with remaining carry-over tasks documented",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "done"
+    assert refreshed.evidence == "Forcing closure with remaining carry-over tasks documented"
+    assert "override" in result.output
+
+
+def test_phase_done_requires_evidence(tmp_db, project, monkeypatch) -> None:
+    """phase done should require evidence input."""
+    phase = Phase.create(project_id=project.id, title="Execution", status="active")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "done", phase.id])
+
+    assert result.exit_code != 0
+    assert "Missing option '--evidence'" in result.output
