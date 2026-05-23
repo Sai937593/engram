@@ -108,6 +108,37 @@ def test_phase_add_allows_same_title_in_another_project(tmp_db, project, monkeyp
     assert any(phase.title == "phase   alpha" for phase in phases)
 
 
+def test_phase_add_active_demotes_existing_active_phase_in_same_project(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase add --status active should preserve one active phase in the current project."""
+    old_active = Phase.create(project_id=project.id, title="Old Active", status="active")
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    other_active = Phase.create(
+        project_id=other_project.id, title="External Active", status="active"
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "add", "New Active", "--status", "active"])
+
+    assert result.exit_code == 0, result.output
+    created = next(
+        phase for phase in Phase.list_by_project(project.id) if phase.title == "New Active"
+    )
+    assert Phase.get(created.id).status == "active"
+    assert Phase.get(old_active.id).status == "planned"
+    assert Phase.get(other_active.id).status == "active"
+
+    active_phases = [
+        phase for phase in Phase.list_by_project(project.id) if phase.status == "active"
+    ]
+    assert [phase.id for phase in active_phases] == [created.id]
+
+
 def test_phase_list_empty_project(tmp_db, project, monkeypatch) -> None:
     """phase list should show guidance when the current project has no phases."""
     runner = make_runner_with_project(monkeypatch, project)
@@ -329,6 +360,38 @@ def test_phase_update_title_preserves_project_normalized_uniqueness(
 
     assert result.exit_code != 0
     assert "already exists in this project" in result.output
+
+
+def test_phase_update_status_active_demotes_existing_active_phase_in_same_project(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase update status=active should preserve one active phase in the current project."""
+    old_active = Phase.create(project_id=project.id, title="Old Active", status="active")
+    target = Phase.create(project_id=project.id, title="Target", status="planned")
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    other_active = Phase.create(
+        project_id=other_project.id, title="External Active", status="active"
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", target.id, "--field", "status", "--value", "active"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert Phase.get(target.id).status == "active"
+    assert Phase.get(old_active.id).status == "planned"
+    assert Phase.get(other_active.id).status == "active"
+
+    active_phases = [
+        phase for phase in Phase.list_by_project(project.id) if phase.status == "active"
+    ]
+    assert [phase.id for phase in active_phases] == [target.id]
 
 
 def test_phase_start_by_id_sets_selected_phase_active(tmp_db, project, monkeypatch) -> None:

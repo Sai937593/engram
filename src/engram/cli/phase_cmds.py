@@ -12,6 +12,17 @@ VALID_PHASE_FIELDS = {"title", "description", "status", "order_index", "acceptan
 VALID_PHASE_STATUSES = {"planned", "active", "done", "blocked", "cancelled"}
 
 
+def _print_demoted_phase_count(demoted_count: int) -> None:
+    """Print a summary when activation demotes existing active phases."""
+    if not demoted_count:
+        return
+
+    noun = "phase" if demoted_count == 1 else "phases"
+    cli_root.console.print(
+        f"[yellow]Demoted {demoted_count} previously active {noun} to planned.[/yellow]"
+    )
+
+
 @cli_root.cli.group()
 def phase() -> None:
     """Manage phases."""
@@ -47,15 +58,21 @@ def phase_add(
                 f"Phase '{title}' already exists in this project as '{existing_phase.title}' ({existing_phase.id})."
             )
 
+    create_status = "planned" if status == "active" else status
     created_phase = Phase.create(
         project_id=project.id,
         title=title.strip(),
         description=description,
-        status=status,
+        status=create_status,
         order_index=order_index,
         acceptance=acceptance,
     )
+    demoted_count = 0
+    if status == "active":
+        created_phase, demoted_count = Phase.start(created_phase.id)
+
     cli_root.console.print(f"[green]Phase created with ID:[/green] {created_phase.id}")
+    _print_demoted_phase_count(demoted_count)
 
 
 def _compact_phase_summary(phase: Phase) -> str:
@@ -172,8 +189,14 @@ def phase_update(phase_ref: str, field: str | None, value: str | None) -> None:
                 )
         update_value = value.strip()
 
-    phase.update(**{field: update_value})
+    demoted_count = 0
+    if field == "status" and update_value == "active":
+        _, demoted_count = Phase.start(phase.id)
+    else:
+        phase.update(**{field: update_value})
+
     cli_root.console.print(f"[green]Phase '{phase.id}' updated.[/green]")
+    _print_demoted_phase_count(demoted_count)
 
 
 @phase.command(name="start")
@@ -188,11 +211,7 @@ def phase_start(phase_ref: str) -> None:
     cli_root.console.print(
         f"[green]Phase '{started_phase.title}' ({started_phase.id}) is now active.[/green]"
     )
-    if demoted_count:
-        noun = "phase" if demoted_count == 1 else "phases"
-        cli_root.console.print(
-            f"[yellow]Demoted {demoted_count} previously active {noun} to planned.[/yellow]"
-        )
+    _print_demoted_phase_count(demoted_count)
 
 
 def _task_is_linked_to_phase(task: Task, phase: Phase) -> bool:
