@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(model): add active phase resolution to `Task.get_next` with active_phase_id preference and project-level fallback.
 - fix(cli): update phase-complete detection in `engram finish` to prefer phase_id equality with fallback to effective phase title.
 - feat(cli): update finish commit scope to use effective phase title instead of raw task.phase, falling back to legacy phase or misc.
 - feat(cli): update branch checkout logic to use effective phase title for tasks, resolving via first-class Phase and falling back to legacy phase or feat/misc.

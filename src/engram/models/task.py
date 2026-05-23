@@ -108,11 +108,27 @@ class Task:
         return None
 
     @classmethod
-    def get_next(cls, project_id: str) -> "Task | None":
+    def get_next(cls, project_id: str, active_phase_id: str | None = None) -> "Task | None":
         """Return the highest-priority todo task, respecting dependencies."""
         priority_order = "CASE t1.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
         conn = get_db_connection()
         # Find a task that is 'todo', and either has no dependency, OR its dependency is 'done'
+        if active_phase_id:
+            query = f"""
+                SELECT t1.* FROM tasks t1
+                LEFT JOIN tasks t2 ON t1.depends_on = t2.id
+                WHERE t1.project_id = ?
+                  AND t1.phase_id = ?
+                  AND t1.status = 'todo'
+                  AND (t1.depends_on IS NULL OR t2.status = 'done')
+                ORDER BY {priority_order}, t1.created_at ASC
+                LIMIT 1
+            """
+            row = conn.execute(query, (project_id, active_phase_id)).fetchone()
+            if row:
+                conn.close()
+                return cls.from_row(row)
+
         query = f"""
             SELECT t1.* FROM tasks t1
             LEFT JOIN tasks t2 ON t1.depends_on = t2.id
