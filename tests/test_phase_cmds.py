@@ -170,3 +170,66 @@ def test_phase_list_only_shows_current_project_phases(tmp_db, project, monkeypat
     assert result.exit_code == 0, result.output
     assert "Current Project Phase" in result.output
     assert "Other Project Phase" not in result.output
+
+
+def test_phase_get_by_id_prints_full_phase_details(tmp_db, project, monkeypatch) -> None:
+    """phase get should print full details when phase is referenced by ID."""
+    created = Phase.create(
+        project_id=project.id,
+        title="Phase Alpha",
+        status="active",
+        order_index=4,
+        description="Implement end-to-end command behavior",
+        acceptance="All acceptance checks pass",
+        evidence="Linked test output",
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "get", created.id])
+
+    assert result.exit_code == 0, result.output
+    assert f"ID: {created.id}" in result.output
+    assert "Title: Phase Alpha" in result.output
+    assert "Status: active" in result.output
+    assert "Order Index: 4" in result.output
+    assert "Description: Implement end-to-end command behavior" in result.output
+    assert "Acceptance Criteria:" in result.output
+    assert "All acceptance checks pass" in result.output
+    assert "Evidence / Notes:" in result.output
+    assert "Linked test output" in result.output
+
+
+def test_phase_get_by_unique_normalized_title(tmp_db, project, monkeypatch) -> None:
+    """phase get should resolve a unique normalized title within the current project."""
+    created = Phase.create(project_id=project.id, title="Phase   Beta")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "get", "  phase beta  "])
+
+    assert result.exit_code == 0, result.output
+    assert f"ID: {created.id}" in result.output
+    assert "Title: Phase   Beta" in result.output
+
+
+def test_phase_get_rejects_ambiguous_normalized_title(tmp_db, project, monkeypatch) -> None:
+    """phase get should fail when title lookup matches multiple normalized phases."""
+    first = Phase.create(project_id=project.id, title="Phase Alpha")
+    second = Phase.create(project_id=project.id, title="  phase   alpha ")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "get", "phase alpha"])
+
+    assert result.exit_code != 0
+    assert "Ambiguous phase 'phase alpha'" in result.output
+    assert first.id in result.output
+    assert second.id in result.output
+
+
+def test_phase_get_reports_missing_phase(tmp_db, project, monkeypatch) -> None:
+    """phase get should report a clear error when no phase matches."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "get", "phase zeta"])
+
+    assert result.exit_code != 0
+    assert "Phase 'phase zeta' not found in this project." in result.output

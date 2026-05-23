@@ -4,7 +4,7 @@ import click
 from rich.table import Table
 
 import engram.cli as cli_root
-from engram.cli.phase_helpers import normalize_phase_title
+from engram.cli.phase_helpers import normalize_phase_title, resolve_phase_in_project
 from engram.models.phase import Phase
 
 
@@ -105,3 +105,19 @@ def phase_list() -> None:
         )
 
     cli_root.console.print(table)
+
+
+@phase.command(name="get")
+@click.argument("phase_ref")
+def phase_get(phase_ref: str) -> None:
+    """Show full details for a phase by ID or unique title."""
+    project = cli_root.get_current_project()
+    phase = resolve_phase_in_project(phase_ref, project.id)
+
+    cli_root.console.print(f"[cyan]ID:[/cyan] {phase.id}")
+    cli_root.console.print(f"[cyan]Title:[/cyan] {phase.title}")
+    cli_root.console.print(f"[cyan]Status:[/cyan] {phase.status}")
+    cli_root.console.print(f"[cyan]Order Index:[/cyan] {phase.order_index}")
+    cli_root.console.print(f"[cyan]Description:[/cyan] {phase.description or 'N/A'}")
+    cli_root.console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{phase.acceptance or 'N/A'}")
+    cli_root.console.print(f"[cyan]Evidence / Notes:[/cyan]\n{phase.evidence or 'N/A'}")
