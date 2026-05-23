@@ -57,7 +57,7 @@ def get_startup_context(project_id: str) -> str:
 
     if todo_tasks:
         context.append("\n## ACTIVE TASKS")
-        for t in todo_tasks[:5]:
+        for t in todo_tasks:
             context.append(f"- [{t.status}] {t.title} ({t.id})")
 
     pending_count = len([t for t in tasks if t.status not in ("done", "cancelled")])
@@ -88,16 +88,11 @@ def get_startup_context(project_id: str) -> str:
     return "\n".join(context)
 
 
-def _compact_text(text: str | None, max_chars: int | None = None) -> str:
-    """Safely convert text to ASCII, optionally truncating if max_chars is specified."""
+def _compact_text(text: str | None) -> str:
+    """Safely convert text to ASCII without truncation."""
     if not text:
         return ""
-    safe_text = text.encode("ascii", errors="replace").decode("ascii")
-    if max_chars is not None and len(safe_text) > max_chars:
-        if max_chars <= 3:
-            return "..."
-        return safe_text[: max_chars - 3] + "..."
-    return safe_text
+    return text.encode("ascii", errors="replace").decode("ascii")
 
 
 def get_task_context(task_id: str) -> str:

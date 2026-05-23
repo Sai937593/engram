@@ -92,21 +92,15 @@ def test_compact_text():
     assert _compact_text(None) == ""
     assert _compact_text("") == ""
 
-    # Normal short ASCII
+    # Normal ASCII
     assert _compact_text("Hello World") == "Hello World"
 
     # Unicode replacement
     assert _compact_text("Hello \u2665 World") == "Hello ? World"
 
-    # Truncation
+    # Verify no truncation occurs on long strings
     long_str = "a" * 200
-    truncated = _compact_text(long_str, max_chars=50)
-    assert len(truncated) == 50
-    assert truncated.endswith("...")
-    assert truncated == "a" * 47 + "..."
-
-    # Truncation with very small max_chars
-    assert _compact_text("abcdef", max_chars=3) == "..."
+    assert _compact_text(long_str) == long_str
 
 
 def test_task_context_shows_compact_phase_details(project):

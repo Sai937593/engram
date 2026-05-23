@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): completely remove output truncation across CLI commands including memory search snippets, phase list summaries, and startup active tasks.
 - docs: document task command phase options and phase_id/phase fields including clearing logic in USER_MANUAL.md.
 - fix(cli): remove default truncation from task context details in engram start to prevent details from being cut off.
 - docs: document all 6 engram phase CLI commands in USER_MANUAL.md.
