@@ -17,7 +17,7 @@ Tasks are units of work within a project.
 
 - Lifecycle: `todo -> in-progress -> done | blocked | cancelled`
 - Priority levels: `low | medium | high | critical`
-- Important fields: `title`, `description`, `acceptance`, `evidence`, `phase`, `tags`, `depends_on`
+- Important fields: `title`, `description`, `acceptance`, `evidence`, `phase`, `phase_id`, `tags`, `depends_on`
 - Use `engram task next` or `engram start` to claim work instead of scanning all tasks manually.
 
 ### Memories
@@ -66,10 +66,11 @@ engram task next
 Show the highest-priority actionable `todo` task.
 
 ```bash
-engram task list [--status STATUS] [--all]
+engram task list [--status STATUS] [--all] [--phase TEXT]
 ```
 
-List tasks. By default, Engram shows todo tasks; use `--all` to include terminal states.
+List tasks for the current project. By default, Engram shows `todo` tasks; use `--all` to include terminal states.
+- `--phase TEXT`: Filter tasks to a first-class phase ID or unique phase title (matches legacy free-form phase text if no first-class phase matches).
 
 ```bash
 engram task add "<Title>" [--description TEXT] [--priority PRIORITY]
@@ -78,7 +79,8 @@ engram task add "<Title>" [--description TEXT] [--priority PRIORITY]
                           [--depends-on TASK_IDS]
 ```
 
-Create a task. Defaults are `priority=medium` and `status=todo`.
+Create a task in the current project. Defaults are `priority=medium` and `status=todo`.
+- `--phase TEXT`: Associate the task with a phase. If `TEXT` matches a first-class phase ID or unique title, the task's first-class `phase_id` and legacy `phase` fields are resolved and set. If no first-class phase matches, it falls back to storing the free-form legacy text in `phase`.
 
 ```bash
 engram task start <task_id>
@@ -90,7 +92,11 @@ Mark a task as `in-progress`.
 engram task update <task_id> --field <field> --value <value>
 ```
 
-Update a single task field. Common fields are `status`, `priority`, `title`, `description`, `acceptance`, `evidence`, `phase`, `tags`, and `depends_on`.
+Update a single task field.
+- **Valid Fields:** `title`, `status`, `priority`, `description`, `acceptance`, `tags`, `phase`, `phase_id`, `evidence`, `depends_on`.
+- **Phase association (`phase_id`):** Update the `phase_id` field with a first-class phase ID or unique title. This resolves the phase, links the task to it, and mirrors the title into the legacy `phase` text field for compatibility.
+- **Legacy phase title (`phase`):** Update the `phase` field directly with a text string to use legacy free-form phase labels without establishing a first-class phase link.
+- **Clearing a task's phase:** Set `--field phase_id --value none` (or `null`/`clear`) to clear both `phase_id` and `phase` fields, dissociating the task from any phase.
 
 ```bash
 engram task note <task_id> "<note>"

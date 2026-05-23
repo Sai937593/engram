@@ -88,12 +88,12 @@ def get_startup_context(project_id: str) -> str:
     return "\n".join(context)
 
 
-def _compact_text(text: str | None, max_chars: int = 150) -> str:
-    """Safely truncate text to avoid dumping long content, while remaining ASCII-safe."""
+def _compact_text(text: str | None, max_chars: int | None = None) -> str:
+    """Safely convert text to ASCII, optionally truncating if max_chars is specified."""
     if not text:
         return ""
     safe_text = text.encode("ascii", errors="replace").decode("ascii")
-    if len(safe_text) > max_chars:
+    if max_chars is not None and len(safe_text) > max_chars:
         if max_chars <= 3:
             return "..."
         return safe_text[: max_chars - 3] + "..."

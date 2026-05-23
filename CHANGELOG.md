@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+- docs: document task command phase options and phase_id/phase fields including clearing logic in USER_MANUAL.md.
+- fix(cli): remove default truncation from task context details in engram start to prevent details from being cut off.
 - docs: document all 6 engram phase CLI commands in USER_MANUAL.md.
 - test(cli): add formatting tests for Phase 6 context builder to verify readability, truncation, stability, and compactness.
 - feat(cli): conditionally include truncated phase evidence summary in task context.
