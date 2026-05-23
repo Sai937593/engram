@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- feat(model): add `get_effective_phase_title` compatibility helper to prefer first-class `Phase.title`, safely fallback to legacy `task.phase`, and return `None` for unphased or stale references.
+- feat(model): teach Task create/read/update paths to persist `phase_id` while keeping legacy `phase` callers compatible.
+- fix(db): backfill legacy `tasks.phase` values into project-scoped `phases` with idempotent `tasks.phase_id` migration coverage.
+- feat(model): add Phase domain model with status validation, project-ordered listing, deterministic order index defaults, and CRUD tests.
+- feat(db): add first-class phases schema and idempotent nullable `tasks.phase_id` migration.
 - docs: align public README and user manual with the current CLI and remove stale planning docs.
 - chore: prepare repository for public release, add MIT license, exclude unpolished UI, and write portfolio README.md
 - feat(cli): implement --all/-a option for 'engram task list' and improve empty states with helpful guidance.

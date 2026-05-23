@@ -18,6 +18,7 @@ def tmp_db(tmp_path, monkeypatch):
         "engram.models.project.get_db_connection", lambda: get_db_connection(db_path)
     )
     monkeypatch.setattr("engram.models.task.get_db_connection", lambda: get_db_connection(db_path))
+    monkeypatch.setattr("engram.models.phase.get_db_connection", lambda: get_db_connection(db_path))
     monkeypatch.setattr(
         "engram.models.memory.get_db_connection", lambda: get_db_connection(db_path)
     )
