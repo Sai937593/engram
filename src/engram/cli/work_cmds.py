@@ -7,7 +7,7 @@ import click
 
 import engram.cli as cli_root
 from engram.context import get_task_context
-from engram.models.task import Task
+from engram.models.task import Task, get_effective_phase_title
 
 
 def slugify(text: str) -> str:
@@ -18,8 +18,9 @@ def slugify(text: str) -> str:
     return text.strip("-")
 
 
-def git_checkout_phase_branch(phase: str | None) -> None:
-    """Check out the git branch corresponding to the given phase, or a misc branch if None."""
+def git_checkout_phase_branch(t: Task) -> None:
+    """Check out the git branch corresponding to the given task's phase, or a misc branch if None."""
+    phase = get_effective_phase_title(t)
     if not phase:
         branch_name = "feat/misc"
     else:
@@ -95,7 +96,8 @@ def start():
         return
 
     # Check git status before branch checkout safely
-    target_branch = f"feat/phase-{slugify(t.phase)}" if t.phase else "feat/misc"
+    phase_title = get_effective_phase_title(t)
+    target_branch = f"feat/phase-{slugify(phase_title)}" if phase_title else "feat/misc"
     current_branch = get_current_branch()
     if current_branch != target_branch and is_working_tree_dirty():
         cli_root.console.print(
@@ -112,7 +114,7 @@ def start():
         cli_root.console.print(f"[green]Started task:[/green] {t.id}")
 
     # We have a task, check out phase branch
-    git_checkout_phase_branch(t.phase)
+    git_checkout_phase_branch(t)
 
     # Print the rich context
     context_str = get_task_context(t.id)
@@ -120,6 +122,13 @@ def start():
     cli_root.console.print("\n" + "=" * 40)
     cli_root.console.print(context_str)
     cli_root.console.print("=" * 40 + "\n")
+
+
+def _is_same_phase(t1: Task, t2: Task) -> bool:
+    """Return True if two tasks belong to the same phase."""
+    if t1.phase_id and t2.phase_id:
+        return t1.phase_id == t2.phase_id
+    return get_effective_phase_title(t1) == get_effective_phase_title(t2)
 
 
 @cli_root.cli.command(name="finish")
@@ -187,7 +196,9 @@ def finish(commit_type):
     # Git operations
     subprocess.run(["git", "add", "-A"], check=False)
 
-    commit_msg = f"{resolved_type}({slugify(t.phase) or 'misc'}): {t.title} [{t.id}]"
+    commit_msg = (
+        f"{resolved_type}({slugify(get_effective_phase_title(t)) or 'misc'}): {t.title} [{t.id}]"
+    )
     commit_res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True)
 
     if commit_res.returncode != 0:
@@ -215,10 +226,10 @@ def finish(commit_type):
 
     # Check if phase is complete
     next_t = Task.get_next(p.id)
-    if not next_t or next_t.phase != t.phase:
+    if not next_t or not _is_same_phase(next_t, t):
         # Either no more tasks, or the next task is in a different phase
         # Check if all tasks in CURRENT phase are done
-        phase_tasks = [pt for pt in tasks if pt.phase == t.phase]
+        phase_tasks = [pt for pt in tasks if _is_same_phase(pt, t)]
         if all(pt.status in ("done", "cancelled") for pt in phase_tasks):
             cli_root.console.print("\n[bold green]Phase Complete![/bold green]")
             cli_root.console.print("All tasks in the current phase are done.")
