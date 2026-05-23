@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(model): add Phase domain model with status validation, project-ordered listing, deterministic order index defaults, and CRUD tests.
 - feat(db): add first-class phases schema and idempotent nullable `tasks.phase_id` migration.
 - docs: align public README and user manual with the current CLI and remove stale planning docs.
 - chore: prepare repository for public release, add MIT license, exclude unpolished UI, and write portfolio README.md
