@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- fix(cli): route `phase add --status active` and `phase update --field status --value active` through the single-active-phase activation path.
 - feat(cli): add `engram phase done` with required evidence, unfinished-linked-task guard for todo/in-progress/blocked statuses, and `--force` override coverage across phase_id plus legacy phase links.
 - feat(cli): add `engram phase start` with deterministic single-active-phase enforcement, same-project active-phase demotion, and idempotent activation coverage.
 - feat(cli): add `engram phase update` with mutable-field validation, status/order parsing checks, and project-scoped normalized title collision protection.
