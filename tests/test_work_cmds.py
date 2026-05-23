@@ -365,3 +365,102 @@ def test_finish_commit_handles_no_phase_gracefully(tmp_db, project, mock_git, mo
     commit_cmd = mock_git.commits[0]
     commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
     assert commit_msg.startswith("feat(misc): Refactor core db")
+
+
+def test_finish_phase_complete_with_phase_id(tmp_db, project, mock_git, monkeypatch):
+    """engram finish detects Phase Complete! when all tasks in a first-class phase are done."""
+    phase = Phase.create(project_id=project.id, title="Phase Roadmap")
+    # Task 1 is already done, Task 2 is in-progress and will be finished
+    Task.create(
+        project_id=project.id,
+        title="Task 1",
+        phase_id=phase.id,
+        status="done",
+    )
+    Task.create(
+        project_id=project.id,
+        title="Task 2",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish"])
+
+    assert result.exit_code == 0
+    assert "Phase Complete!" in result.output
+    assert "All tasks in the current phase are done" in result.output
+
+
+def test_finish_phase_complete_fallback_to_effective_title(tmp_db, project, mock_git, monkeypatch):
+    """engram finish detects Phase Complete! using legacy fallback when phase_id is missing but titles match."""
+    # Task 1 is done, Task 2 is in-progress and has no phase_id but matching legacy phase text
+    Task.create(
+        project_id=project.id,
+        title="Task 1",
+        phase="Phase Legacy",
+        status="done",
+    )
+    Task.create(
+        project_id=project.id,
+        title="Task 2",
+        phase="Phase Legacy",
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish"])
+
+    assert result.exit_code == 0
+    assert "Phase Complete!" in result.output
+
+
+def test_finish_phase_not_complete_same_phase_id_one_todo(tmp_db, project, mock_git, monkeypatch):
+    """engram finish does not detect Phase Complete! if another task in the same phase_id is todo."""
+    phase = Phase.create(project_id=project.id, title="Phase Roadmap")
+    # Task 1 is in-progress, Task 2 is todo in the same phase
+    Task.create(
+        project_id=project.id,
+        title="Task 1",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    Task.create(
+        project_id=project.id,
+        title="Task 2",
+        phase_id=phase.id,
+        status="todo",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish"])
+
+    assert result.exit_code == 0
+    assert "Phase Complete!" not in result.output
+
+
+def test_finish_phase_complete_with_other_phase_todo(tmp_db, project, mock_git, monkeypatch):
+    """engram finish detects Phase Complete! when the current first-class phase is done, even if a different first-class phase has todo tasks."""
+    phase_a = Phase.create(project_id=project.id, title="Phase A")
+    phase_b = Phase.create(project_id=project.id, title="Phase B")
+
+    # Task 1 in Phase A is in-progress
+    Task.create(
+        project_id=project.id,
+        title="Task 1",
+        phase_id=phase_a.id,
+        status="in-progress",
+    )
+    # Task 2 in Phase B is todo
+    Task.create(
+        project_id=project.id,
+        title="Task 2",
+        phase_id=phase_b.id,
+        status="todo",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish"])
+
+    assert result.exit_code == 0
+    assert "Phase Complete!" in result.output

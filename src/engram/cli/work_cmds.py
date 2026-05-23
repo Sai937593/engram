@@ -124,6 +124,13 @@ def start():
     cli_root.console.print("=" * 40 + "\n")
 
 
+def _is_same_phase(t1: Task, t2: Task) -> bool:
+    """Return True if two tasks belong to the same phase."""
+    if t1.phase_id and t2.phase_id:
+        return t1.phase_id == t2.phase_id
+    return get_effective_phase_title(t1) == get_effective_phase_title(t2)
+
+
 @cli_root.cli.command(name="finish")
 @click.option(
     "-t",
@@ -219,10 +226,10 @@ def finish(commit_type):
 
     # Check if phase is complete
     next_t = Task.get_next(p.id)
-    if not next_t or next_t.phase != t.phase:
+    if not next_t or not _is_same_phase(next_t, t):
         # Either no more tasks, or the next task is in a different phase
         # Check if all tasks in CURRENT phase are done
-        phase_tasks = [pt for pt in tasks if pt.phase == t.phase]
+        phase_tasks = [pt for pt in tasks if _is_same_phase(pt, t)]
         if all(pt.status in ("done", "cancelled") for pt in phase_tasks):
             cli_root.console.print("\n[bold green]Phase Complete![/bold green]")
             cli_root.console.print("All tasks in the current phase are done.")
