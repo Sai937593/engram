@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(cli): implement `engram phase add` with project-scoped normalized duplicate-title validation and automatic per-project order indexing.
 - feat(cli): add shared phase title normalization and project-scoped phase resolver helpers with ambiguity/missing-case coverage.
 - feat(cli): add dedicated `engram phase` command group registration plus CLI entrypoint tests for root discovery and `phase --help` loading.
 - feat(model): add `get_effective_phase_title` compatibility helper to prefer first-class `Phase.title`, safely fallback to legacy `task.phase`, and return `None` for unphased or stale references.
