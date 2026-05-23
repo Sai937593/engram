@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- test(cli): add formatting tests for Phase 6 context builder to verify readability, truncation, stability, and compactness.
+- feat(cli): conditionally include truncated phase evidence summary in task context.
+- feat(cli): include compact phase goal and acceptance criteria summary in task context.
+- feat(cli): implement compact text utility for phase context formatting to safely truncate goals/descriptions/evidence while ensuring ASCII safety on legacy Windows consoles.
 - test(model): add tests for active phase preference and project fallback in `Task.get_next` and `engram start`.
 - feat(cli): add compact phase formatting (title, status, goal/description) to task start context output.
 - feat(cli): update `engram start` to resolve and use the active phase, prioritizing in-progress tasks inside the active phase and passing active_phase_id to Task.get_next.

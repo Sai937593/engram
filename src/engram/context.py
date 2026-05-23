@@ -88,6 +88,18 @@ def get_startup_context(project_id: str) -> str:
     return "\n".join(context)
 
 
+def _compact_text(text: str | None, max_chars: int = 150) -> str:
+    """Safely truncate text to avoid dumping long content, while remaining ASCII-safe."""
+    if not text:
+        return ""
+    safe_text = text.encode("ascii", errors="replace").decode("ascii")
+    if len(safe_text) > max_chars:
+        if max_chars <= 3:
+            return "..."
+        return safe_text[: max_chars - 3] + "..."
+    return safe_text
+
+
 def get_task_context(task_id: str) -> str:
     """Generate focused context for a specific task, including project-wide knowledge."""
     task = Task.get(task_id)
@@ -107,7 +119,11 @@ def get_task_context(task_id: str) -> str:
             context.append("\n## PHASE")
             context.append(f"Phase: {phase.title} (Status: {phase.status})")
             if phase.description:
-                context.append(f"Goal: {phase.description}")
+                context.append(f"Goal: {_compact_text(phase.description)}")
+            if phase.acceptance:
+                context.append(f"Acceptance: {_compact_text(phase.acceptance)}")
+            if phase.evidence:
+                context.append(f"Evidence: {_compact_text(phase.evidence)}")
     elif task.phase:
         context.append("\n## PHASE")
         context.append(f"Phase: {task.phase}")

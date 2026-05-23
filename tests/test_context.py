@@ -83,3 +83,175 @@ def test_task_context_shows_legacy_phase_info(project):
     ctx = get_task_context(t.id)
     assert "## PHASE" in ctx
     assert "Phase: Phase Legacy" in ctx
+
+
+def test_compact_text():
+    from engram.context import _compact_text
+
+    # None and empty
+    assert _compact_text(None) == ""
+    assert _compact_text("") == ""
+
+    # Normal short ASCII
+    assert _compact_text("Hello World") == "Hello World"
+
+    # Unicode replacement
+    assert _compact_text("Hello \u2665 World") == "Hello ? World"
+
+    # Truncation
+    long_str = "a" * 200
+    truncated = _compact_text(long_str, max_chars=50)
+    assert len(truncated) == 50
+    assert truncated.endswith("...")
+    assert truncated == "a" * 47 + "..."
+
+    # Truncation with very small max_chars
+    assert _compact_text("abcdef", max_chars=3) == "..."
+
+
+def test_task_context_shows_compact_phase_details(project):
+    from engram.models.phase import Phase
+
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Custom",
+        description="Deliver \u2605 star products: " + ("x" * 200),
+        status="active",
+        acceptance="Acceptance criteria is very long: " + ("y" * 200),
+        evidence="Evidence that we delivered: " + ("z" * 200),
+    )
+    t = Task.create(
+        project_id=project.id,
+        title="Task in detailed phase",
+        phase_id=phase.id,
+    )
+    ctx = get_task_context(t.id)
+
+    assert "## PHASE" in ctx
+    assert "Phase: Phase Custom (Status: active)" in ctx
+
+    # Goal should show "?" instead of "\u2605", and be truncated at 150 chars total
+    # "Goal: " takes 6 chars. 150 limit on _compact_text. Total line limit around 156.
+    assert "Goal: Deliver ? star products: " in ctx
+    assert "..." in ctx
+    assert len(ctx.split("Goal: ")[1].split("\n")[0]) == 150
+
+    # Acceptance should be truncated and ASCII-safe
+    assert "Acceptance: Acceptance criteria is very long: " in ctx
+
+    # Evidence should be truncated and ASCII-safe
+    assert "Evidence: Evidence that we delivered: " in ctx
+
+
+def test_task_context_shows_short_phase_details_fully(project):
+    from engram.models.phase import Phase
+
+    phase = Phase.create(
+        project_id=project.id,
+        title="Short Phase",
+        description="Goal is simple.",
+        status="active",
+        acceptance="Acceptance is simple.",
+        evidence="Evidence is simple.",
+    )
+    t = Task.create(
+        project_id=project.id,
+        title="Task in short phase",
+        phase_id=phase.id,
+    )
+    ctx = get_task_context(t.id)
+
+    assert "## PHASE" in ctx
+    assert "Phase: Short Phase (Status: active)" in ctx
+    assert "Goal: Goal is simple." in ctx
+    assert "Acceptance: Acceptance is simple." in ctx
+    assert "Evidence: Evidence is simple." in ctx
+    # Ensure there is no trailing ellipsis in these short texts
+    assert "..." not in ctx.split("Goal: ")[1].split("\n")[0]
+
+
+def test_task_context_phase_no_extra_fields(project):
+    from engram.models.phase import Phase
+
+    phase = Phase.create(
+        project_id=project.id,
+        title="Empty Phase Fields",
+        status="active",
+    )
+    t = Task.create(
+        project_id=project.id,
+        title="Task in empty field phase",
+        phase_id=phase.id,
+    )
+    ctx = get_task_context(t.id)
+
+    assert "## PHASE" in ctx
+    assert "Phase: Empty Phase Fields (Status: active)" in ctx
+    assert "Goal:" not in ctx
+    assert "Acceptance:" not in ctx
+    assert "Evidence:" not in ctx
+
+
+def test_task_context_phase_evidence_truncation_exactly(project):
+    from engram.models.phase import Phase
+
+    long_evidence = "Evidence is: " + ("e" * 300)
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Evidence Truncation",
+        status="active",
+        evidence=long_evidence,
+    )
+    t = Task.create(
+        project_id=project.id,
+        title="Task with long evidence phase",
+        phase_id=phase.id,
+    )
+    ctx = get_task_context(t.id)
+
+    # Check evidence line
+    evidence_line = ctx.split("Evidence: ")[1].split("\n")[0]
+    assert len(evidence_line) == 150
+    assert evidence_line.endswith("...")
+    assert evidence_line == "Evidence is: " + ("e" * (150 - len("Evidence is: ") - 3)) + "..."
+
+
+def test_task_context_phase_formatting_stability(project):
+    from engram.models.phase import Phase
+
+    # Test stability with special characters, emojis, newlines, and varied sizes
+    phase = Phase.create(
+        project_id=project.id,
+        title="Stable Phase",
+        description="Line 1\nLine 2\nLine 3 with unicode \u2728",
+        status="active",
+        acceptance="Short.",
+        evidence="Evidence line 1\nEvidence line 2 with a lot of details: " + ("w" * 200),
+    )
+    t = Task.create(
+        project_id=project.id,
+        title="Task in stable phase",
+        phase_id=phase.id,
+    )
+    ctx = get_task_context(t.id)
+
+    assert "## PHASE" in ctx
+    assert "Phase: Stable Phase (Status: active)" in ctx
+    assert "Goal: Line 1" in ctx
+    assert "Line 2" in ctx
+    assert "Line 3 with unicode ?" in ctx
+    assert "Acceptance: Short." in ctx
+
+    # Evidence has newlines and is long, check it has "?" replaced if any (though 'w' is ASCII),
+    # and that it is truncated. Let's inspect the entire evidence block in ctx.
+    evidence_part = ctx.split("Evidence: ")[1]
+    # It starts with "Evidence line 1"
+    assert evidence_part.startswith("Evidence line 1")
+
+    # To be extremely precise and stable:
+    from engram.context import _compact_text
+
+    compacted_evidence = _compact_text(phase.evidence)
+    assert compacted_evidence in ctx
+    assert len(compacted_evidence) == 150
+    assert compacted_evidence.endswith("...")
