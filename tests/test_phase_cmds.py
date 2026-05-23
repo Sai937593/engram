@@ -1,0 +1,597 @@
+"""CLI tests for `engram phase` commands."""
+
+import os
+import re
+
+import pytest
+from click.testing import CliRunner
+
+from engram.cli import cli
+from engram.models.phase import Phase
+from engram.models.project import Project
+from engram.models.task import Task
+
+
+def make_runner_with_project(monkeypatch, project) -> CliRunner:
+    """Return a CliRunner with current-project resolution patched."""
+    monkeypatch.setattr("engram.cli.get_current_project", lambda: project)
+    return CliRunner()
+
+
+def test_phase_add_creates_phase_for_current_project(tmp_db, project, monkeypatch) -> None:
+    """phase add should create a phase with provided fields."""
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(
+        cli,
+        [
+            "phase",
+            "add",
+            "Phase Alpha",
+            "--description",
+            "Ship milestone one",
+            "--status",
+            "active",
+            "--acceptance",
+            "All milestone tasks completed",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    match = re.search(r"Phase created with ID:\s*([a-f0-9]{8})", result.output)
+    assert match is not None
+    created = Phase.get(match.group(1))
+    assert created is not None
+    assert created.project_id == project.id
+    assert created.title == "Phase Alpha"
+    assert created.description == "Ship milestone one"
+    assert created.status == "active"
+    assert created.acceptance == "All milestone tasks completed"
+
+
+def test_phase_add_defaults_order_index_to_next_for_project(tmp_db, project, monkeypatch) -> None:
+    """phase add auto-assigns the next order_index within the current project only."""
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    Phase.create(project_id=other_project.id, title="Other", order_index=999)
+    Phase.create(project_id=project.id, title="Phase One", order_index=2)
+
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(cli, ["phase", "add", "Phase Two"])
+
+    assert result.exit_code == 0, result.output
+    match = re.search(r"Phase created with ID:\s*([a-f0-9]{8})", result.output)
+    assert match is not None
+    created = Phase.get(match.group(1))
+    assert created is not None
+    assert created.order_index == 3
+
+
+def test_phase_add_rejects_invalid_status(tmp_db, project, monkeypatch) -> None:
+    """phase add should reject statuses outside the supported enum."""
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(cli, ["phase", "add", "Phase Alpha", "--status", "todo"])
+
+    assert result.exit_code != 0
+    assert "Invalid value for '--status'" in result.output
+
+
+def test_phase_add_rejects_duplicate_normalized_title_in_same_project(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase add blocks duplicate phase titles after normalization in the same project."""
+    Phase.create(project_id=project.id, title="  Phase   Alpha  ")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "add", "phase alpha"])
+
+    assert result.exit_code != 0
+    assert "already exists in this project" in result.output
+
+
+def test_phase_add_allows_same_title_in_another_project(tmp_db, project, monkeypatch) -> None:
+    """phase add permits the same normalized title when it belongs to another project."""
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    Phase.create(project_id=other_project.id, title="Phase Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "add", "  phase   alpha  "])
+
+    assert result.exit_code == 0, result.output
+    phases = Phase.list_by_project(project.id)
+    assert any(phase.title == "phase   alpha" for phase in phases)
+
+
+def test_phase_list_empty_project(tmp_db, project, monkeypatch) -> None:
+    """phase list should show guidance when the current project has no phases."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "No phases defined for this project." in result.output
+
+
+def test_phase_list_single_phase_shows_compact_fields(tmp_db, project, monkeypatch) -> None:
+    """phase list should show id/title/status/order with compact summary text."""
+    created = Phase.create(
+        project_id=project.id,
+        title="Phase Alpha",
+        status="active",
+        order_index=3,
+        description="Ship milestone one for onboarding experience",
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert created.id in result.output
+    assert "Phase Alpha" in result.output
+    assert "active" in result.output
+    assert "3" in result.output
+    assert "Ship milestone one for onboarding" in result.output
+    assert "experience" in result.output
+
+
+def test_phase_list_orders_by_order_index_then_creation_order(tmp_db, project, monkeypatch) -> None:
+    """phase list should use deterministic ordering by index then creation order."""
+    first_same_index = Phase.create(project_id=project.id, title="Build", order_index=1)
+    Phase.create(project_id=project.id, title="Plan", order_index=0)
+    second_same_index = Phase.create(project_id=project.id, title="Verify", order_index=1)
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "list"])
+
+    assert result.exit_code == 0, result.output
+    plan_pos = result.output.index("Plan")
+    first_pos = result.output.index(first_same_index.title)
+    second_pos = result.output.index(second_same_index.title)
+    assert plan_pos < first_pos < second_pos
+
+
+def test_phase_list_only_shows_current_project_phases(tmp_db, project, monkeypatch) -> None:
+    """phase list should only include phases from the current resolved project."""
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    Phase.create(project_id=project.id, title="Current Project Phase")
+    Phase.create(project_id=other_project.id, title="Other Project Phase")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "Current Project Phase" in result.output
+    assert "Other Project Phase" not in result.output
+
+
+def test_phase_get_by_id_prints_full_phase_details(tmp_db, project, monkeypatch) -> None:
+    """phase get should print full details when phase is referenced by ID."""
+    created = Phase.create(
+        project_id=project.id,
+        title="Phase Alpha",
+        status="active",
+        order_index=4,
+        description="Implement end-to-end command behavior",
+        acceptance="All acceptance checks pass",
+        evidence="Linked test output",
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "get", created.id])
+
+    assert result.exit_code == 0, result.output
+    assert f"ID: {created.id}" in result.output
+    assert "Title: Phase Alpha" in result.output
+    assert "Status: active" in result.output
+    assert "Order Index: 4" in result.output
+    assert "Description: Implement end-to-end command behavior" in result.output
+    assert "Acceptance Criteria:" in result.output
+    assert "All acceptance checks pass" in result.output
+    assert "Evidence / Notes:" in result.output
+    assert "Linked test output" in result.output
+
+
+def test_phase_get_by_unique_normalized_title(tmp_db, project, monkeypatch) -> None:
+    """phase get should resolve a unique normalized title within the current project."""
+    created = Phase.create(project_id=project.id, title="Phase   Beta")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "get", "  phase beta  "])
+
+    assert result.exit_code == 0, result.output
+    assert f"ID: {created.id}" in result.output
+    assert "Title: Phase   Beta" in result.output
+
+
+def test_phase_get_rejects_ambiguous_normalized_title(tmp_db, project, monkeypatch) -> None:
+    """phase get should fail when title lookup matches multiple normalized phases."""
+    first = Phase.create(project_id=project.id, title="Phase Alpha")
+    second = Phase.create(project_id=project.id, title="  phase   alpha ")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "get", "phase alpha"])
+
+    assert result.exit_code != 0
+    assert "Ambiguous phase 'phase alpha'" in result.output
+    assert first.id in result.output
+    assert second.id in result.output
+
+
+def test_phase_get_reports_missing_phase(tmp_db, project, monkeypatch) -> None:
+    """phase get should report a clear error when no phase matches."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "get", "phase zeta"])
+
+    assert result.exit_code != 0
+    assert "Phase 'phase zeta' not found in this project." in result.output
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_attr"),
+    [
+        ("title", "Refined Phase", "Refined Phase"),
+        ("description", "Rewritten summary", "Rewritten summary"),
+        ("status", "active", "active"),
+        ("order_index", "12", 12),
+        ("acceptance", "All checks pass", "All checks pass"),
+        ("evidence", "CLI output attached", "CLI output attached"),
+    ],
+)
+def test_phase_update_supports_all_mutable_fields(
+    tmp_db, project, monkeypatch, field: str, value: str, expected_attr: str | int
+) -> None:
+    """phase update should apply updates for every mutable phase field."""
+    created = Phase.create(
+        project_id=project.id,
+        title="Initial Phase",
+        description="Old summary",
+        status="planned",
+        order_index=1,
+        acceptance="Old acceptance",
+        evidence="Old evidence",
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "update", created.id, "--field", field, "--value", value])
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(created.id)
+    assert refreshed is not None
+    assert getattr(refreshed, field) == expected_attr
+    assert f"Phase '{created.id}' updated." in result.output
+
+
+def test_phase_update_rejects_unknown_field(tmp_db, project, monkeypatch) -> None:
+    """phase update should fail clearly when a field is not mutable."""
+    created = Phase.create(project_id=project.id, title="Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", created.id, "--field", "project_id", "--value", "other"],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown field 'project_id'" in result.output
+
+
+def test_phase_update_rejects_invalid_status(tmp_db, project, monkeypatch) -> None:
+    """phase update should fail clearly on unsupported status values."""
+    created = Phase.create(project_id=project.id, title="Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", created.id, "--field", "status", "--value", "todo"],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid status 'todo'" in result.output
+
+
+def test_phase_update_rejects_non_integer_order_index(tmp_db, project, monkeypatch) -> None:
+    """phase update should fail when order_index cannot be parsed as an integer."""
+    created = Phase.create(project_id=project.id, title="Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", created.id, "--field", "order_index", "--value", "first"],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid order_index 'first'" in result.output
+
+
+def test_phase_update_title_preserves_project_normalized_uniqueness(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase update should reject a title that collides by normalized value in the same project."""
+    created = Phase.create(project_id=project.id, title="Build")
+    Phase.create(project_id=project.id, title="Phase Alpha")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "update", created.id, "--field", "title", "--value", "  phase   alpha "],
+    )
+
+    assert result.exit_code != 0
+    assert "already exists in this project" in result.output
+
+
+def test_phase_start_by_id_sets_selected_phase_active(tmp_db, project, monkeypatch) -> None:
+    """phase start should resolve by id and make the selected phase active."""
+    phase = Phase.create(project_id=project.id, title="Execution", status="planned")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "start", phase.id])
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "active"
+    assert "is now active" in result.output
+
+
+def test_phase_start_by_unique_normalized_title_sets_phase_active(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase start should resolve a unique normalized title within the current project."""
+    phase = Phase.create(project_id=project.id, title="  Build   API  ", status="planned")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "start", "build api"])
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "active"
+
+
+def test_phase_start_demotes_existing_active_phase_in_same_project(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase start should demote existing active phases in the same project to planned."""
+    old_active = Phase.create(project_id=project.id, title="Old Active", status="active")
+    another_active = Phase.create(project_id=project.id, title="Another Active", status="active")
+    target = Phase.create(project_id=project.id, title="Target", status="planned")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "start", target.id])
+
+    assert result.exit_code == 0, result.output
+    assert Phase.get(target.id).status == "active"
+    assert Phase.get(old_active.id).status == "planned"
+    assert Phase.get(another_active.id).status == "planned"
+
+    active_phases = [
+        phase for phase in Phase.list_by_project(project.id) if phase.status == "active"
+    ]
+    assert [phase.id for phase in active_phases] == [target.id]
+
+
+def test_phase_start_does_not_mutate_other_project_phases(tmp_db, project, monkeypatch) -> None:
+    """phase start should only change phase states in the current project."""
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    other_active = Phase.create(
+        project_id=other_project.id, title="External Active", status="active"
+    )
+    target = Phase.create(project_id=project.id, title="Target", status="planned")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "start", target.id])
+
+    assert result.exit_code == 0, result.output
+    assert Phase.get(target.id).status == "active"
+    assert Phase.get(other_active.id).status == "active"
+
+
+def test_phase_start_is_idempotent_when_phase_already_active(tmp_db, project, monkeypatch) -> None:
+    """phase start should be idempotent for repeated starts on the already-active phase."""
+    target = Phase.create(project_id=project.id, title="Target", status="active")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    first = runner.invoke(cli, ["phase", "start", target.id])
+    second = runner.invoke(cli, ["phase", "start", target.id])
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert Phase.get(target.id).status == "active"
+    assert "Demoted" not in second.output
+    active_phases = [
+        phase for phase in Phase.list_by_project(project.id) if phase.status == "active"
+    ]
+    assert [phase.id for phase in active_phases] == [target.id]
+
+
+def test_phase_done_marks_phase_done_when_linked_tasks_are_done_or_cancelled(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase done should succeed when linked tasks are only done/cancelled and evidence is provided."""
+    phase = Phase.create(project_id=project.id, title="Release", status="active")
+    Task.create(project_id=project.id, title="Task Done", status="done", phase_id=phase.id)
+    Task.create(
+        project_id=project.id, title="Legacy Cancelled", status="cancelled", phase="  release  "
+    )
+    Task.create(project_id=project.id, title="Other Phase Task", status="todo", phase="Planning")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "done", phase.id, "--evidence", "All release checks and QA validations passed"],
+    )
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "done"
+    assert refreshed.evidence == "All release checks and QA validations passed"
+    assert "marked as done" in result.output
+
+
+def test_phase_done_rejects_when_unfinished_linked_tasks_remain(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase done should fail by default if linked tasks are todo/in-progress/blocked."""
+    phase = Phase.create(project_id=project.id, title="Execution", status="active")
+    todo_task = Task.create(
+        project_id=project.id, title="Todo Task", status="todo", phase_id=phase.id
+    )
+    blocked_task = Task.create(
+        project_id=project.id,
+        title="Legacy Blocked",
+        status="blocked",
+        phase="execution",
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["phase", "done", phase.id, "--evidence", "Attempted completion evidence"],
+    )
+
+    assert result.exit_code != 0
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "active"
+    assert todo_task.id in result.output
+    assert blocked_task.id in result.output
+    assert "Use --force to override" in result.output
+
+
+def test_phase_done_force_completes_when_unfinished_linked_tasks_remain(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase done --force should complete anyway and record evidence."""
+    phase = Phase.create(project_id=project.id, title="Execution", status="active")
+    Task.create(project_id=project.id, title="Incomplete", status="in-progress", phase_id=phase.id)
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            "phase",
+            "done",
+            phase.id,
+            "--force",
+            "--evidence",
+            "Forcing closure with remaining carry-over tasks documented",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "done"
+    assert refreshed.evidence == "Forcing closure with remaining carry-over tasks documented"
+    assert "override" in result.output
+
+
+def test_phase_cli_end_to_end_workflow_add_list_get_update_start_done(
+    tmp_db, project, monkeypatch
+) -> None:
+    """phase commands should work as one end-to-end workflow for the current project."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    add_result = runner.invoke(
+        cli,
+        [
+            "phase",
+            "add",
+            "Phase Alpha",
+            "--description",
+            "Initial milestone scope",
+            "--acceptance",
+            "All checks pass",
+        ],
+    )
+    assert add_result.exit_code == 0, add_result.output
+    created_match = re.search(r"Phase created with ID:\s*([a-f0-9]{8})", add_result.output)
+    assert created_match is not None
+    phase_id = created_match.group(1)
+
+    list_result = runner.invoke(cli, ["phase", "list"])
+    assert list_result.exit_code == 0, list_result.output
+    assert phase_id in list_result.output
+    assert "Phase Alpha" in list_result.output
+
+    get_result = runner.invoke(cli, ["phase", "get", phase_id])
+    assert get_result.exit_code == 0, get_result.output
+    assert f"ID: {phase_id}" in get_result.output
+    assert "Status: planned" in get_result.output
+
+    update_result = runner.invoke(
+        cli,
+        ["phase", "update", phase_id, "--field", "title", "--value", "Execution Ready"],
+    )
+    assert update_result.exit_code == 0, update_result.output
+
+    start_result = runner.invoke(cli, ["phase", "start", "execution ready"])
+    assert start_result.exit_code == 0, start_result.output
+    assert Phase.get(phase_id).status == "active"
+
+    done_result = runner.invoke(
+        cli,
+        ["phase", "done", phase_id, "--evidence", "Release checks completed"],
+    )
+    assert done_result.exit_code == 0, done_result.output
+    refreshed = Phase.get(phase_id)
+    assert refreshed is not None
+    assert refreshed.status == "done"
+    assert refreshed.evidence == "Release checks completed"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["phase", "get", "phase-id"],
+        ["phase", "update", "phase-id", "--field", "status", "--value", "done"],
+        ["phase", "start", "phase-id"],
+        ["phase", "done", "phase-id", "--evidence", "Cross-project completion attempt"],
+    ],
+)
+def test_phase_commands_reject_cross_project_phase_refs(
+    tmp_db, project, monkeypatch, args: list[str]
+) -> None:
+    """phase get/update/start/done should reject phase IDs from another project."""
+    other_project = Project.create(
+        "other-proj",
+        "Other Project",
+        repo_paths=[os.path.abspath("/tmp/other-repo")],
+    )
+    foreign_phase = Phase.create(project_id=other_project.id, title="Foreign", status="active")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    resolved_args = [foreign_phase.id if token == "phase-id" else token for token in args]
+    result = runner.invoke(cli, resolved_args)
+
+    assert result.exit_code != 0
+    assert f"Phase '{foreign_phase.id}' not found in this project." in result.output
+    assert Phase.get(foreign_phase.id).status == "active"
+
+
+def test_phase_done_requires_evidence(tmp_db, project, monkeypatch) -> None:
+    """phase done should require evidence input."""
+    phase = Phase.create(project_id=project.id, title="Execution", status="active")
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["phase", "done", phase.id])
+
+    assert result.exit_code != 0
+    assert "Missing option '--evidence'" in result.output

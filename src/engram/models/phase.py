@@ -170,6 +170,77 @@ class Phase:
         conn.close()
 
     @classmethod
+    def start(cls, phase_id: str) -> tuple["Phase", int]:
+        """Set a phase active and demote any other active phases in the same project."""
+        phase = cls.get(phase_id)
+        if phase is None:
+            raise ValueError(f"Phase '{phase_id}' not found.")
+
+        conn = get_db_connection()
+        audit_events: list[dict[str, str]] = []
+        other_active_rows = conn.execute(
+            """
+            SELECT id
+            FROM phases
+            WHERE project_id = ? AND status = 'active' AND id != ?
+            """,
+            (phase.project_id, phase.id),
+        ).fetchall()
+        demoted_ids = [row["id"] for row in other_active_rows]
+
+        for demoted_id in demoted_ids:
+            conn.execute(
+                """
+                UPDATE phases
+                SET status = 'planned', updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (demoted_id,),
+            )
+            audit_events.append(
+                {
+                    "target_id": demoted_id,
+                    "old_value": "active",
+                    "new_value": "planned",
+                }
+            )
+
+        if phase.status != "active":
+            conn.execute(
+                """
+                UPDATE phases
+                SET status = 'active', updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (phase.id,),
+            )
+            audit_events.append(
+                {
+                    "target_id": phase.id,
+                    "old_value": str(phase.status),
+                    "new_value": "active",
+                }
+            )
+
+        conn.commit()
+        conn.close()
+
+        for event in audit_events:
+            AuditLog.log(
+                "phases",
+                event["target_id"],
+                "update",
+                field="status",
+                old_value=event["old_value"],
+                new_value=event["new_value"],
+            )
+
+        refreshed = cls.get(phase.id)
+        if refreshed is None:
+            raise ValueError(f"Phase '{phase_id}' not found after update.")
+        return refreshed, len(demoted_ids)
+
+    @classmethod
     def _validate_status(cls, status: str) -> None:
         if status not in cls.VALID_STATUSES:
             allowed = ", ".join(sorted(cls.VALID_STATUSES))
