@@ -97,6 +97,21 @@ def get_task_context(task_id: str) -> str:
     context = []
     context.append(f"# TASK: {task.title} ({task.id})")
     context.append(f"Status: {task.status} | Priority: {task.priority}")
+
+    # Phase context
+    if task.phase_id:
+        from engram.models.phase import Phase
+
+        phase = Phase.get(task.phase_id)
+        if phase:
+            context.append("\n## PHASE")
+            context.append(f"Phase: {phase.title} (Status: {phase.status})")
+            if phase.description:
+                context.append(f"Goal: {phase.description}")
+    elif task.phase:
+        context.append("\n## PHASE")
+        context.append(f"Phase: {task.phase}")
+
     if task.description:
         context.append(f"\nDescription: {task.description}")
 

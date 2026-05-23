@@ -52,3 +52,34 @@ def test_task_context_shows_acceptance(project):
 def test_task_context_not_found():
     ctx = get_task_context("nonexistent-id")
     assert "not found" in ctx.lower()
+
+
+def test_task_context_shows_phase_info(project):
+    from engram.models.phase import Phase
+
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Roadmap",
+        description="Deliver the roadmap features",
+        status="active",
+    )
+    t = Task.create(
+        project_id=project.id,
+        title="Task in phase",
+        phase_id=phase.id,
+    )
+    ctx = get_task_context(t.id)
+    assert "## PHASE" in ctx
+    assert "Phase: Phase Roadmap (Status: active)" in ctx
+    assert "Goal: Deliver the roadmap features" in ctx
+
+
+def test_task_context_shows_legacy_phase_info(project):
+    t = Task.create(
+        project_id=project.id,
+        title="Task in legacy phase",
+        phase="Phase Legacy",
+    )
+    ctx = get_task_context(t.id)
+    assert "## PHASE" in ctx
+    assert "Phase: Phase Legacy" in ctx
