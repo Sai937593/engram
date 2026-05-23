@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- feat(cli): add `engram task list --phase` filtering by first-class phase id/unique title with legacy-only fallback matching and explicit phase_id precedence.
 - feat(cli): resolve `engram task add --phase` against first-class project phases by id or unique normalized title, mirror resolved phase titles into legacy task.phase, reject ambiguous/missing phase references, and preserve free-form legacy phase text when no first-class phase match exists.
 - fix(cli): route `phase add --status active` and `phase update --field status --value active` through the single-active-phase activation path.
 - feat(cli): add `engram phase done` with required evidence, unfinished-linked-task guard for todo/in-progress/blocked statuses, and `--force` override coverage across phase_id plus legacy phase links.

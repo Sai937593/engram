@@ -7,7 +7,11 @@ import click
 from rich.table import Table
 
 import engram.cli as cli_root
-from engram.cli.phase_helpers import resolve_phase_for_task_add
+from engram.cli.phase_helpers import (
+    normalize_phase_title,
+    resolve_phase_for_task_add,
+    resolve_phase_in_project,
+)
 from engram.db import get_db_connection
 from engram.models.task import Task
 
@@ -243,10 +247,23 @@ def task_start(task_id: str) -> None:
     is_flag=True,
     help="Show all tasks regardless of status (equivalent to --status all)",
 )
-def task_list(status: str, show_all: bool) -> None:
+@click.option("--phase", help="Filter tasks to a phase ID or unique phase title")
+def task_list(status: str, show_all: bool, phase: str | None) -> None:
     """List tasks for the current project."""
     p = cli_root.get_current_project()
     tasks = Task.list_by_project(p.id)
+    if phase is not None:
+        resolved_phase = resolve_phase_in_project(phase, p.id)
+        resolved_phase_title = normalize_phase_title(resolved_phase.title)
+        tasks = [
+            task
+            for task in tasks
+            if (
+                (task.phase_id == resolved_phase.id)
+                if task.phase_id
+                else normalize_phase_title(task.phase) == resolved_phase_title
+            )
+        ]
     if show_all:
         status = "all"
     if status.lower() != "all":
