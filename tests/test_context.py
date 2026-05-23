@@ -92,21 +92,15 @@ def test_compact_text():
     assert _compact_text(None) == ""
     assert _compact_text("") == ""
 
-    # Normal short ASCII
+    # Normal ASCII
     assert _compact_text("Hello World") == "Hello World"
 
     # Unicode replacement
     assert _compact_text("Hello \u2665 World") == "Hello ? World"
 
-    # Truncation
+    # Verify no truncation occurs on long strings
     long_str = "a" * 200
-    truncated = _compact_text(long_str, max_chars=50)
-    assert len(truncated) == 50
-    assert truncated.endswith("...")
-    assert truncated == "a" * 47 + "..."
-
-    # Truncation with very small max_chars
-    assert _compact_text("abcdef", max_chars=3) == "..."
+    assert _compact_text(long_str) == long_str
 
 
 def test_task_context_shows_compact_phase_details(project):
@@ -130,17 +124,16 @@ def test_task_context_shows_compact_phase_details(project):
     assert "## PHASE" in ctx
     assert "Phase: Phase Custom (Status: active)" in ctx
 
-    # Goal should show "?" instead of "\u2605", and be truncated at 150 chars total
-    # "Goal: " takes 6 chars. 150 limit on _compact_text. Total line limit around 156.
+    # Goal should show "?" instead of "\u2605", and not be truncated
     assert "Goal: Deliver ? star products: " in ctx
-    assert "..." in ctx
-    assert len(ctx.split("Goal: ")[1].split("\n")[0]) == 150
+    assert "..." not in ctx.split("Goal: ")[1].split("\n")[0]
+    assert len(ctx.split("Goal: ")[1].split("\n")[0]) == len("Deliver ? star products: ") + 200
 
-    # Acceptance should be truncated and ASCII-safe
-    assert "Acceptance: Acceptance criteria is very long: " in ctx
+    # Acceptance should not be truncated and should be ASCII-safe
+    assert "Acceptance: Acceptance criteria is very long: " + ("y" * 200) in ctx
 
-    # Evidence should be truncated and ASCII-safe
-    assert "Evidence: Evidence that we delivered: " in ctx
+    # Evidence should not be truncated and should be ASCII-safe
+    assert "Evidence: Evidence that we delivered: " + ("z" * 200) in ctx
 
 
 def test_task_context_shows_short_phase_details_fully(project):
@@ -211,9 +204,9 @@ def test_task_context_phase_evidence_truncation_exactly(project):
 
     # Check evidence line
     evidence_line = ctx.split("Evidence: ")[1].split("\n")[0]
-    assert len(evidence_line) == 150
-    assert evidence_line.endswith("...")
-    assert evidence_line == "Evidence is: " + ("e" * (150 - len("Evidence is: ") - 3)) + "..."
+    assert len(evidence_line) == len("Evidence is: ") + 300
+    assert not evidence_line.endswith("...")
+    assert evidence_line == "Evidence is: " + ("e" * 300)
 
 
 def test_task_context_phase_formatting_stability(project):
@@ -253,5 +246,8 @@ def test_task_context_phase_formatting_stability(project):
 
     compacted_evidence = _compact_text(phase.evidence)
     assert compacted_evidence in ctx
-    assert len(compacted_evidence) == 150
-    assert compacted_evidence.endswith("...")
+    assert (
+        len(compacted_evidence)
+        == len("Evidence line 1\nEvidence line 2 with a lot of details: ") + 200
+    )
+    assert not compacted_evidence.endswith("...")

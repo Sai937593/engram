@@ -11,13 +11,23 @@ A project maps one or more local repository paths to a record in the Engram data
 - Commands are project-aware based on the current working directory.
 - Memory lives outside the repository, so it survives branch changes, moves, and deletes.
 
+### Phases
+
+Phases are first-class project milestones that group related tasks.
+
+- Planning structure: `Project -> Phase -> Task`
+- Lifecycle: `planned -> active -> done | blocked | cancelled`
+- Only one phase should be active per project. `engram phase start <phase_ref>` activates one phase and demotes any other active phase in the same project back to `planned`.
+- New task workflows should use first-class phase links through `phase_id`.
+
 ### Tasks
 
 Tasks are units of work within a project.
 
 - Lifecycle: `todo -> in-progress -> done | blocked | cancelled`
 - Priority levels: `low | medium | high | critical`
-- Important fields: `title`, `description`, `acceptance`, `evidence`, `phase`, `tags`, `depends_on`
+- Important fields: `title`, `description`, `acceptance`, `evidence`, `phase_id`, `phase`, `tags`, `depends_on`
+- `phase_id` is the first-class phase association. The legacy free-form `phase` text remains readable during compatibility and is backfilled into first-class phases during database initialization when possible.
 - Use `engram task next` or `engram start` to claim work instead of scanning all tasks manually.
 
 ### Memories
@@ -66,10 +76,10 @@ engram task next
 Show the highest-priority actionable `todo` task.
 
 ```bash
-engram task list [--status STATUS] [--all]
+engram task list [--status STATUS] [--all] [--phase TEXT]
 ```
 
-List tasks. By default, Engram shows todo tasks; use `--all` to include terminal states.
+List tasks. By default, Engram shows todo tasks; use `--all` to include terminal states. Use `--phase TEXT` to filter by first-class phase ID or unique phase title.
 
 ```bash
 engram task add "<Title>" [--description TEXT] [--priority PRIORITY]
@@ -78,7 +88,7 @@ engram task add "<Title>" [--description TEXT] [--priority PRIORITY]
                           [--depends-on TASK_IDS]
 ```
 
-Create a task. Defaults are `priority=medium` and `status=todo`.
+Create a task. Defaults are `priority=medium` and `status=todo`. If `--phase` matches a first-class phase ID or unique title, Engram stores the linked `phase_id` and mirrors the phase title into legacy `phase` for compatibility. If no first-class phase matches, the value is stored as legacy free-form phase text.
 
 ```bash
 engram task start <task_id>
@@ -90,7 +100,11 @@ Mark a task as `in-progress`.
 engram task update <task_id> --field <field> --value <value>
 ```
 
-Update a single task field. Common fields are `status`, `priority`, `title`, `description`, `acceptance`, `evidence`, `phase`, `tags`, and `depends_on`.
+Update a single task field. Common fields are `status`, `priority`, `title`, `description`, `acceptance`, `evidence`, `phase_id`, `phase`, `tags`, and `depends_on`.
+
+- Use `--field phase_id --value <phase_id_or_unique_title>` to link a task to a first-class phase.
+- Use `--field phase_id --value none` to clear both `phase_id` and legacy `phase`.
+- Direct updates to `--field phase` are legacy compatibility behavior and should not be preferred for new tasks.
 
 ```bash
 engram task note <task_id> "<note>"
@@ -149,6 +163,45 @@ engram project list
 ```
 
 Inspect or update project metadata. Valid statuses are `active`, `paused`, and `archived`.
+
+### Phase Management
+
+```bash
+engram phase add "<Title>" [--description TEXT] [--status STATUS]
+                         [--acceptance TEXT] [--order-index INTEGER]
+```
+
+Add a phase to the current project. The default status is `planned`. Valid statuses are `planned`, `active`, `done`, `blocked`, and `cancelled`.
+
+```bash
+engram phase list
+```
+
+List phases for the current project in `order_index` order.
+
+```bash
+engram phase get <phase_ref>
+```
+
+Show full details for a phase by ID or unique title.
+
+```bash
+engram phase start <phase_ref>
+```
+
+Start a phase by ID or unique title and make it the only active phase in the project.
+
+```bash
+engram phase update <phase_ref> --field <field> --value <value>
+```
+
+Update a mutable phase field. Supported fields are `title`, `description`, `status`, `order_index`, `acceptance`, and `evidence`.
+
+```bash
+engram phase done <phase_ref> --evidence "<proof>" [--force]
+```
+
+Mark a phase as done with completion evidence. By default, Engram rejects completion while linked `todo`, `in-progress`, or `blocked` tasks remain; use `--force` only when intentionally closing with unfinished linked work.
 
 ### Exports
 

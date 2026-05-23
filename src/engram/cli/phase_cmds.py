@@ -80,11 +80,7 @@ def _compact_phase_summary(phase: Phase) -> str:
     if not summary_source:
         return "-"
 
-    compact = " ".join(summary_source.split())
-    max_len = 72
-    if len(compact) <= max_len:
-        return compact
-    return compact[: max_len - 1] + "..."
+    return " ".join(summary_source.split())
 
 
 @phase.command(name="list")

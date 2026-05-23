@@ -67,11 +67,7 @@ def _type_search(memory_type: str, query: str) -> None:
     table.add_column("Title", style="white")
     table.add_column("Snippet", style="dim")
     for m in results:
-        snippet = (
-            m.content[:70].replace("\n", " ") + "..."
-            if len(m.content) > 70
-            else m.content.replace("\n", " ")
-        )
+        snippet = m.content.replace("\n", " ")
         table.add_row(m.id, m.title, snippet)
     cli_root.console.print(table)
 
@@ -306,11 +302,7 @@ def memory_search(query, type, tags):
     table.add_column("Snippet", style="dim")
 
     for m in results:
-        snippet = (
-            m.content[:70].replace("\n", " ") + "..."
-            if len(m.content) > 70
-            else m.content.replace("\n", " ")
-        )
+        snippet = m.content.replace("\n", " ")
         table.add_row(m.id, m.title, snippet)
 
     cli_root.console.print(table)
