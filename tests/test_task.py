@@ -305,3 +305,48 @@ def test_init_db_backfills_legacy_task_phase_strings(tmp_path) -> None:
     assert task_legacy_phase_rows["legacy-task-1"] == " Phase Alpha "
     assert task_legacy_phase_rows["legacy-task-2"] == "phase   alpha"
     assert all(phase_id for phase_id in phase_ids.keys())
+
+
+def test_get_next_prefer_active_phase(project):
+    phase_1 = Phase.create(project_id=project.id, title="Phase 1")
+    phase_2 = Phase.create(project_id=project.id, title="Phase 2")
+
+    task_p1 = Task.create(
+        project_id=project.id,
+        title="Task Phase 1",
+        priority="medium",
+        phase_id=phase_1.id,
+    )
+    task_p2 = Task.create(
+        project_id=project.id,
+        title="Task Phase 2",
+        priority="high",
+        phase_id=phase_2.id,
+    )
+
+    nxt = Task.get_next(project.id, active_phase_id=phase_1.id)
+    assert nxt is not None
+    assert nxt.id == task_p1.id
+
+    nxt = Task.get_next(project.id, active_phase_id=phase_2.id)
+    assert nxt is not None
+    assert nxt.id == task_p2.id
+
+    nxt = Task.get_next(project.id)
+    assert nxt is not None
+    assert nxt.id == task_p2.id
+
+
+def test_get_next_active_phase_fallback_to_project_level(project):
+    phase_1 = Phase.create(project_id=project.id, title="Phase 1")
+
+    task_proj = Task.create(
+        project_id=project.id,
+        title="Project Level Task",
+        priority="medium",
+        phase_id=None,
+    )
+
+    nxt = Task.get_next(project.id, active_phase_id=phase_1.id)
+    assert nxt is not None
+    assert nxt.id == task_proj.id

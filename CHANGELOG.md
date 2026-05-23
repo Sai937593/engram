@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- test(model): add tests for active phase preference and project fallback in `Task.get_next` and `engram start`.
+- feat(cli): add compact phase formatting (title, status, goal/description) to task start context output.
+- feat(cli): update `engram start` to resolve and use the active phase, prioritizing in-progress tasks inside the active phase and passing active_phase_id to Task.get_next.
+- feat(model): add active phase resolution to `Task.get_next` with active_phase_id preference and project-level fallback.
 - fix(cli): update phase-complete detection in `engram finish` to prefer phase_id equality with fallback to effective phase title.
 - feat(cli): update finish commit scope to use effective phase title instead of raw task.phase, falling back to legacy phase or misc.
 - feat(cli): update branch checkout logic to use effective phase title for tasks, resolving via first-class Phase and falling back to legacy phase or feat/misc.
