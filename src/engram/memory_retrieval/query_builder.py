@@ -90,6 +90,38 @@ def _build_context_fields(context: Mapping[str, str | None] | None) -> list[tupl
     return fields
 
 
+def _resolve_phase_context(
+    selected_task: Task,
+    active_phase: Phase | None,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Resolve phase context from active phase, phase_id link, then legacy phase title."""
+    if active_phase:
+        return (
+            active_phase.id,
+            _normalize_text(active_phase.title),
+            _normalize_text(active_phase.description),
+            _normalize_text(active_phase.acceptance),
+        )
+
+    if selected_task.phase_id:
+        resolved_phase = Phase.get(selected_task.phase_id)
+        if resolved_phase:
+            return (
+                resolved_phase.id,
+                _normalize_text(resolved_phase.title),
+                _normalize_text(resolved_phase.description),
+                _normalize_text(resolved_phase.acceptance),
+            )
+
+    legacy_phase_title = _normalize_text(selected_task.phase)
+    return (
+        selected_task.phase_id,
+        legacy_phase_title or None,
+        None,
+        None,
+    )
+
+
 def build_task_retrieval_query(
     selected_task: Task,
     active_phase: Phase | None = None,
@@ -98,6 +130,13 @@ def build_task_retrieval_query(
 ) -> TaskRetrievalQuery:
     """Build deterministic retrieval query text from task, phase, and optional context."""
     resolved_options = options or RetrievalQueryBuilderOptions()
+    (
+        resolved_phase_id,
+        resolved_phase_title,
+        resolved_phase_description,
+        resolved_phase_acceptance,
+    ) = _resolve_phase_context(selected_task, active_phase)
+
     raw_fields: list[tuple[str, str | None]] = [
         ("task.title", selected_task.title),
         ("task.description", selected_task.description),
@@ -105,12 +144,14 @@ def build_task_retrieval_query(
         ("task.tags", _sorted_tags(selected_task.tags)),
     ]
 
-    if resolved_options.include_phase_fields and active_phase:
+    if resolved_options.include_phase_fields and (
+        resolved_phase_title or resolved_phase_description or resolved_phase_acceptance
+    ):
         raw_fields.extend(
             [
-                ("phase.title", active_phase.title),
-                ("phase.description", active_phase.description),
-                ("phase.acceptance", active_phase.acceptance),
+                ("phase.title", resolved_phase_title),
+                ("phase.description", resolved_phase_description),
+                ("phase.acceptance", resolved_phase_acceptance),
             ]
         )
 
@@ -118,7 +159,7 @@ def build_task_retrieval_query(
         raw_fields.extend(_build_context_fields(context))
 
     omitted_fields = ["task.evidence"]
-    if active_phase:
+    if resolved_phase_title or resolved_phase_description or resolved_phase_acceptance:
         omitted_fields.append("phase.evidence")
 
     included_fields: list[str] = []
@@ -149,8 +190,8 @@ def build_task_retrieval_query(
     metadata = RetrievalQueryMetadata(
         task_id=selected_task.id,
         project_id=selected_task.project_id,
-        phase_id=active_phase.id if active_phase else selected_task.phase_id,
-        phase_title=active_phase.title if active_phase else None,
+        phase_id=resolved_phase_id,
+        phase_title=resolved_phase_title,
         included_fields=tuple(included_fields),
         omitted_fields=tuple(omitted_fields),
         truncated_fields=tuple(truncated_fields),

@@ -62,6 +62,47 @@ def test_query_builder_is_deterministic_with_phase_and_context():
     assert "phase.evidence" in first.metadata.omitted_fields
 
 
+def test_query_builder_resolves_phase_context_from_task_phase_id(tmp_db, project):
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Linked",
+        description="Phase resolved by task phase_id.",
+        acceptance="Phase acceptance details are included.",
+    )
+    task = Task(
+        id="task004",
+        project_id=project.id,
+        title="Query from linked phase",
+        phase_id=phase.id,
+    )
+
+    query = build_task_retrieval_query(task)
+
+    assert query.metadata.phase_id == phase.id
+    assert query.metadata.phase_title == "Phase Linked"
+    assert "phase.title: Phase Linked" in query.query_text
+    assert "phase.description: Phase resolved by task phase_id." in query.query_text
+    assert "phase.acceptance: Phase acceptance details are included." in query.query_text
+
+
+def test_query_builder_falls_back_to_legacy_phase_title_when_phase_id_not_resolved():
+    task = Task(
+        id="task005",
+        project_id="proj001",
+        title="Legacy phase fallback",
+        phase="Legacy Retrieval Phase",
+        phase_id="missing-phase-id",
+    )
+
+    query = build_task_retrieval_query(task)
+
+    assert query.metadata.phase_id == "missing-phase-id"
+    assert query.metadata.phase_title == "Legacy Retrieval Phase"
+    assert "phase.title: Legacy Retrieval Phase" in query.query_text
+    assert "phase.description" in query.metadata.omitted_fields
+    assert "phase.acceptance" in query.metadata.omitted_fields
+
+
 def test_query_builder_does_not_perform_database_search(monkeypatch):
     task = Task(
         id="task003",
