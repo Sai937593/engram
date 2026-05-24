@@ -26,6 +26,10 @@ def format_retrieval_debug_output(result: StartupTaskMemoryRetrievalResult) -> s
         f"max_candidates={retrieval.max_candidates}, "
         f"scanned_row_count={retrieval.scanned_row_count}, "
         f"returned_candidate_count={retrieval.returned_candidate_count}",
+        "lexical threshold metadata: "
+        "min_content_term_hits_without_title_or_tag="
+        f"{retrieval.threshold_min_content_term_hits_without_title_or_tag}, "
+        f"threshold_filtered_row_count={retrieval.threshold_filtered_row_count}",
         "pack candidate metadata: "
         f"input_candidate_count={pack.input_candidate_count}, "
         f"unique_candidate_count={pack.unique_candidate_count}",

@@ -120,7 +120,7 @@ def test_retriever_applies_task_id_boost_deterministically(project) -> None:
     non_boosted_memory = Memory.create(
         project_id=project.id,
         type="lesson",
-        title="Non boosted memory",
+        title="Non boosted helper memory",
         content="helper helper helper",
         scope="task",
         task_id=None,
@@ -325,3 +325,68 @@ def test_phase9_generic_terms_do_not_pull_irrelevant_retrieval_internals(project
     assert retrieval_internal.id not in [candidate.memory_id for candidate in result.candidates]
     assert result.candidates == ()
     assert result.metadata.scanned_row_count == 0
+
+
+def test_retriever_threshold_filters_weak_single_term_content_only_match(project) -> None:
+    """Weak content-only overlap should be filtered instead of filling startup pack slots."""
+    task = Task.create(
+        project_id=project.id,
+        title="Create release manual",
+        description="Prepare release guide content.",
+    )
+    weak_overlap = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Internal implementation note",
+        content="Release checklist for unrelated internals.",
+        scope="task",
+        task_id=None,
+    )
+    retrieval_query = _build_test_query(
+        project_id=project.id,
+        task_id=task.id,
+        query_text="release manual",
+    )
+
+    result = retrieve_task_memory_candidates(retrieval_query)
+
+    assert weak_overlap.id not in [candidate.memory_id for candidate in result.candidates]
+    assert result.metadata.scanned_row_count == 1
+    assert result.metadata.returned_candidate_count == 0
+    assert result.metadata.threshold_filtered_row_count == 1
+    assert result.metadata.threshold_min_content_term_hits_without_title_or_tag == 2
+
+
+def test_retriever_threshold_keeps_multi_term_content_and_task_linked_matches(project) -> None:
+    """Threshold should keep stronger lexical signal and preserve direct task-linked matches."""
+    task = Task.create(project_id=project.id, title="Prepare release manual")
+    strong_content_overlap = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Internal implementation note",
+        content="Release manual checklist for docs handoff.",
+        scope="task",
+        task_id=None,
+    )
+    direct_task_match = Memory.create(
+        project_id=project.id,
+        type="snippet",
+        title="Origin task note",
+        content="Release details for this exact task.",
+        scope="task",
+        task_id=task.id,
+    )
+    retrieval_query = _build_test_query(
+        project_id=project.id,
+        task_id=task.id,
+        query_text="release manual",
+    )
+
+    result = retrieve_task_memory_candidates(retrieval_query)
+    by_id = {candidate.memory_id: candidate for candidate in result.candidates}
+
+    assert strong_content_overlap.id in by_id
+    assert direct_task_match.id in by_id
+    assert by_id[strong_content_overlap.id].content_term_hits == ("release", "manual")
+    assert by_id[direct_task_match.id].task_id_match is True
+    assert result.metadata.threshold_filtered_row_count == 0

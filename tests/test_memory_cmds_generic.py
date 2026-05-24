@@ -387,6 +387,7 @@ def test_memory_related_to_task_debug_success(tmp_db, project, monkeypatch) -> N
     assert "query text:" in result.output
     assert "retrieval mode:" in result.output
     assert "fts candidate metadata:" in result.output
+    assert "lexical threshold metadata:" in result.output
     assert "pack candidate metadata:" in result.output
     assert "selected counts:" in result.output
     assert "selected memory ids:" in result.output
@@ -409,6 +410,7 @@ def test_memory_related_to_task_debug_empty(tmp_db, project, monkeypatch) -> Non
     assert "RETRIEVAL DEBUG" in result.output
     assert "query text:" in result.output
     assert "retrieval mode:" in result.output
+    assert "lexical threshold metadata:" in result.output
     assert "selected_item_count=0" in result.output
     assert "No relevant task memories selected." not in result.output
 

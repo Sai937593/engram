@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(retrieval): add deterministic lexical relevance thresholding that filters weak single-term content-only FTS matches while preserving direct task-linked and stronger multi-term candidates, with threshold debug metadata in retrieval diagnostics.
 - feat(retrieval): expand startup FTS candidate scope to include only project-level L2/L3 lessons/decisions while explicitly excluding L0/L1 guardrails and non-policy project memory types.
 - feat(retrieval): tune FTS query normalization to drop non-signal structural/filler terms, reducing generic-term false positives for non-retrieval tasks while preserving deterministic bounded defaults.
 - docs(retrieval): add Phase 9 evaluation artifact with real-task retrieval examples, expected-vs-actual selections, misses, false positives, and observed failure modes.

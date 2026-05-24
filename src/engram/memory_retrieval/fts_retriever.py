@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from engram.db import get_db_connection
@@ -20,6 +21,7 @@ from engram.memory_retrieval.retrieval_contract import (
 
 PROJECT_SCOPE_ELIGIBLE_LEVELS = ("L2", "L3")
 PROJECT_SCOPE_ELIGIBLE_TYPES = ("lesson", "decision")
+_TOKEN_PATTERN = re.compile(r"\w+", flags=re.UNICODE)
 
 
 def _split_csv_tags(raw_tags: str | None) -> tuple[str, ...]:
@@ -38,6 +40,29 @@ def _extract_terms_from_safe_query(safe_query: str) -> tuple[str, ...]:
         for token in safe_query.split(" OR ")
         if len(token) >= 2 and token.startswith('"') and token.endswith('"')
     )
+
+
+def _extract_token_set(text: str | None) -> set[str]:
+    """Extract casefolded lexical tokens from text for deterministic hit checks."""
+    if not text:
+        return set()
+    return {token.casefold() for token in _TOKEN_PATTERN.findall(text)}
+
+
+def _passes_lexical_threshold(
+    *,
+    has_task_id_match: bool,
+    title_hits: tuple[str, ...],
+    tag_hits: tuple[str, ...],
+    content_hits: tuple[str, ...],
+    min_content_term_hits_without_title_or_tag: int,
+) -> bool:
+    """Return whether candidate signal is strong enough for deterministic inclusion."""
+    if has_task_id_match or title_hits or tag_hits:
+        return True
+    if min_content_term_hits_without_title_or_tag <= 0:
+        return True
+    return len(content_hits) >= min_content_term_hits_without_title_or_tag
 
 
 def _fetch_task_memory_fts_rows(
@@ -136,6 +161,10 @@ def retrieve_task_memory_candidates(
             max_candidates=resolved_options.max_candidates,
             scanned_row_count=0,
             returned_candidate_count=0,
+            threshold_min_content_term_hits_without_title_or_tag=(
+                resolved_options.min_content_term_hits_without_title_or_tag
+            ),
+            threshold_filtered_row_count=0,
         )
         return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
@@ -159,17 +188,36 @@ def retrieve_task_memory_candidates(
             max_candidates=resolved_options.max_candidates,
             scanned_row_count=0,
             returned_candidate_count=0,
+            threshold_min_content_term_hits_without_title_or_tag=(
+                resolved_options.min_content_term_hits_without_title_or_tag
+            ),
+            threshold_filtered_row_count=0,
         )
         return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
     candidates: list[TaskMemoryCandidate] = []
+    threshold_filtered_row_count = 0
     for row in fts_rows:
         title_folded = row.title.casefold()
+        content_tokens = _extract_token_set(row.content)
         tag_folded = tuple(tag.casefold() for tag in row.tags)
 
         title_hits = tuple(term for term in query_terms if term in title_folded)
         tag_hits = tuple(term for term in query_terms if term in tag_folded)
+        content_hits = tuple(term for term in query_terms if term in content_tokens)
         has_task_id_match = bool(query_task_id) and row.task_id == query_task_id
+
+        if not _passes_lexical_threshold(
+            has_task_id_match=has_task_id_match,
+            title_hits=title_hits,
+            tag_hits=tag_hits,
+            content_hits=content_hits,
+            min_content_term_hits_without_title_or_tag=(
+                resolved_options.min_content_term_hits_without_title_or_tag
+            ),
+        ):
+            threshold_filtered_row_count += 1
+            continue
 
         boost_score = (
             (resolved_options.task_id_match_boost if has_task_id_match else 0)
@@ -193,6 +241,7 @@ def retrieve_task_memory_candidates(
                 task_id_match=has_task_id_match,
                 title_term_hits=title_hits,
                 tag_term_hits=tag_hits,
+                content_term_hits=content_hits,
             )
         )
 
@@ -220,5 +269,9 @@ def retrieve_task_memory_candidates(
         max_candidates=resolved_options.max_candidates,
         scanned_row_count=len(fts_rows),
         returned_candidate_count=len(ordered_candidates),
+        threshold_min_content_term_hits_without_title_or_tag=(
+            resolved_options.min_content_term_hits_without_title_or_tag
+        ),
+        threshold_filtered_row_count=threshold_filtered_row_count,
     )
     return TaskMemoryRetrievalResult(candidates=ordered_candidates, metadata=metadata)

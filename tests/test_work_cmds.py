@@ -343,6 +343,7 @@ def test_start_debug_retrieval_prints_diagnostics_when_enabled(
     assert "query text: task.title: Task 1 | task.description: Retrieve memory" in result.output
     assert "retrieval mode: fts" in result.output
     assert "fts candidate metadata:" in result.output
+    assert "lexical threshold metadata:" in result.output
     assert "max_candidates=20" in result.output
     assert "scanned_row_count=4" in result.output
     assert "returned_candidate_count=2" in result.output
