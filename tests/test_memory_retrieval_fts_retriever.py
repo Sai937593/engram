@@ -3,7 +3,11 @@
 import sqlite3
 
 from engram.memory_retrieval.fts_retriever import retrieve_task_memory_candidates
-from engram.memory_retrieval.query_builder import RetrievalQueryMetadata, TaskRetrievalQuery
+from engram.memory_retrieval.query_builder import (
+    RetrievalQueryMetadata,
+    TaskRetrievalQuery,
+    build_task_retrieval_query,
+)
 from engram.models.memory import Memory
 from engram.models.project import Project
 from engram.models.task import Task
@@ -223,3 +227,62 @@ def test_retriever_falls_back_when_fts_table_is_unavailable(project) -> None:
     assert "no such table" in result.metadata.fallback_reason
     assert result.metadata.scanned_row_count == 0
     assert result.metadata.returned_candidate_count == 0
+
+
+def test_phase9_scope_gap_misses_project_scope_docs_guidance(project) -> None:
+    """Phase 9 regression: docs guidance in project scope is missed for user-manual tasks."""
+    task = Task.create(
+        project_id=project.id,
+        title="Create User Manual",
+        description="Prepare public release documentation and command help output.",
+        acceptance="Manual includes command output examples and release checks.",
+    )
+    docs_guidance = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Public docs must match CLI help",
+        content="Before release, verify README and USER_MANUAL align with --help output.",
+        scope="project",
+        level="L1",
+    )
+    retrieval_internal = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Task retrieval debug output notes",
+        content="Debug retrieval query output for startup tests.",
+        scope="task",
+        task_id=None,
+        tags=["retrieval", "debug"],
+    )
+
+    retrieval_query = build_task_retrieval_query(task)
+    result = retrieve_task_memory_candidates(retrieval_query)
+    returned_ids = [candidate.memory_id for candidate in result.candidates]
+
+    assert docs_guidance.id not in returned_ids
+    assert retrieval_internal.id in returned_ids
+    assert all(candidate.scope == "task" for candidate in result.candidates)
+
+
+def test_phase9_generic_terms_can_pull_irrelevant_retrieval_internals(project) -> None:
+    """Phase 9 regression: generic terms can pull retrieval internals into release tasks."""
+    task = Task.create(
+        project_id=project.id,
+        title="Prepare repository for public release",
+        description="Prepare docs and final output checks for release readiness.",
+    )
+    retrieval_internal = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Task output retrieval diagnostics",
+        content="Task query output and retrieval debugging for startup internals.",
+        scope="task",
+        task_id=None,
+    )
+    retrieval_query = build_task_retrieval_query(task)
+
+    result = retrieve_task_memory_candidates(retrieval_query)
+
+    assert [candidate.memory_id for candidate in result.candidates] == [retrieval_internal.id]
+    assert result.candidates[0].task_id_match is False
+    assert "task" in result.candidates[0].title_term_hits
