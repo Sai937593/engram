@@ -1,239 +1,30 @@
-from engram.models.memory import Memory
-from engram.models.project import Project
-from engram.models.task import Task
-
-
-def get_startup_context(project_id: str) -> str:
-    """Generate a compact, agent-optimized startup context string."""
-    project = Project.get(project_id)
-
-    # Fetch typed memories up-front
-    constraints = Memory.list_by_type(project_id, "constraint")
-    lessons = Memory.list_by_type(project_id, "lesson")
-    decisions = Memory.list_by_type(project_id, "decision")
-    # Other always-include memories (notes, snippets) that don't fit a typed bucket
-    all_memories = Memory.list_by_project(project_id)
-    typed_ids = {m.id for m in constraints + lessons + decisions}
-    other_always_include = [m for m in all_memories if m.always_include and m.id not in typed_ids]
-
-    context = []
-    context.append(f"# PROJECT: {project.name}")
-    if project.summary:
-        context.append(f"Summary: {project.summary}")
-
-    # --- Constraints (hard rules — always read FIRST) ---
-    if constraints:
-        context.append("\n## CONSTRAINTS")
-        for m in constraints:
-            context.append(f"### {m.title}")
-            context.append(m.content)
-
-    # --- Lessons Learned (solved problems — don't re-solve) ---
-    if lessons:
-        context.append("\n## LESSONS LEARNED")
-        for m in lessons:
-            context.append(f"### {m.title}")
-            context.append(m.content)
-
-    # --- Key Decisions (architectural rationale) ---
-    if decisions:
-        context.append("\n## KEY DECISIONS")
-        for m in decisions:
-            context.append(f"### {m.title}")
-            context.append(m.content)
-
-    # --- Other always-include memories ---
-    if other_always_include:
-        context.append("\n## KEY MEMORIES")
-        for m in other_always_include:
-            context.append(f"### {m.title} ({m.type})")
-            context.append(m.content)
-
-    # --- Task state ---
-    tasks = Task.list_by_project(project_id)
-    counts = Task.count_by_status(project_id)
-    total = sum(counts.values())
-    todo_tasks = [t for t in tasks if t.status in ("todo", "in-progress")]
-
-    if todo_tasks:
-        context.append("\n## ACTIVE TASKS")
-        for t in todo_tasks:
-            context.append(f"- [{t.status}] {t.title} ({t.id})")
-
-    pending_count = len([t for t in tasks if t.status not in ("done", "cancelled")])
-    context.append(f"\nPending tasks: {pending_count}")
-
-    # Phase-gap guidance — actionable messaging when no work is queued
-    if total == 0:
-        context.append(
-            "\n## STATUS: NO TASKS DEFINED\n"
-            "The next phase has not been planned. Before writing any code, ask the user\n"
-            "what the next phase of work should be, then add tasks:\n"
-            '  engram task add "<task title>" --phase "Phase N" --priority high'
-        )
-    elif pending_count == 0:
-        context.append(
-            "\n## STATUS: PHASE COMPLETE\n"
-            f"All {total} task(s) are done or cancelled. Confirm with the user whether\n"
-            "to plan the next phase or mark the project complete:\n"
-            '  engram task add "<next task>"  — to continue\n'
-            "  engram project update --status archived  — to close"
-        )
-
-    context.append(
-        "Tip: use 'engram task get <id>' for full detail,"
-        " 'engram memory search <topic>' to find context"
-    )
-
-    return "\n".join(context)
+from engram.context_helpers.common import compact_text
+from engram.context_helpers.handoff import build_handoff_context
+from engram.context_helpers.snapshot import build_snapshot_context
+from engram.context_helpers.startup import build_startup_context
+from engram.context_helpers.task import build_task_context
 
 
 def _compact_text(text: str | None) -> str:
     """Safely convert text to ASCII without truncation."""
-    if not text:
-        return ""
-    return text.encode("ascii", errors="replace").decode("ascii")
+    return compact_text(text)
 
 
-def get_task_context(task_id: str) -> str:
-    """Generate focused context for a specific task, including project-wide knowledge."""
-    task = Task.get(task_id)
-    if not task:
-        return "Task not found."
+def get_startup_context(project_id: str) -> str:
+    """Generate a compact, agent-optimized startup context string."""
+    return build_startup_context(project_id)
 
-    context = []
-    context.append(f"# TASK: {task.title} ({task.id})")
-    context.append(f"Status: {task.status} | Priority: {task.priority}")
 
-    # Phase context
-    if task.phase_id:
-        from engram.models.phase import Phase
-
-        phase = Phase.get(task.phase_id)
-        if phase:
-            context.append("\n## PHASE")
-            context.append(f"Phase: {phase.title} (Status: {phase.status})")
-            if phase.description:
-                context.append(f"Goal: {_compact_text(phase.description)}")
-            if phase.acceptance:
-                context.append(f"Acceptance: {_compact_text(phase.acceptance)}")
-            if phase.evidence:
-                context.append(f"Evidence: {_compact_text(phase.evidence)}")
-    elif task.phase:
-        context.append("\n## PHASE")
-        context.append(f"Phase: {task.phase}")
-
-    if task.description:
-        context.append(f"\nDescription: {task.description}")
-
-    if task.acceptance:
-        context.append(f"\nAcceptance Criteria:\n{task.acceptance}")
-
-    # Memories linked directly to this task
-    memories = Memory.list_by_project(task.project_id)
-    linked_memories = [m for m in memories if m.task_id == task_id]
-    if linked_memories:
-        context.append("\n## LINKED MEMORIES")
-        for m in linked_memories:
-            context.append(f"### {m.title} ({m.type})")
-            context.append(m.content)
-
-    # Project-wide knowledge every agent needs before touching any task
-    constraints = Memory.list_by_type(task.project_id, "constraint")
-    lessons = Memory.list_by_type(task.project_id, "lesson")
-    if constraints or lessons:
-        context.append("\n## PROJECT KNOWLEDGE")
-        for m in constraints:
-            context.append(f"### [CONSTRAINT] {m.title}")
-            context.append(m.content)
-        for m in lessons:
-            context.append(f"### [LESSON] {m.title}")
-            context.append(m.content)
-
-    return "\n".join(context)
+def get_task_context(task_id: str, hard_constraints_only: bool = False) -> str:
+    """Generate focused context for a specific task."""
+    return build_task_context(task_id, hard_constraints_only=hard_constraints_only)
 
 
 def get_snapshot_context(project_id: str) -> str:
     """Export a full project snapshot as agent-readable Markdown."""
-    project = Project.get(project_id)
-    tasks = Task.list_by_project(project_id)
-    memories = Memory.list_by_project(project_id)
-
-    context = []
-    context.append(f"# PROJECT SNAPSHOT: {project.name} ({project.id})")
-    if project.summary:
-        context.append(f"Summary: {project.summary}")
-    context.append(f"Status: {project.status}")
-
-    context.append("\n## TASKS")
-    for t in tasks:
-        context.append(f"### [{t.status.upper()}] {t.title} ({t.id})")
-        context.append(f"Priority: {t.priority}")
-        if t.description:
-            context.append(f"Description: {t.description}")
-        if t.acceptance:
-            context.append(f"Acceptance Criteria:\n{t.acceptance}")
-
-    context.append("\n## MEMORIES")
-    for m in memories:
-        context.append(f"### {m.title} ({m.type}) [{m.id}]")
-        if m.tags:
-            context.append(f"Tags: {', '.join(m.tags)}")
-        context.append(m.content)
-
-    return "\n".join(context)
+    return build_snapshot_context(project_id)
 
 
 def get_handoff_context(project_id: str) -> str:
     """Generate a project handoff document for another agent or human."""
-    project = Project.get(project_id)
-    tasks = Task.list_by_project(project_id)
-    constraints = Memory.list_by_type(project_id, "constraint")
-    lessons = Memory.list_by_type(project_id, "lesson")
-    decisions = Memory.list_by_type(project_id, "decision")
-    # Other important memories
-    all_memories = Memory.list_by_project(project_id)
-    typed_ids = {m.id for m in constraints + lessons + decisions}
-    other_important = [m for m in all_memories if m.always_include and m.id not in typed_ids]
-
-    context = []
-    context.append(f"# PROJECT HANDOFF: {project.name}")
-    if project.summary:
-        context.append(f"Context: {project.summary}")
-
-    context.append("\n## ACTIVE TASKS")
-    active_tasks = [t for t in tasks if t.status in ("todo", "in-progress", "blocked")]
-    for t in active_tasks:
-        context.append(f"### {t.title} ({t.id})")
-        context.append(f"Status: {t.status} | Priority: {t.priority}")
-        if t.description:
-            context.append(f"Description: {t.description}")
-
-    if constraints:
-        context.append("\n## CONSTRAINTS")
-        for m in constraints:
-            context.append(f"### {m.title}")
-            context.append(m.content)
-
-    if lessons:
-        context.append("\n## LESSONS LEARNED")
-        for m in lessons:
-            context.append(f"### {m.title}")
-            context.append(m.content)
-
-    if decisions:
-        context.append("\n## KEY DECISIONS")
-        for m in decisions:
-            context.append(f"### {m.title}")
-            context.append(m.content)
-
-    if other_important:
-        context.append("\n## CRITICAL CONTEXT")
-        for m in other_important:
-            context.append(f"### {m.title} ({m.type})")
-            context.append(m.content)
-
-    context.append("\n## NEXT STEPS")
-    context.append("Refer to active tasks above.")
-
-    return "\n".join(context)
+    return build_handoff_context(project_id)

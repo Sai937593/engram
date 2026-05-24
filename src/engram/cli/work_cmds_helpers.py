@@ -1,0 +1,142 @@
+"""Helper utilities for workflow command behavior."""
+
+from __future__ import annotations
+
+import re
+import subprocess
+
+from engram.cli.phase_helpers import normalize_phase_title
+from engram.models.phase import Phase
+from engram.models.task import Task, get_effective_phase_title
+
+
+def slugify(text: str) -> str:
+    """Return a git-safe slug for branch naming."""
+    if not text:
+        return "misc"
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
+
+
+def get_target_branch(task: Task) -> str:
+    """Return the phase branch name for the provided task."""
+    phase_title = get_effective_phase_title(task)
+    return f"feat/phase-{slugify(phase_title)}" if phase_title else "feat/misc"
+
+
+def git_checkout_phase_branch(task: Task) -> None:
+    """Check out the git branch corresponding to the task's effective phase."""
+    branch_name = get_target_branch(task)
+
+    result = subprocess.run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"])
+    if result.returncode == 0:
+        subprocess.run(["git", "checkout", branch_name], check=False)
+        return
+
+    subprocess.run(["git", "checkout", "-b", branch_name], check=False)
+
+
+def is_working_tree_dirty() -> bool:
+    """Return True when uncommitted changes are present in the repository."""
+    res = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+    if res.returncode != 0:
+        return False
+    return bool(res.stdout.strip())
+
+
+def get_current_branch() -> str:
+    """Return the current git branch name, or an empty string on failure."""
+    res = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True
+    )
+    if res.returncode != 0:
+        return ""
+    return res.stdout.strip()
+
+
+def task_matches_phase(task: Task, phase: Phase) -> bool:
+    """Return whether a task is linked to a phase via first-class or legacy data."""
+    if task.phase_id == phase.id:
+        return True
+    if task.phase_id:
+        return False
+    return normalize_phase_title(task.phase) == normalize_phase_title(phase.title)
+
+
+def is_same_phase(task_1: Task, task_2: Task) -> bool:
+    """Return whether two tasks belong to the same effective phase."""
+    if task_1.phase_id and task_2.phase_id:
+        return task_1.phase_id == task_2.phase_id
+    return get_effective_phase_title(task_1) == get_effective_phase_title(task_2)
+
+
+def select_task_to_start(project_id: str) -> tuple[Task | None, bool]:
+    """Select the next task to start or resume based on workflow priority rules."""
+    phases = Phase.list_by_project(project_id)
+    active_phase = next((phase for phase in phases if phase.status == "active"), None)
+    tasks = Task.list_by_project(project_id)
+
+    if active_phase:
+        in_progress_active = [
+            task
+            for task in tasks
+            if task.status == "in-progress" and task_matches_phase(task, active_phase)
+        ]
+        if in_progress_active:
+            return in_progress_active[0], True
+
+        next_active = Task.get_next_for_phase(project_id, active_phase.id, active_phase.title)
+        if next_active:
+            return next_active, False
+
+        next_unphased = Task.get_next_unphased(project_id)
+        if next_unphased:
+            return next_unphased, False
+
+        in_progress_any = [task for task in tasks if task.status == "in-progress"]
+        if in_progress_any:
+            return in_progress_any[0], True
+
+        return Task.get_next(project_id), False
+
+    in_progress_any = [task for task in tasks if task.status == "in-progress"]
+    if in_progress_any:
+        return in_progress_any[0], True
+
+    return Task.get_next(project_id), False
+
+
+def resolve_commit_type(task: Task, requested_type: str | None, allowed_types: set[str]) -> str:
+    """Resolve the commit type from explicit input or task tags."""
+    if requested_type:
+        resolved = requested_type.lower()
+        if resolved not in allowed_types:
+            raise ValueError(requested_type)
+        return resolved
+
+    tag_to_type = {
+        "bug": "fix",
+        "bugfix": "fix",
+        "fix": "fix",
+        "docs": "docs",
+        "documentation": "docs",
+        "chore": "chore",
+        "refactor": "refactor",
+        "test": "test",
+        "testing": "test",
+        "ci": "ci",
+        "style": "style",
+        "perf": "perf",
+        "feat": "feat",
+        "feature": "feat",
+    }
+
+    for tag in task.tags:
+        cleaned_tag = tag.strip().lower()
+        if cleaned_tag in allowed_types:
+            return cleaned_tag
+        if cleaned_tag in tag_to_type:
+            return tag_to_type[cleaned_tag]
+
+    return "feat"

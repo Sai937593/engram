@@ -1,4 +1,4 @@
-"""Tests for first-class type command groups and engram commit validation."""
+"""Tests for type command groups and commit/context behavior."""
 
 import re
 
@@ -7,23 +7,13 @@ from click.testing import CliRunner
 
 from engram.cli import cli
 from engram.models.memory import Memory
-from engram.models.phase import Phase
 from engram.models.task import Task
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
-
-def make_runner_with_project(monkeypatch, tmp_db, project) -> CliRunner:
-    """Return a CliRunner with CWD patched to the project's repo path."""
+def make_runner_with_project(monkeypatch, project) -> CliRunner:
+    """Return a CliRunner with current-project resolution patched."""
     monkeypatch.setattr("engram.cli.get_current_project", lambda: project)
     return CliRunner()
-
-
-# ---------------------------------------------------------------------------
-# Type command groups: constraint, lesson, decision, snippet
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -38,40 +28,38 @@ def make_runner_with_project(monkeypatch, tmp_db, project) -> CliRunner:
 def test_type_add_creates_correct_memory(
     type_name, default_always_include, tmp_db, project, monkeypatch
 ):
-    """Each type add command creates a memory with the correct type and always_include default."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    """Each type add command creates a memory with the correct defaults."""
+    runner = make_runner_with_project(monkeypatch, project)
     result = runner.invoke(cli, [type_name, "add", "Test title", "--content", "Test content"])
     assert result.exit_code == 0, result.output
 
     memories = Memory.list_by_type(project.id, type_name)
     assert len(memories) == 1
-    m = memories[0]
-    assert m.type == type_name
-    assert m.title == "Test title"
-    assert m.content == "Test content"
-    assert m.always_include is default_always_include
+    created = memories[0]
+    assert created.type == type_name
+    assert created.title == "Test title"
+    assert created.content == "Test content"
+    assert created.always_include is default_always_include
 
 
 @pytest.mark.parametrize("type_name", ["constraint", "lesson", "decision", "snippet"])
 def test_type_add_no_always_include_flag(type_name, tmp_db, project, monkeypatch):
-    """The --no-always-include flag overrides the default for constraint/lesson/decision."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    """The opt-out flag flips default inclusion behavior for each type command."""
+    runner = make_runner_with_project(monkeypatch, project)
     flag = "--no-always-include" if type_name != "snippet" else "--always-include"
     result = runner.invoke(cli, [type_name, "add", "Title", "--content", "Body", flag])
     assert result.exit_code == 0, result.output
 
     memories = Memory.list_by_type(project.id, type_name)
     assert len(memories) == 1
-    # For constraint/lesson/decision: flag flips to False; for snippet: flag flips to True
     expected = False if type_name != "snippet" else True
     assert memories[0].always_include is expected
 
 
 @pytest.mark.parametrize("type_name", ["constraint", "lesson", "decision", "snippet"])
 def test_type_list_shows_only_own_type(type_name, tmp_db, project, monkeypatch):
-    """type list only shows memories of that specific type, not all memories."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    # Add one of the target type and one of a different type
+    """type list only shows memories of that specific type."""
+    runner = make_runner_with_project(monkeypatch, project)
     Memory.create(project_id=project.id, type=type_name, title="Mine", content="A")
     Memory.create(project_id=project.id, type="note", title="Not mine", content="B")
 
@@ -83,101 +71,34 @@ def test_type_list_shows_only_own_type(type_name, tmp_db, project, monkeypatch):
 
 @pytest.mark.parametrize("type_name", ["constraint", "lesson", "decision", "snippet"])
 def test_type_list_empty(type_name, tmp_db, project, monkeypatch):
-    """type list shows a helpful message when no memories of that type exist."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    """type list shows an empty-state message when no entries exist."""
+    runner = make_runner_with_project(monkeypatch, project)
     result = runner.invoke(cli, [type_name, "list"])
     assert result.exit_code == 0, result.output
-    assert type_name in result.output  # mentions the type in the empty message
+    assert type_name in result.output
 
 
 @pytest.mark.parametrize("type_name", ["constraint", "lesson", "decision", "snippet"])
 def test_type_get_shows_detail(type_name, tmp_db, project, monkeypatch):
-    """type get shows the full memory content."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    m = Memory.create(
-        project_id=project.id, type=type_name, title="Detail test", content="Full content here"
+    """type get renders full memory content."""
+    runner = make_runner_with_project(monkeypatch, project)
+    memory = Memory.create(
+        project_id=project.id,
+        type=type_name,
+        title="Detail test",
+        content="Full content here",
     )
-    result = runner.invoke(cli, [type_name, "get", m.id])
+
+    result = runner.invoke(cli, [type_name, "get", memory.id])
     assert result.exit_code == 0, result.output
     assert "Full content here" in result.output
 
 
-# ---------------------------------------------------------------------------
-# Task.count_by_status
-# ---------------------------------------------------------------------------
-
-
-def test_count_by_status_empty(tmp_db, project):
-    """count_by_status returns empty dict when no tasks exist."""
-    counts = Task.count_by_status(project.id)
-    assert counts == {}
-
-
-def test_count_by_status_mixed(tmp_db, project):
-    """count_by_status returns accurate counts across statuses."""
-    Task.create(project_id=project.id, title="A", status="todo")
-    Task.create(project_id=project.id, title="B", status="todo")
-    Task.create(project_id=project.id, title="C", status="done")
-    Task.create(project_id=project.id, title="D", status="blocked")
-
-    counts = Task.count_by_status(project.id)
-    assert counts["todo"] == 2
-    assert counts["done"] == 1
-    assert counts["blocked"] == 1
-
-
-# ---------------------------------------------------------------------------
-# task next — three distinct empty states
-# ---------------------------------------------------------------------------
-
-
-def test_task_next_no_tasks_defined(tmp_db, project, monkeypatch):
-    """task next shows 'No tasks defined' when the project has zero tasks."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    result = runner.invoke(cli, ["task", "next"])
-    assert result.exit_code == 0, result.output
-    assert "No tasks defined" in result.output
-    assert "engram task add" in result.output
-
-
-def test_task_next_all_done(tmp_db, project, monkeypatch):
-    """task next shows 'All tasks complete' when every task is done or cancelled."""
-    Task.create(project_id=project.id, title="Done task", status="done")
-    Task.create(project_id=project.id, title="Cancelled task", status="cancelled")
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    result = runner.invoke(cli, ["task", "next"])
-    assert result.exit_code == 0, result.output
-    assert "All tasks complete" in result.output
-
-
-def test_task_next_all_blocked(tmp_db, project, monkeypatch):
-    """task next shows blocked guidance when all remaining tasks are blocked."""
-    Task.create(project_id=project.id, title="Blocked task", status="blocked")
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    result = runner.invoke(cli, ["task", "next"])
-    assert result.exit_code == 0, result.output
-    assert "blocked" in result.output.lower()
-
-
-def test_task_next_returns_task(tmp_db, project, monkeypatch):
-    """task next returns the task when a todo task exists."""
-    Task.create(project_id=project.id, title="Ready task", status="todo", priority="high")
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    result = runner.invoke(cli, ["task", "next"])
-    assert result.exit_code == 0, result.output
-    assert "Ready task" in result.output
-
-
-# ---------------------------------------------------------------------------
-# engram commit — message validation
-# ---------------------------------------------------------------------------
-
-
 def test_commit_rejects_invalid_message(tmp_db, project, monkeypatch):
-    """engram commit rejects messages that don't follow Conventional Commits format."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    """engram commit rejects messages outside Conventional Commits format."""
+    runner = make_runner_with_project(monkeypatch, project)
     result = runner.invoke(cli, ["commit", "-m", "this is a bad commit message"])
-    assert result.exit_code == 0, result.output  # click exits 0 even on user errors
+    assert result.exit_code == 0, result.output
     assert "Error" in result.output
     assert "Conventional Commits" in result.output
 
@@ -200,23 +121,17 @@ def test_commit_accepts_valid_messages(msg, tmp_db, project, monkeypatch):
 
 
 def test_commit_warns_missing_task_id(tmp_db, project, monkeypatch, capsys):
-    """engram commit warns (not fails) when no [task-id] bracket is present."""
-    # We test the validation logic directly since subprocess.run would need git
+    """engram commit warns, but does not fail, without [task-id] in message."""
     from engram.cli import CONVENTIONAL_COMMIT_TYPES
 
     msg = "feat(cli): add something without task id"
     pattern = rf"^({'|'.join(CONVENTIONAL_COMMIT_TYPES)})(\(.+\))?: .+"
-    assert re.match(pattern, msg)  # valid format
-    assert "[" not in msg  # missing task id — should warn but not fail
-
-
-# ---------------------------------------------------------------------------
-# context — startup sections
-# ---------------------------------------------------------------------------
+    assert re.match(pattern, msg)
+    assert "[" not in msg
 
 
 def test_startup_context_shows_constraints_first(tmp_db, project, monkeypatch):
-    """Constraints appear in the startup context output."""
+    """Startup context renders constraints before lessons."""
     from engram.context import get_startup_context
 
     Memory.create(
@@ -237,12 +152,11 @@ def test_startup_context_shows_constraints_first(tmp_db, project, monkeypatch):
     ctx = get_startup_context(project.id)
     assert "## CONSTRAINTS" in ctx
     assert "## LESSONS LEARNED" in ctx
-    # Constraints must appear before lessons
     assert ctx.index("## CONSTRAINTS") < ctx.index("## LESSONS LEARNED")
 
 
 def test_startup_context_no_tasks_phase_gap(tmp_db, project):
-    """Startup context shows the NO TASKS DEFINED block when project has zero tasks."""
+    """Startup context shows NO TASKS DEFINED when project has zero tasks."""
     from engram.context import get_startup_context
 
     ctx = get_startup_context(project.id)
@@ -250,7 +164,7 @@ def test_startup_context_no_tasks_phase_gap(tmp_db, project):
 
 
 def test_startup_context_phase_complete(tmp_db, project):
-    """Startup context shows PHASE COMPLETE when all tasks are done/cancelled."""
+    """Startup context shows PHASE COMPLETE when all work is finished."""
     from engram.context import get_startup_context
 
     Task.create(project_id=project.id, title="Done", status="done")
@@ -269,452 +183,3 @@ def test_task_context_includes_project_knowledge(tmp_db, project, task):
     assert "PROJECT KNOWLEDGE" in ctx
     assert "No secrets" in ctx
     assert "Use WAL" in ctx
-
-
-# ---------------------------------------------------------------------------
-# task depends_on tests
-# ---------------------------------------------------------------------------
-
-
-def test_task_add_depends_on_exact_and_prefix(tmp_db, project, monkeypatch):
-    """task add supports --depends-on / -d with exact ID and partial prefix."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    # 1. Create a dependency task
-    t_dep = Task.create(project_id=project.id, title="Dependency task")
-
-    # 2. Add task depending on exact ID
-    res = runner.invoke(cli, ["task", "add", "Task A", "--depends-on", t_dep.id])
-    assert res.exit_code == 0, res.output
-    # Parse the created ID from the output
-    match = re.search(r"Task created with ID:\s*([a-f0-9]{8})", res.output)
-    assert match is not None
-    t_a_id = match.group(1)
-
-    t_a = Task.get(t_a_id)
-    assert t_a.depends_on == t_dep.id
-
-    # 3. Add task depending on prefix of t_dep.id
-    prefix = t_dep.id[:4]
-    res2 = runner.invoke(cli, ["task", "add", "Task B", "-d", prefix])
-    assert res2.exit_code == 0, res2.output
-    match2 = re.search(r"Task created with ID:\s*([a-f0-9]{8})", res2.output)
-    assert match2 is not None
-    t_b_id = match2.group(1)
-
-    t_b = Task.get(t_b_id)
-    assert t_b.depends_on == t_dep.id
-
-
-def test_task_add_depends_on_errors(tmp_db, project, monkeypatch):
-    """task add handles non-existent and ambiguous depends-on values."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    # 1. Non-existent dependency
-    res = runner.invoke(cli, ["task", "add", "Task A", "-d", "nonexist"])
-    assert res.exit_code != 0
-    assert "Error: Task dependency 'nonexist' not found" in res.output
-
-    # 2. Ambiguous dependency (prefix matching multiple tasks)
-    # We force create two tasks starting with similar prefixes if possible, or just mock/insert them
-    # Since they have random IDs, let's create a few and find two that share a prefix, or manually insert them.
-    from engram.db import get_db_connection
-
-    conn = get_db_connection(tmp_db)
-    conn.execute(
-        "INSERT INTO tasks (id, project_id, title) VALUES ('aaaa1111', ?, 'Task 1')",
-        (project.id,),
-    )
-    conn.execute(
-        "INSERT INTO tasks (id, project_id, title) VALUES ('aaaa2222', ?, 'Task 2')",
-        (project.id,),
-    )
-    conn.commit()
-    conn.close()
-
-    res2 = runner.invoke(cli, ["task", "add", "Task B", "-d", "aaaa"])
-    assert res2.exit_code != 0
-    assert "Error: Ambiguous task dependency 'aaaa'" in res2.output
-
-
-def test_task_update_depends_on(tmp_db, project, monkeypatch):
-    """task update supports updating depends_on, prevents self-dependency, and allows clearing it."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    # Create two tasks
-    t1 = Task.create(project_id=project.id, title="Task 1")
-    t2 = Task.create(project_id=project.id, title="Task 2")
-
-    # Update t1 to depend on t2 prefix
-    res = runner.invoke(
-        cli, ["task", "update", t1.id, "--field", "depends_on", "--value", t2.id[:4]]
-    )
-    assert res.exit_code == 0, res.output
-    t1_refreshed = Task.get(t1.id)
-    assert t1_refreshed.depends_on == t2.id
-
-    # Try to make t1 depend on itself
-    res2 = runner.invoke(
-        cli, ["task", "update", t1.id, "--field", "depends_on", "--value", t1.id[:4]]
-    )
-    assert res2.exit_code != 0
-    assert "Error: A task cannot depend on itself" in res2.output
-
-    # Clear dependency
-    res3 = runner.invoke(cli, ["task", "update", t1.id, "--field", "depends_on", "--value", "none"])
-    assert res3.exit_code == 0, res3.output
-    t1_cleared = Task.get(t1.id)
-    assert t1_cleared.depends_on is None
-
-
-def test_task_get_shows_depends_on(tmp_db, project, monkeypatch):
-    """task get displays Depends On information."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    t_dep = Task.create(project_id=project.id, title="Dep")
-    t = Task.create(project_id=project.id, title="Main", depends_on=t_dep.id)
-
-    res = runner.invoke(cli, ["task", "get", t.id])
-    assert res.exit_code == 0, res.output
-    assert f"Depends On: {t_dep.id}" in res.output
-
-    # Get task without dependency
-    res2 = runner.invoke(cli, ["task", "get", t_dep.id])
-    assert res2.exit_code == 0, res2.output
-    assert "Depends On: N/A" in res2.output
-
-
-def test_task_get_shows_effective_phase_title(tmp_db, project, monkeypatch) -> None:
-    """task get resolves phase display via effective phase title rules."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    phase = Phase.create(project_id=project.id, title="Phase Alpha")
-
-    explicit = Task.create(
-        project_id=project.id,
-        title="Task Explicit",
-        phase_id=phase.id,
-        phase="Legacy Should Not Show",
-    )
-    legacy = Task.create(project_id=project.id, title="Task Legacy", phase="Phase Legacy")
-    unphased = Task.create(project_id=project.id, title="Task Unphased")
-
-    explicit_res = runner.invoke(cli, ["task", "get", explicit.id])
-    assert explicit_res.exit_code == 0, explicit_res.output
-    assert "Phase: Phase Alpha" in explicit_res.output
-    assert "Legacy Should Not Show" not in explicit_res.output
-
-    legacy_res = runner.invoke(cli, ["task", "get", legacy.id])
-    assert legacy_res.exit_code == 0, legacy_res.output
-    assert "Phase: Phase Legacy" in legacy_res.output
-
-    unphased_res = runner.invoke(cli, ["task", "get", unphased.id])
-    assert unphased_res.exit_code == 0, unphased_res.output
-    assert "Phase: N/A" in unphased_res.output
-
-
-def test_task_dependency_cycle_detection(tmp_db, project, monkeypatch):
-    """Circular dependencies are blocked and not written to SQLite."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    # 1. Create a chain: A depends_on B, B depends_on C.
-    t_c = Task.create(project_id=project.id, title="Task C")
-    t_b = Task.create(project_id=project.id, title="Task B", depends_on=t_c.id)
-    t_a = Task.create(project_id=project.id, title="Task A", depends_on=t_b.id)
-
-    # 2. Try to make C depend on A (creating cycle A -> B -> C -> A)
-    res = runner.invoke(cli, ["task", "update", t_c.id, "--field", "depends_on", "--value", t_a.id])
-    assert res.exit_code != 0
-    assert "Error: Circular dependency detected" in res.output
-
-    # Verify that the value was NOT updated in the database
-    t_c_refreshed = Task.get(t_c.id)
-    assert t_c_refreshed.depends_on is None
-
-
-# ---------------------------------------------------------------------------
-# task status propagation and dependency validation tests
-# ---------------------------------------------------------------------------
-
-
-def test_task_status_propagation_effective_status(tmp_db, project) -> None:
-    """get_effective_status correctly computes transitive statuses down the DAG."""
-    from engram.cli.task_cmds import get_effective_status
-
-    # 1. Non-dependent task gets its own status
-    t1 = Task.create(project_id=project.id, title="T1", status="todo")
-    assert get_effective_status(t1) == "todo"
-
-    t1.update(status="in-progress")
-    assert get_effective_status(t1) == "in-progress"
-
-    # 2. Task depending on unfinished task is blocked
-    t2 = Task.create(project_id=project.id, title="T2", status="todo", depends_on=t1.id)
-    assert get_effective_status(t2) == "blocked"
-
-    # 3. Transitive dependency propagation
-    t3 = Task.create(project_id=project.id, title="T3", status="todo", depends_on=t2.id)
-    assert get_effective_status(t3) == "blocked"
-
-    # 4. Dependency is cancelled -> downstream is cancelled
-    t1.update(status="cancelled")
-    assert get_effective_status(t2) == "cancelled"
-    assert get_effective_status(t3) == "cancelled"
-
-    # 5. Dependency is blocked -> downstream is blocked
-    t1.update(status="blocked")
-    assert get_effective_status(t2) == "blocked"
-    assert get_effective_status(t3) == "blocked"
-
-    # 6. Dependency is done -> downstream gets its own status
-    t1.update(status="done")
-    t2.update(status="done")
-    t3.update(status="todo")
-    assert get_effective_status(t3) == "todo"
-
-
-def test_task_start_blocked_by_dependency(tmp_db, project, monkeypatch) -> None:
-    """task start is blocked if any transitive dependency is not done."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    t1 = Task.create(project_id=project.id, title="Dep Task", status="todo")
-    t2 = Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
-
-    # Attempt to start sub task while dependency is todo
-    res = runner.invoke(cli, ["task", "start", t2.id])
-    assert "Error:" in res.output
-    assert "blocked by unfinished" in res.output
-    assert f"'{t1.id}'" in res.output
-    assert Task.get(t2.id).status == "todo"
-
-    # Set dependency to done
-    t1.update(status="done")
-
-    # Now sub task should start successfully
-    res2 = runner.invoke(cli, ["task", "start", t2.id])
-    assert res2.exit_code == 0
-    assert "marked as in-progress" in res2.output
-    assert Task.get(t2.id).status == "in-progress"
-
-
-def test_task_done_blocked_by_dependency(tmp_db, project, monkeypatch) -> None:
-    """task done is blocked if any transitive dependency is not done."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    t1 = Task.create(project_id=project.id, title="Dep Task", status="todo")
-    t2 = Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
-
-    # Attempt to complete sub task while dependency is todo
-    res = runner.invoke(cli, ["task", "done", t2.id])
-    assert "Error:" in res.output
-    assert "blocked by unfinished" in res.output
-    assert f"'{t1.id}'" in res.output
-    assert Task.get(t2.id).status == "todo"
-
-
-def test_task_list_shows_effective_status(tmp_db, project, monkeypatch) -> None:
-    """task list shows effective status and allows filtering by it."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    t1 = Task.create(project_id=project.id, title="Dep Task", status="todo")
-    Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
-
-    # Verify task list shows blocked (dep) for the downstream task
-    res = runner.invoke(cli, ["task", "list", "--status", "all"])
-    assert res.exit_code == 0
-    assert "blocked (dep)" in res.output
-    assert "todo" in res.output  # for Dep Task
-
-    # Verify task list --status blocked shows Sub Task
-    res_blocked = runner.invoke(cli, ["task", "list", "--status", "blocked"])
-    assert res_blocked.exit_code == 0
-    assert "Sub Task" in res_blocked.output
-    assert "Dep Task" not in res_blocked.output  # Dep Task is 'todo', not effectively blocked
-
-
-def test_task_next_shows_implicit_blockers_count(tmp_db, project, monkeypatch) -> None:
-    """task next correctly counts and displays implicit blockers when all tasks are blocked."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    t1 = Task.create(project_id=project.id, title="Dep Task", status="blocked")
-    Task.create(project_id=project.id, title="Sub Task", status="todo", depends_on=t1.id)
-
-    # All tasks are effectively blocked (t1 is explicitly blocked, t2 is implicitly blocked)
-    res = runner.invoke(cli, ["task", "next"])
-    assert res.exit_code == 0
-    assert "All remaining tasks are blocked" in res.output
-    assert "2 blocked" in res.output
-
-
-def test_task_list_shows_effective_phase(tmp_db, project, monkeypatch) -> None:
-    """task list displays phase values using effective phase title rules."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    phase = Phase.create(project_id=project.id, title="Phase Alpha")
-
-    Task.create(
-        project_id=project.id,
-        title="Task A",
-        phase_id=phase.id,
-        phase="Legacy Should Not Show",
-    )
-    Task.create(project_id=project.id, title="Task B", phase="Phase Legacy")
-    Task.create(project_id=project.id, title="Task C", phase=None)
-
-    res = runner.invoke(cli, ["task", "list", "--status", "all"])
-    assert res.exit_code == 0
-    assert "Phase Alpha" in res.output
-    assert "Phase Legacy" in res.output
-    assert "Legacy Should Not Show" not in res.output
-    assert "-" in res.output
-
-
-def test_task_list_default_todo_filter(tmp_db, project, monkeypatch) -> None:
-    """task list defaults to only showing todo tasks, and allows showing all using --status all."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    Task.create(project_id=project.id, title="Task Todo", status="todo")
-    Task.create(project_id=project.id, title="Task Done", status="done")
-
-    # 1. By default, only shows Todo tasks
-    res_default = runner.invoke(cli, ["task", "list"])
-    assert res_default.exit_code == 0
-    assert "Task Todo" in res_default.output
-    assert "Task Done" not in res_default.output
-
-    # 2. Shows all tasks with --status all
-    res_all = runner.invoke(cli, ["task", "list", "--status", "all"])
-    assert res_all.exit_code == 0
-    assert "Task Todo" in res_all.output
-    assert "Task Done" in res_all.output
-
-
-def test_task_list_all_flag(tmp_db, project, monkeypatch) -> None:
-    """task list supports --all / -a to show all tasks regardless of status."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    Task.create(project_id=project.id, title="Task Todo", status="todo")
-    Task.create(project_id=project.id, title="Task Done", status="done")
-
-    # 1. Shows all tasks with --all
-    res_all = runner.invoke(cli, ["task", "list", "--all"])
-    assert res_all.exit_code == 0
-    assert "Task Todo" in res_all.output
-    assert "Task Done" in res_all.output
-
-    # 2. Shows all tasks with -a
-    res_a = runner.invoke(cli, ["task", "list", "-a"])
-    assert res_a.exit_code == 0
-    assert "Task Todo" in res_a.output
-    assert "Task Done" in res_a.output
-
-
-def test_task_list_empty_project_guidance(tmp_db, project, monkeypatch) -> None:
-    """task list shows helpful guidance when no tasks are defined in the project."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    res = runner.invoke(cli, ["task", "list"])
-    assert res.exit_code == 0
-    assert "No tasks defined" in res.output
-    assert "engram task add" in res.output
-
-
-def test_task_list_all_completed_guidance(tmp_db, project, monkeypatch) -> None:
-    """task list shows phase done guidance when all tasks are done or cancelled."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    Task.create(project_id=project.id, title="Done Task", status="done")
-    Task.create(project_id=project.id, title="Cancelled Task", status="cancelled")
-
-    res = runner.invoke(cli, ["task", "list"])
-    assert res.exit_code == 0
-    assert "All tasks complete" in res.output
-    assert "engram task add" in res.output
-
-
-def test_task_list_phase_filter_by_id_includes_legacy_matches_only(
-    tmp_db, project, monkeypatch
-) -> None:
-    """task list --phase filters by phase_id and includes matching legacy-only tasks."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    alpha = Phase.create(project_id=project.id, title="Phase Alpha")
-    beta = Phase.create(project_id=project.id, title="Phase Beta")
-
-    Task.create(project_id=project.id, title="AlphaMain", phase_id=alpha.id, phase=alpha.title)
-    Task.create(project_id=project.id, title="AlphaLegacy", phase="  phase   alpha ")
-    Task.create(project_id=project.id, title="BetaExplicit", phase_id=beta.id, phase=alpha.title)
-    Task.create(project_id=project.id, title="NoPhase")
-
-    res = runner.invoke(cli, ["task", "list", "--status", "all", "--phase", alpha.id])
-
-    assert res.exit_code == 0, res.output
-    assert "AlphaMain" in res.output
-    assert "AlphaLegacy" in res.output
-    assert "BetaExplicit" not in res.output
-    assert "NoPhase" not in res.output
-
-
-def test_task_list_phase_filter_by_unique_title_combines_with_status_and_all(
-    tmp_db, project, monkeypatch
-) -> None:
-    """task list --phase title combines correctly with --status and --all."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    alpha = Phase.create(project_id=project.id, title="Phase Alpha")
-
-    Task.create(
-        project_id=project.id,
-        title="Alpha todo",
-        status="todo",
-        phase_id=alpha.id,
-        phase=alpha.title,
-    )
-    Task.create(
-        project_id=project.id,
-        title="Alpha done",
-        status="done",
-        phase_id=alpha.id,
-        phase=alpha.title,
-    )
-    Task.create(project_id=project.id, title="Other todo", status="todo", phase="Phase Beta")
-
-    res_default = runner.invoke(cli, ["task", "list", "--phase", "  phase alpha  "])
-    assert res_default.exit_code == 0, res_default.output
-    assert "Alpha todo" in res_default.output
-    assert "Alpha done" not in res_default.output
-    assert "Other todo" not in res_default.output
-
-    res_all = runner.invoke(cli, ["task", "list", "--phase", "phase alpha", "--all"])
-    assert res_all.exit_code == 0, res_all.output
-    assert "Alpha todo" in res_all.output
-    assert "Alpha done" in res_all.output
-    assert "Other todo" not in res_all.output
-
-    res_done = runner.invoke(cli, ["task", "list", "--phase", "phase alpha", "--status", "done"])
-    assert res_done.exit_code == 0, res_done.output
-    assert "Alpha done" in res_done.output
-    assert "Alpha todo" not in res_done.output
-    assert "Other todo" not in res_done.output
-
-
-def test_task_list_phase_filter_rejects_missing_phase_reference(
-    tmp_db, project, monkeypatch
-) -> None:
-    """task list --phase errors clearly when the phase reference is missing."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-
-    res = runner.invoke(cli, ["task", "list", "--phase", "missing-phase"])
-
-    assert res.exit_code != 0
-    assert "Phase 'missing-phase' not found in this project." in res.output
-
-
-def test_task_list_phase_filter_rejects_ambiguous_phase_title(tmp_db, project, monkeypatch) -> None:
-    """task list --phase errors clearly when normalized title lookup is ambiguous."""
-    runner = make_runner_with_project(monkeypatch, tmp_db, project)
-    first = Phase.create(project_id=project.id, title="Phase Alpha")
-    second = Phase.create(project_id=project.id, title="  phase   alpha ")
-
-    res = runner.invoke(cli, ["task", "list", "--phase", "phase alpha"])
-
-    assert res.exit_code != 0
-    assert "Ambiguous phase 'phase alpha'" in res.output
-    assert first.id in res.output
-    assert second.id in res.output

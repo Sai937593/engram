@@ -1,129 +1,32 @@
 """Core workflow commands: start and finish."""
 
-import re
 import subprocess
 
 import click
 
 import engram.cli as cli_root
-from engram.cli.phase_helpers import normalize_phase_title
+from engram.cli.work_cmds_helpers import (
+    get_current_branch,
+    get_target_branch,
+    git_checkout_phase_branch,
+    is_same_phase,
+    is_working_tree_dirty,
+    resolve_commit_type,
+    select_task_to_start,
+    slugify,
+)
 from engram.context import get_task_context
-from engram.models.phase import Phase
 from engram.models.task import Task, get_effective_phase_title
-
-
-def slugify(text: str) -> str:
-    if not text:
-        return "misc"
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9]+", "-", text)
-    return text.strip("-")
-
-
-def git_checkout_phase_branch(t: Task) -> None:
-    """Check out the git branch corresponding to the given task's phase, or a misc branch if None."""
-    phase = get_effective_phase_title(t)
-    if not phase:
-        branch_name = "feat/misc"
-    else:
-        slug = slugify(phase)
-        branch_name = f"feat/phase-{slug}"
-
-    # Check if branch exists
-    result = subprocess.run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch_name}"])
-    if result.returncode == 0:
-        # Branch exists, just checkout
-        subprocess.run(["git", "checkout", branch_name], check=False)
-    else:
-        # Check if we are on main, if not, maybe we should checkout main first?
-        # Actually just create it from current branch (assume main or previous phase).
-        # We will do checkout -b
-        subprocess.run(["git", "checkout", "-b", branch_name], check=False)
-
-
-def is_working_tree_dirty() -> bool:
-    """Return True if there are uncommitted changes in the git repository."""
-    res = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-    if res.returncode != 0:
-        return False
-    return bool(res.stdout.strip())
-
-
-def get_current_branch() -> str:
-    """Return the name of the current active git branch."""
-    res = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True
-    )
-    if res.returncode != 0:
-        return ""
-    return res.stdout.strip()
-
-
-def _task_matches_phase(task: Task, phase: Phase) -> bool:
-    """Return whether a task is linked to a phase through first-class or legacy data."""
-    if task.phase_id == phase.id:
-        return True
-    if task.phase_id:
-        return False
-    return normalize_phase_title(task.phase) == normalize_phase_title(phase.title)
 
 
 @cli_root.cli.command(name="start")
 def start():
     """Start the next task in the workflow."""
-    p = cli_root.get_current_project()
+    project = cli_root.get_current_project()
+    task, is_resuming = select_task_to_start(project.id)
 
-    phases = Phase.list_by_project(p.id)
-    active_phase = next((ph for ph in phases if ph.status == "active"), None)
-
-    # Fetch all tasks in the project to check in-progress states
-    tasks = Task.list_by_project(p.id)
-
-    # 1. In-progress tasks from the active phase
-    in_progress_active = []
-    if active_phase:
-        in_progress_active = [
-            task
-            for task in tasks
-            if task.status == "in-progress" and _task_matches_phase(task, active_phase)
-        ]
-
-    is_resuming = False
-    t = None
-
-    if in_progress_active:
-        t = in_progress_active[0]
-        is_resuming = True
-    elif active_phase:
-        # 2. Actionable tasks from the active phase
-        t = Task.get_next_for_phase(p.id, active_phase.id, active_phase.title)
-
-        if not t:
-            # 3. Project-level actionable tasks without any phase
-            t = Task.get_next_unphased(p.id)
-
-        if not t:
-            # 4. Other in-progress tasks in the project
-            in_progress_any = [task for task in tasks if task.status == "in-progress"]
-            if in_progress_any:
-                t = in_progress_any[0]
-                is_resuming = True
-
-        if not t:
-            # 5. Existing global next-task behavior
-            t = Task.get_next(p.id)
-    else:
-        next_t = Task.get_next(p.id)
-        in_progress_any = [task for task in tasks if task.status == "in-progress"]
-        if in_progress_any:
-            t = in_progress_any[0]
-            is_resuming = True
-        else:
-            t = next_t
-
-    if not t:
-        # No task available
-        counts = Task.count_by_status(p.id)
+    if not task:
+        counts = Task.count_by_status(project.id)
         total = sum(counts.values())
         if total == 0:
             cli_root.console.print(
@@ -135,7 +38,7 @@ def start():
             cli_root.console.print(
                 '  [cyan]engram task add "<task title>" --phase "Phase N" --priority high[/cyan]'
             )
-        elif all(s in ("done", "cancelled") for s in counts):
+        elif all(status in ("done", "cancelled") for status in counts):
             cli_root.console.print("[green]All tasks complete.[/green] This project is done.")
             cli_root.console.print(
                 "Action: Confirm with the user whether to plan the next phase or close the project."
@@ -147,9 +50,7 @@ def start():
             )
         return
 
-    # Check git status before branch checkout safely
-    phase_title = get_effective_phase_title(t)
-    target_branch = f"feat/phase-{slugify(phase_title)}" if phase_title else "feat/misc"
+    target_branch = get_target_branch(task)
     current_branch = get_current_branch()
     if current_branch != target_branch and is_working_tree_dirty():
         cli_root.console.print(
@@ -160,27 +61,17 @@ def start():
         raise SystemExit(1)
 
     if is_resuming:
-        cli_root.console.print(f"[yellow]Resuming in-progress task:[/yellow] {t.id}")
+        cli_root.console.print(f"[yellow]Resuming in-progress task:[/yellow] {task.id}")
     else:
-        t.update(status="in-progress")
-        cli_root.console.print(f"[green]Started task:[/green] {t.id}")
+        task.update(status="in-progress")
+        cli_root.console.print(f"[green]Started task:[/green] {task.id}")
 
-    # We have a task, check out phase branch
-    git_checkout_phase_branch(t)
+    git_checkout_phase_branch(task)
 
-    # Print the rich context
-    context_str = get_task_context(t.id)
-    # Also print the global rules if we want, or just rely on get_task_context which includes PROJECT KNOWLEDGE
+    context_str = get_task_context(task.id, hard_constraints_only=True)
     cli_root.console.print("\n" + "=" * 40)
     cli_root.console.print(context_str)
     cli_root.console.print("=" * 40 + "\n")
-
-
-def _is_same_phase(t1: Task, t2: Task) -> bool:
-    """Return True if two tasks belong to the same phase."""
-    if t1.phase_id and t2.phase_id:
-        return t1.phase_id == t2.phase_id
-    return get_effective_phase_title(t1) == get_effective_phase_title(t2)
 
 
 @cli_root.cli.command(name="finish")
@@ -193,64 +84,30 @@ def _is_same_phase(t1: Task, t2: Task) -> bool:
 )
 def finish(commit_type):
     """Finish the active task (commit, push, and mark done)."""
-    p = cli_root.get_current_project()
-    tasks = Task.list_by_project(p.id)
-    in_progress = [t for t in tasks if t.status == "in-progress"]
+    project = cli_root.get_current_project()
+    tasks = Task.list_by_project(project.id)
+    in_progress = [task for task in tasks if task.status == "in-progress"]
 
     if not in_progress:
         cli_root.console.print("[red]Error:[/red] No task is currently in-progress.")
         return
 
-    t = in_progress[0]
+    task = in_progress[0]
 
-    # Validate or resolve commit type
-    resolved_type = None
-    if commit_type:
-        resolved_type = commit_type.lower()
-        if resolved_type not in cli_root.CONVENTIONAL_COMMIT_TYPES:
-            cli_root.console.print(f"[red]Error:[/red] Invalid commit type '{commit_type}'.")
-            cli_root.console.print(
-                f"Must be one of: {', '.join(sorted(cli_root.CONVENTIONAL_COMMIT_TYPES))}"
-            )
-            raise SystemExit(1)
-    else:
-        # Auto-resolve from tags
-        tag_to_type = {
-            "bug": "fix",
-            "bugfix": "fix",
-            "fix": "fix",
-            "docs": "docs",
-            "documentation": "docs",
-            "chore": "chore",
-            "refactor": "refactor",
-            "test": "test",
-            "testing": "test",
-            "ci": "ci",
-            "style": "style",
-            "perf": "perf",
-            "feat": "feat",
-            "feature": "feat",
-        }
-        for tag in t.tags:
-            cleaned_tag = tag.strip().lower()
-            if cleaned_tag in cli_root.CONVENTIONAL_COMMIT_TYPES:
-                resolved_type = cleaned_tag
-                break
-            if cleaned_tag in tag_to_type:
-                resolved_type = tag_to_type[cleaned_tag]
-                break
+    try:
+        resolved_type = resolve_commit_type(task, commit_type, cli_root.CONVENTIONAL_COMMIT_TYPES)
+    except ValueError:
+        cli_root.console.print(f"[red]Error:[/red] Invalid commit type '{commit_type}'.")
+        cli_root.console.print(
+            f"Must be one of: {', '.join(sorted(cli_root.CONVENTIONAL_COMMIT_TYPES))}"
+        )
+        raise SystemExit(1) from None
 
-        if not resolved_type:
-            resolved_type = "feat"
+    cli_root.console.print(f"Finishing task: {task.title} ({task.id})")
 
-    cli_root.console.print(f"Finishing task: {t.title} ({t.id})")
-
-    # Git operations
     subprocess.run(["git", "add", "-A"], check=False)
 
-    commit_msg = (
-        f"{resolved_type}({slugify(get_effective_phase_title(t)) or 'misc'}): {t.title} [{t.id}]"
-    )
+    commit_msg = f"{resolved_type}({slugify(get_effective_phase_title(task)) or 'misc'}): {task.title} [{task.id}]"
     commit_res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True)
 
     if commit_res.returncode != 0:
@@ -272,17 +129,13 @@ def finish(commit_type):
         cli_root.console.print(push_res.stderr)
         return
 
-    # Tests passed, push succeeded, mark done
-    t.update(status="done")
-    cli_root.console.print(f"[green]Task '{t.id}' marked as done.[/green]")
+    task.update(status="done")
+    cli_root.console.print(f"[green]Task '{task.id}' marked as done.[/green]")
 
-    # Check if phase is complete
-    next_t = Task.get_next(p.id)
-    if not next_t or not _is_same_phase(next_t, t):
-        # Either no more tasks, or the next task is in a different phase
-        # Check if all tasks in CURRENT phase are done
-        phase_tasks = [pt for pt in tasks if _is_same_phase(pt, t)]
-        if all(pt.status in ("done", "cancelled") for pt in phase_tasks):
+    next_task = Task.get_next(project.id)
+    if not next_task or not is_same_phase(next_task, task):
+        phase_tasks = [phase_task for phase_task in tasks if is_same_phase(phase_task, task)]
+        if all(phase_task.status in ("done", "cancelled") for phase_task in phase_tasks):
             cli_root.console.print("\n[bold green]Phase Complete![/bold green]")
             cli_root.console.print("All tasks in the current phase are done.")
             cli_root.console.print(
