@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(retrieval): expand startup FTS candidate scope to include only project-level L2/L3 lessons/decisions while explicitly excluding L0/L1 guardrails and non-policy project memory types.
 - feat(retrieval): tune FTS query normalization to drop non-signal structural/filler terms, reducing generic-term false positives for non-retrieval tasks while preserving deterministic bounded defaults.
 - docs(retrieval): add Phase 9 evaluation artifact with real-task retrieval examples, expected-vs-actual selections, misses, false positives, and observed failure modes.
 - feat(cli): add `--debug` flag to `engram memory related-to-task <task-id>` showing FTS queries, candidates, selected memories, ranks/boosts, hidden counts, and budget diagnostics.

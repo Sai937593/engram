@@ -1,4 +1,4 @@
-"""Tests for task-scope FTS retrieval candidates."""
+"""Tests for startup task-memory FTS retrieval candidates."""
 
 import sqlite3
 
@@ -181,7 +181,7 @@ def test_retriever_falls_back_when_fts_query_execution_fails(project, monkeypatc
         raise sqlite3.OperationalError("malformed MATCH expression")
 
     monkeypatch.setattr(
-        "engram.memory_retrieval.fts_retriever._fetch_task_scope_fts_rows",
+        "engram.memory_retrieval.fts_retriever._fetch_task_memory_fts_rows",
         _raise_fts_error,
     )
 
@@ -229,8 +229,10 @@ def test_retriever_falls_back_when_fts_table_is_unavailable(project) -> None:
     assert result.metadata.returned_candidate_count == 0
 
 
-def test_phase9_scope_gap_still_misses_project_scope_docs_guidance(project) -> None:
-    """Phase 9 regression: project-scope docs guidance is still out of task-scope retrieval."""
+def test_retriever_includes_eligible_project_scope_guidance_without_l0_l1_guardrails(
+    project,
+) -> None:
+    """Phase 10 scope policy: include project L2/L3 lessons/decisions, exclude L0/L1 guardrails."""
     task = Task.create(
         project_id=project.id,
         title="Create User Manual",
@@ -243,7 +245,39 @@ def test_phase9_scope_gap_still_misses_project_scope_docs_guidance(project) -> N
         title="Public docs must match CLI help",
         content="Before release, verify README and USER_MANUAL align with --help output.",
         scope="project",
+        level="L3",
+    )
+    export_decision = Memory.create(
+        project_id=project.id,
+        type="decision",
+        title="Export outputs stay CLI-aligned",
+        content="Use command help as the source of truth for release export docs.",
+        scope="project",
+        level="L2",
+    )
+    guardrail = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Guardrail with release/help terms",
+        content="Release docs must match command help output exactly.",
+        scope="project",
         level="L1",
+    )
+    identity_guardrail = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Identity guardrail with release/help terms",
+        content="Release help policy belongs in guardrails, not task candidates.",
+        scope="project",
+        level="L0",
+    )
+    non_eligible_project_type = Memory.create(
+        project_id=project.id,
+        type="snippet",
+        title="Project snippet with release terms",
+        content="release docs help snippet should not be included",
+        scope="project",
+        level="L3",
     )
     retrieval_internal = Memory.create(
         project_id=project.id,
@@ -259,10 +293,14 @@ def test_phase9_scope_gap_still_misses_project_scope_docs_guidance(project) -> N
     result = retrieve_task_memory_candidates(retrieval_query)
     returned_ids = [candidate.memory_id for candidate in result.candidates]
 
-    assert docs_guidance.id not in returned_ids
+    assert docs_guidance.id in returned_ids
+    assert export_decision.id in returned_ids
+    assert guardrail.id not in returned_ids
+    assert identity_guardrail.id not in returned_ids
+    assert non_eligible_project_type.id not in returned_ids
     assert retrieval_internal.id not in returned_ids
-    assert result.candidates == ()
-    assert result.metadata.scanned_row_count == 0
+    assert any(candidate.scope == "project" for candidate in result.candidates)
+    assert result.metadata.scanned_row_count >= 2
 
 
 def test_phase9_generic_terms_do_not_pull_irrelevant_retrieval_internals(project) -> None:

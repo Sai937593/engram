@@ -73,6 +73,7 @@ class RawMemoryRow:
     memory_id: str
     project_id: str
     scope: str
+    level: str | None
     type: str
     task_id: str | None
     title: str

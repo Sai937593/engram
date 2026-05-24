@@ -1,4 +1,4 @@
-"""Task-scope FTS retrieval over memories with deterministic ranking metadata."""
+"""FTS retrieval over task memories and eligible project guidance candidates."""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ from engram.memory_retrieval.retrieval_contract import (
     TaskMemoryRetrievalOptions,
     TaskMemoryRetrievalResult,
 )
+
+PROJECT_SCOPE_ELIGIBLE_LEVELS = ("L2", "L3")
+PROJECT_SCOPE_ELIGIBLE_TYPES = ("lesson", "decision")
 
 
 def _split_csv_tags(raw_tags: str | None) -> tuple[str, ...]:
@@ -37,13 +40,13 @@ def _extract_terms_from_safe_query(safe_query: str) -> tuple[str, ...]:
     )
 
 
-def _fetch_task_scope_fts_rows(
+def _fetch_task_memory_fts_rows(
     *,
     project_id: str,
     safe_fts_query: str,
     max_candidates: int,
 ) -> list[RawMemoryRow]:
-    """Fetch task-scope FTS rows for one project in deterministic FTS order."""
+    """Fetch task and eligible project-scope FTS rows in deterministic FTS order."""
     conn = get_db_connection()
     try:
         rows = conn.execute(
@@ -52,6 +55,7 @@ def _fetch_task_scope_fts_rows(
                 m.id,
                 m.project_id,
                 m.scope,
+                m.level,
                 m.type,
                 m.task_id,
                 m.title,
@@ -62,11 +66,26 @@ def _fetch_task_scope_fts_rows(
             JOIN memories_fts ON m.rowid = memories_fts.rowid
             WHERE memories_fts MATCH ?
               AND m.project_id = ?
-              AND m.scope = 'task'
+              AND (
+                m.scope = 'task'
+                OR (
+                    m.scope = 'project'
+                    AND m.level IN (?, ?)
+                    AND m.type IN (?, ?)
+                )
+              )
             ORDER BY fts_rank ASC, m.id ASC
             LIMIT ?
             """,
-            (safe_fts_query, project_id, max_candidates),
+            (
+                safe_fts_query,
+                project_id,
+                PROJECT_SCOPE_ELIGIBLE_LEVELS[0],
+                PROJECT_SCOPE_ELIGIBLE_LEVELS[1],
+                PROJECT_SCOPE_ELIGIBLE_TYPES[0],
+                PROJECT_SCOPE_ELIGIBLE_TYPES[1],
+                max_candidates,
+            ),
         ).fetchall()
     finally:
         conn.close()
@@ -76,6 +95,7 @@ def _fetch_task_scope_fts_rows(
             memory_id=row["id"],
             project_id=row["project_id"],
             scope=row["scope"],
+            level=row["level"],
             type=row["type"],
             task_id=row["task_id"],
             title=row["title"] or "",
@@ -91,7 +111,7 @@ def retrieve_task_memory_candidates(
     retrieval_query: TaskRetrievalQuery,
     options: TaskMemoryRetrievalOptions | None = None,
 ) -> TaskMemoryRetrievalResult:
-    """Retrieve task-scope memory candidates using normalized SQLite FTS."""
+    """Retrieve task memories and scoped project guidance using normalized SQLite FTS."""
     resolved_options = options or TaskMemoryRetrievalOptions()
     project_id = retrieval_query.metadata.project_id
     query_task_id = retrieval_query.metadata.task_id
@@ -120,7 +140,7 @@ def retrieve_task_memory_candidates(
         return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
     try:
-        fts_rows = _fetch_task_scope_fts_rows(
+        fts_rows = _fetch_task_memory_fts_rows(
             project_id=project_id,
             safe_fts_query=safe_fts_query,
             max_candidates=resolved_options.max_candidates,
