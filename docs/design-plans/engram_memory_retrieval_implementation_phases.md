@@ -355,6 +355,7 @@ retrieval.
 - Adjust query construction, boosts, budgets, K, or thresholds.
 - Document known retrieval failure modes.
 - Decide whether semantic retrieval is justified yet.
+- Evaluation artifact: `docs/design-plans/engram_memory_retrieval_phase9_evaluation_examples.md`.
 ```
 
 ### Acceptance Criteria

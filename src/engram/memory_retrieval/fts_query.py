@@ -10,6 +10,33 @@ EMPTY_FTS_QUERY = '""'
 MAX_FTS_TERMS = 48
 MAX_FTS_TERM_CHARS = 64
 _TOKEN_PATTERN = re.compile(r"\w+", flags=re.UNICODE)
+_NON_SIGNAL_TERMS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "context",
+        "debug",
+        "description",
+        "for",
+        "in",
+        "not",
+        "of",
+        "or",
+        "output",
+        "phase",
+        "query",
+        "task",
+        "tags",
+        "test",
+        "tests",
+        "the",
+        "title",
+        "to",
+        "with",
+        "acceptance",
+    }
+)
 
 
 def _extract_search_terms(
@@ -31,6 +58,8 @@ def _extract_search_terms(
             continue
         limited = cleaned[:max_term_chars]
         key = limited.casefold()
+        if key in _NON_SIGNAL_TERMS:
+            continue
         if key in seen:
             continue
         seen.add(key)
