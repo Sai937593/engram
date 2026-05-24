@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): include scope/level/task_id metadata in typed memory list/get output and normalize empty memory metadata display to `-` across generic and typed memory views.
 - feat(cli): add shared memory scope/level/task_id validation helpers for `engram memory add/update`, including project-scoped task_id checks and scope metadata in generic memory list/get output.
 - fix(db): backfill legacy memory scopes and levels according to the project/task memory contract.
 - feat(model): add deterministic memory scope listing helpers for project guardrail candidates (project L0/L1) and task-scope memories, with helper-level filtering/order tests.

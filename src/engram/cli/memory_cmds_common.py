@@ -48,6 +48,11 @@ def normalize_optional_value(value: str | None) -> str | None:
     return normalized
 
 
+def render_optional_value(value: str | None) -> str:
+    """Render optional string values in CLI output with a consistent placeholder."""
+    return value if value else "-"
+
+
 def resolve_task_id_in_project(task_id: str | None, project_id: str) -> str | None:
     """Validate that task_id, when present, belongs to the active project."""
     normalized_task_id = normalize_optional_value(task_id)
@@ -157,9 +162,9 @@ def print_memory_details(memory: Memory) -> None:
     cli_root.console.print(f"[cyan]Title:[/cyan] {memory.title}")
     cli_root.console.print(f"[cyan]Type:[/cyan] {memory.type}")
     cli_root.console.print(f"[cyan]Scope:[/cyan] {memory.scope}")
-    cli_root.console.print(f"[cyan]Level:[/cyan] {memory.level or 'N/A'}")
-    cli_root.console.print(f"[cyan]Task ID:[/cyan] {memory.task_id or 'N/A'}")
-    cli_root.console.print(f"[cyan]Tags:[/cyan] {', '.join(memory.tags)}")
+    cli_root.console.print(f"[cyan]Level:[/cyan] {render_optional_value(memory.level)}")
+    cli_root.console.print(f"[cyan]Task ID:[/cyan] {render_optional_value(memory.task_id)}")
+    cli_root.console.print(f"[cyan]Tags:[/cyan] {render_optional_value(', '.join(memory.tags))}")
     cli_root.console.print(f"[cyan]Always Include:[/cyan] {memory.always_include}")
     cli_root.console.print(f"[cyan]Content:[/cyan]\n{memory.content}")
 
@@ -214,13 +219,19 @@ def list_typed_memories(memory_type: str) -> None:
     )
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title", style="white")
+    table.add_column("Scope", style="green")
+    table.add_column("Level", style="blue")
+    table.add_column("Task ID", style="cyan")
     table.add_column("Tags", style="dim blue")
     table.add_column("Always Include", style="dim")
     for memory in memories:
         table.add_row(
             memory.id,
             memory.title,
-            ", ".join(memory.tags),
+            memory.scope,
+            render_optional_value(memory.level),
+            render_optional_value(memory.task_id),
+            render_optional_value(", ".join(memory.tags)),
             "yes" if memory.always_include else "no",
         )
     cli_root.console.print(table)

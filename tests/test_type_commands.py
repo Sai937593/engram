@@ -109,6 +109,68 @@ def test_type_get_shows_detail(type_name, tmp_db, project, monkeypatch):
     assert "Full content here" in result.output
 
 
+@pytest.mark.parametrize("type_name", ["constraint", "lesson", "decision", "snippet"])
+def test_type_list_and_get_show_scope_metadata_for_project_scope(
+    type_name, tmp_db, project, monkeypatch
+):
+    """type list/get render scope-level metadata for project memories."""
+    runner = make_runner_with_project(monkeypatch, project)
+    memory = Memory.create(
+        project_id=project.id,
+        type=type_name,
+        title="Scoped entry",
+        content="Scoped details",
+        scope="project",
+        level=_project_level_for_type(type_name),
+    )
+
+    list_result = runner.invoke(cli, [type_name, "list"])
+    assert list_result.exit_code == 0, list_result.output
+    assert "Scope" in list_result.output
+    assert "Level" in list_result.output
+    assert "Task ID" in list_result.output
+    assert "project" in list_result.output
+    assert "-" in list_result.output
+
+    get_result = runner.invoke(cli, [type_name, "get", memory.id])
+    assert get_result.exit_code == 0, get_result.output
+    assert "Scope: project" in get_result.output
+    assert f"Level: {_project_level_for_type(type_name)}" in get_result.output
+    assert "Task ID: -" in get_result.output
+
+
+@pytest.mark.parametrize("type_name", ["lesson", "snippet"])
+def test_type_list_and_get_show_scope_metadata_for_task_scope(
+    type_name, tmp_db, project, monkeypatch
+):
+    """type list/get render scope-level metadata for task-scope memories."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(project_id=project.id, title=f"{type_name} task")
+    memory = Memory.create(
+        project_id=project.id,
+        type=type_name,
+        title="Scoped entry",
+        content="Scoped details",
+        scope="task",
+        level=None,
+        task_id=task.id,
+    )
+
+    list_result = runner.invoke(cli, [type_name, "list"])
+    assert list_result.exit_code == 0, list_result.output
+    assert "Scope" in list_result.output
+    assert "Level" in list_result.output
+    assert "Task ID" in list_result.output
+    assert "task" in list_result.output
+    assert task.id in list_result.output
+
+    get_result = runner.invoke(cli, [type_name, "get", memory.id])
+    assert get_result.exit_code == 0, get_result.output
+    assert "Scope: task" in get_result.output
+    assert "Level: -" in get_result.output
+    assert f"Task ID: {task.id}" in get_result.output
+
+
 def test_commit_rejects_invalid_message(tmp_db, project, monkeypatch):
     """engram commit rejects messages outside Conventional Commits format."""
     runner = make_runner_with_project(monkeypatch, project)

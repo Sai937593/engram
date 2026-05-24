@@ -10,6 +10,7 @@ from engram.cli.memory_cmds_common import (
     VALID_MEMORY_TYPES,
     get_memory_or_print_error,
     print_memory_details,
+    render_optional_value,
     resolve_memory_add_contract,
     resolve_memory_update_field_value,
 )
@@ -90,9 +91,9 @@ def memory_list() -> None:
             memory_item.title,
             memory_item.type,
             memory_item.scope,
-            memory_item.level or "N/A",
-            memory_item.task_id or "N/A",
-            ", ".join(memory_item.tags),
+            render_optional_value(memory_item.level),
+            render_optional_value(memory_item.task_id),
+            render_optional_value(", ".join(memory_item.tags)),
         )
     cli_root.console.print(table)
 

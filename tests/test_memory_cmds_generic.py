@@ -195,5 +195,5 @@ def test_memory_list_and_get_show_scope_fields(tmp_db, project, monkeypatch) -> 
     get_result = runner.invoke(cli, ["memory", "get", memory.id])
     assert get_result.exit_code == 0, get_result.output
     assert "Scope: task" in get_result.output
-    assert "Level: N/A" in get_result.output
+    assert "Level: -" in get_result.output
     assert f"Task ID: {task.id}" in get_result.output
