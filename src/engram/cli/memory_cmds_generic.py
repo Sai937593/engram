@@ -14,7 +14,12 @@ from engram.cli.memory_cmds_common import (
     resolve_memory_add_contract,
     resolve_memory_update_field_value,
 )
+from engram.db import get_db_connection
+from engram.memory_retrieval.startup_orchestration import (
+    orchestrate_startup_task_memory_retrieval,
+)
 from engram.models.memory import Memory
+from engram.models.task import Task
 
 
 @memory.command(name="add")
@@ -184,3 +189,116 @@ def memory_delete(memory_id: str, yes: bool) -> None:
     if yes or click.confirm(f"Are you sure you want to delete memory '{memory_id}'?"):
         memory_item.delete()
         cli_root.console.print(f"[green]Memory '{memory_id}' deleted.[/green]")
+
+
+def resolve_task_by_id_or_prefix(project_id: str, value: str) -> Task:
+    """Resolve a task ID or prefix safely within the current project, showing clear missing/foreign errors."""
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT id FROM tasks WHERE project_id = ? AND (id = ? OR id LIKE ?)",
+        (project_id, value, value + "%"),
+    ).fetchall()
+    conn.close()
+
+    matching_ids = sorted(list(set(row["id"] for row in rows)))
+
+    if not matching_ids:
+        # Check if it exists in another project (foreign check)
+        conn = get_db_connection()
+        global_rows = conn.execute(
+            "SELECT id FROM tasks WHERE id = ? OR id LIKE ?",
+            (value, value + "%"),
+        ).fetchall()
+        conn.close()
+        if global_rows:
+            raise click.ClickException(
+                f"Task '{value}' is a foreign task belonging to another project."
+            )
+        else:
+            raise click.ClickException(f"Task '{value}' not found in the current project.")
+
+    if len(matching_ids) > 1:
+        if value in matching_ids:
+            resolved_id = value
+        else:
+            raise click.ClickException(
+                f"Ambiguous task ID '{value}'. Multiple matches found: {', '.join(matching_ids)}"
+            )
+    else:
+        resolved_id = matching_ids[0]
+
+    task_item = Task.get(resolved_id)
+    if not task_item:
+        raise click.ClickException(f"Task '{value}' not found in the current project.")
+    return task_item
+
+
+@memory.command(name="related-to-task")
+@click.argument("task_id")
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    help="Print retrieval query, candidate, and packing diagnostics.",
+)
+def memory_related_to_task(task_id: str, debug: bool) -> None:
+    """Inspect related memories for a task without mutating state."""
+    project = cli_root.get_current_project()
+    task_item = resolve_task_by_id_or_prefix(project.id, task_id)
+
+    # Try resolving active phase if it matches the task's phase context
+    from engram.cli.work_cmds_helpers import format_retrieval_debug_output, get_active_phase
+
+    active_phase = get_active_phase(project.id)
+    if active_phase:
+        # If the task doesn't belong to the active phase, do not pass active_phase
+        if not (
+            task_item.phase_id == active_phase.id
+            or (
+                not task_item.phase_id
+                and task_item.phase
+                and task_item.phase.strip().casefold() == active_phase.title.strip().casefold()
+            )
+        ):
+            active_phase = None
+
+    # Execute query -> retriever -> packer pipeline
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=active_phase,
+        selected_task=task_item,
+    )
+
+    if debug:
+        cli_root.console.print(format_retrieval_debug_output(result))
+
+    packed_items = result.pack_result.items
+    if not packed_items:
+        if not debug:
+            cli_root.console.print("No relevant task memories selected.")
+        return
+
+    # Render using premium Rich Table
+    table = Table(
+        title=f"Related Memories for Task '{task_item.id}': {task_item.title}",
+        header_style="bold cyan",
+        border_style="cyan",
+    )
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Title", style="white")
+    table.add_column("Type", style="magenta")
+    table.add_column("Content", style="dim")
+    table.add_column("Boost", style="green", justify="right")
+    table.add_column("FTS Rank", style="yellow", justify="right")
+
+    for item in packed_items:
+        table.add_row(
+            item.memory_id,
+            item.title,
+            item.type,
+            item.content.replace("\n", " "),
+            str(item.boost_score),
+            f"{item.fts_rank:.6f}",
+        )
+
+    cli_root.console.print(table)

@@ -309,3 +309,147 @@ def test_memory_list_and_get_show_scope_fields(tmp_db, project, monkeypatch) -> 
     assert "Scope: task" in get_result.output
     assert "Level: -" in get_result.output
     assert f"Task ID: {task.id}" in get_result.output
+
+
+def test_memory_related_to_task_missing_error(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task rejects completely missing task ID with clear error."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["memory", "related-to-task", "missing1"])
+
+    assert result.exit_code != 0
+    assert "Error: Task 'missing1' not found in the current project." in result.output
+    assert "Traceback" not in result.output
+
+
+def test_memory_related_to_task_foreign_error(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task rejects foreign task belonging to another project."""
+    runner = make_runner_with_project(monkeypatch, project)
+    other_project = Project.create("other", "Other", repo_paths=["/tmp/other"])
+    foreign_task = Task.create(project_id=other_project.id, title="Foreign task")
+
+    result = runner.invoke(cli, ["memory", "related-to-task", foreign_task.id])
+
+    assert result.exit_code != 0
+    assert (
+        f"Error: Task '{foreign_task.id}' is a foreign task belonging to another project."
+        in result.output
+    )
+    assert "Traceback" not in result.output
+
+
+def test_memory_related_to_task_success(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task displays packed memories in a Rich Table for a valid task."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(
+        project_id=project.id, title="Solve logic bug", description="FTS matches logic here"
+    )
+
+    # Create memory with matching terms
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Logic bug hint",
+        content="Always use logic and solve the bug cleanly",
+        scope="task",
+        task_id=task.id,
+    )
+
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id])
+
+    assert result.exit_code == 0, result.output
+    assert f"Related Memories for Task '{task.id}'" in result.output
+    assert memory.id in result.output
+    assert "Logic bug hint" in result.output
+
+
+def test_memory_related_to_task_debug_success(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task with --debug prints retrieval query, candidate, and packing diagnostics."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(
+        project_id=project.id, title="Solve logic bug", description="FTS matches logic here"
+    )
+
+    # Create memory with matching terms
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Logic bug hint",
+        content="Always use logic and solve the bug cleanly",
+        scope="task",
+        task_id=task.id,
+    )
+
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id, "--debug"])
+
+    assert result.exit_code == 0, result.output
+    assert "RETRIEVAL DEBUG" in result.output
+    assert "query text:" in result.output
+    assert "retrieval mode:" in result.output
+    assert "fts candidate metadata:" in result.output
+    assert "pack candidate metadata:" in result.output
+    assert "selected counts:" in result.output
+    assert "selected memory ids:" in result.output
+    assert "budget usage:" in result.output
+    assert "selected item metadata:" in result.output
+    assert memory.id in result.output
+    assert "Logic bug hint" in result.output
+
+
+def test_memory_related_to_task_debug_empty(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task with --debug prints retrieval diagnostics even when no memories match."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(
+        project_id=project.id, title="Solve logic bug", description="FTS matches logic here"
+    )
+
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id, "--debug"])
+
+    assert result.exit_code == 0, result.output
+    assert "RETRIEVAL DEBUG" in result.output
+    assert "query text:" in result.output
+    assert "retrieval mode:" in result.output
+    assert "selected_item_count=0" in result.output
+    assert "No relevant task memories selected." not in result.output
+
+
+def test_memory_related_to_task_no_mutation(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task guarantees that task status and git branch remain completely unchanged."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    # 1. Create a task with 'todo' status
+    task = Task.create(project_id=project.id, title="Check no mutation task", status="todo")
+
+    # 2. Spy on subprocess.run to verify no git checkout or switch calls are made
+    subprocess_calls = []
+
+    def dummy_run(args, **kwargs):
+        subprocess_calls.append(args)
+
+        class DummyProcess:
+            returncode = 0
+            stdout = "main"
+            stderr = ""
+
+        return DummyProcess()
+
+    monkeypatch.setattr("subprocess.run", dummy_run)
+
+    # Verify task status is 'todo' initially
+    assert task.status == "todo"
+
+    # 3. Invoke engram memory related-to-task
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id])
+
+    # 4. Assert command succeeded
+    assert result.exit_code == 0, result.output
+
+    # 5. Assert task status is completely unchanged
+    refreshed_task = Task.get(task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.status == "todo"
+
+    # 6. Assert no git checkout/switch command was executed
+    for call in subprocess_calls:
+        if isinstance(call, list) and len(call) > 1 and call[0] == "git":
+            assert call[1] not in ("checkout", "switch"), f"Git checkout/switch was called: {call}"

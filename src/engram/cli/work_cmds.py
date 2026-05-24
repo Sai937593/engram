@@ -7,6 +7,7 @@ import click
 import engram.cli as cli_root
 import engram.context_helpers.startup as startup_context
 from engram.cli.work_cmds_helpers import (
+    format_retrieval_debug_output,
     get_active_phase,
     get_current_branch,
     get_target_branch,
@@ -17,53 +18,7 @@ from engram.cli.work_cmds_helpers import (
     select_task_to_start,
     slugify,
 )
-from engram.memory_retrieval import StartupTaskMemoryRetrievalResult
 from engram.models.task import Task, get_effective_phase_title
-
-
-def _format_retrieval_debug_output(result: StartupTaskMemoryRetrievalResult) -> str:
-    """Render deterministic retrieval diagnostics for optional startup debugging."""
-    query_text = result.query.query_text if result.query else ""
-    retrieval = result.retrieval_metadata
-    pack = result.pack_result.metadata
-    selected_ids = ", ".join(item.memory_id for item in result.pack_result.items) or "(none)"
-
-    lines = [
-        "## RETRIEVAL DEBUG",
-        f"query text: {query_text or '(empty)'}",
-        f"retrieval mode: {retrieval.source}",
-        "fts candidate metadata: "
-        f"max_candidates={retrieval.max_candidates}, "
-        f"scanned_row_count={retrieval.scanned_row_count}, "
-        f"returned_candidate_count={retrieval.returned_candidate_count}",
-        "pack candidate metadata: "
-        f"input_candidate_count={pack.input_candidate_count}, "
-        f"unique_candidate_count={pack.unique_candidate_count}",
-        "selected counts: "
-        f"selected_item_count={pack.selected_item_count}, "
-        f"hidden_item_count={pack.hidden_item_count}, "
-        f"truncated_item_count={pack.truncated_item_count}",
-        f"selected memory ids: {selected_ids}",
-        "budget usage: "
-        f"used_char_count={pack.used_char_count}/{pack.section_char_budget}, "
-        f"section_budget_exhausted={pack.section_budget_exhausted}",
-    ]
-    if retrieval.fallback_reason:
-        lines.append(f"fallback reason: {retrieval.fallback_reason}")
-    elif retrieval.fallback_used:
-        lines.append("fallback reason: (none provided)")
-
-    if result.pack_result.items:
-        lines.append("selected item metadata:")
-        for item in result.pack_result.items:
-            lines.append(
-                f"- memory_id={item.memory_id}, retrieval_source={item.retrieval_source}, "
-                f"fts_rank={item.fts_rank:.6f}, boost_score={item.boost_score}, "
-                f"source_candidate_index={item.source_candidate_index}, "
-                f"char_count={item.char_count}, was_truncated={item.was_truncated}"
-            )
-
-    return "\n".join(lines)
 
 
 @cli_root.cli.command(name="start")
@@ -94,9 +49,7 @@ def start(debug_retrieval: bool):
         cli_root.console.print("\n" + "=" * 40)
         cli_root.console.print(context_str)
         if debug_retrieval:
-            cli_root.console.print(
-                "\n" + _format_retrieval_debug_output(startup_task_memory_result)
-            )
+            cli_root.console.print("\n" + format_retrieval_debug_output(startup_task_memory_result))
         cli_root.console.print("=" * 40 + "\n")
         return
 
@@ -132,7 +85,7 @@ def start(debug_retrieval: bool):
     cli_root.console.print("\n" + "=" * 40)
     cli_root.console.print(context_str)
     if debug_retrieval:
-        cli_root.console.print("\n" + _format_retrieval_debug_output(startup_task_memory_result))
+        cli_root.console.print("\n" + format_retrieval_debug_output(startup_task_memory_result))
     cli_root.console.print("=" * 40 + "\n")
 
 
