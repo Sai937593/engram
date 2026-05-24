@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 
 from engram.db import get_db_connection
+from engram.memory_retrieval.fts_query import normalize_fts_query_text
 from engram.models.audit import AuditLog
 
 VALID_MEMORY_SCOPES = {"project", "task"}
@@ -260,15 +261,22 @@ class Memory:
         AuditLog.log("memories", self.id, "delete")
 
     @classmethod
-    def search(cls, query, type_filter=None, tag_filters=None):
+    def search(
+        cls,
+        query: str | None,
+        type_filter: str | None = None,
+        tag_filters: list[str] | None = None,
+    ) -> list["Memory"]:
+        """Search memories using a normalized FTS-safe query string."""
         conn = get_db_connection()
 
+        safe_query = normalize_fts_query_text(query)
         sql = """
             SELECT m.* FROM memories m
             JOIN memories_fts f ON m.rowid = f.rowid
             WHERE memories_fts MATCH ?
         """
-        params = [query]
+        params = [safe_query]
 
         if type_filter:
             sql += " AND m.type = ?"

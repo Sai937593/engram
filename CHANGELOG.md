@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- fix(retrieval): harden task-scope FTS candidate retrieval to return empty results with fallback metadata when FTS query execution fails (including malformed MATCH input or unavailable `memories_fts` table).
+- feat(retrieval): add task-scope FTS candidate retrieval helper with deterministic task_id/title/tag boosts, scope+project isolation filters, and debug metadata contracts.
+- feat(retrieval): add FTS-safe retrieval query normalization for malformed/punctuation-heavy task queries and route Memory.search through deterministic quoted-term sanitization.
 - feat(retrieval): add explicit retrieval query budget metadata and regression coverage for long-field compaction, evidence omission, and deterministic hard character caps.
 - feat(retrieval): include deterministic phase context in retrieval query text via active phase, task phase_id resolution, and legacy task.phase fallback with dedicated query-builder regression tests.
 - feat(retrieval): add a backend-agnostic task retrieval query builder API with deterministic query text/metadata and unit coverage for minimal-task and no-db-search paths.
