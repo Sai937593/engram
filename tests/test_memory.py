@@ -535,6 +535,36 @@ def test_init_db_adds_memories_level_column_for_legacy_databases(tmp_path):
         VALUES ('legacy-memory-2', 'legacy-proj', 'note', 'Task Note', 'Scoped to a task', 'task', 'legacy-task', 'task', 0)
         """
     )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-3', 'legacy-proj', 'decision', 'Legacy Decision', 'Use local storage', 'project', NULL, 'architecture', 0)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-4', 'legacy-proj', 'lesson', 'Project Lesson', 'Useful project-level knowledge', 'project', NULL, 'lesson', 0)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-5', 'legacy-proj', 'lesson', 'Task Lesson', 'Useful task-derived knowledge', 'project', 'legacy-task', 'lesson', 0)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-6', 'legacy-proj', 'snippet', 'Project Snippet', 'Reusable command', 'project', NULL, 'snippet', 0)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-7', 'legacy-proj', 'custom', 'Pinned Custom', 'Pinned unknown-type memory', 'project', NULL, 'pinned', 1)
+        """
+    )
     legacy_conn.commit()
     legacy_conn.close()
 
@@ -543,16 +573,42 @@ def test_init_db_adds_memories_level_column_for_legacy_databases(tmp_path):
 
     conn = get_db_connection(db_path)
     memory_columns = {row["name"] for row in conn.execute("PRAGMA table_info(memories)").fetchall()}
-    memory_count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-    migrated_row = conn.execute("SELECT * FROM memories WHERE id = 'legacy-memory-2'").fetchone()
+    migrated_rows = conn.execute("SELECT * FROM memories").fetchall()
     conn.close()
 
     assert "level" in memory_columns
-    assert memory_count == 2
-    migrated_memory = Memory.from_row(migrated_row)
-    assert migrated_memory.scope == "task"
-    assert migrated_memory.task_id == "legacy-task"
-    assert migrated_memory.level is None
+    assert len(migrated_rows) == 7
+    migrated = {row["id"]: Memory.from_row(row) for row in migrated_rows}
+    assert (migrated["legacy-memory-1"].scope, migrated["legacy-memory-1"].level) == (
+        "project",
+        "L1",
+    )
+    assert (migrated["legacy-memory-2"].scope, migrated["legacy-memory-2"].level) == (
+        "task",
+        None,
+    )
+    assert migrated["legacy-memory-2"].task_id == "legacy-task"
+    assert (migrated["legacy-memory-3"].scope, migrated["legacy-memory-3"].level) == (
+        "project",
+        "L2",
+    )
+    assert (migrated["legacy-memory-4"].scope, migrated["legacy-memory-4"].level) == (
+        "project",
+        "L3",
+    )
+    assert (migrated["legacy-memory-5"].scope, migrated["legacy-memory-5"].level) == (
+        "task",
+        None,
+    )
+    assert migrated["legacy-memory-5"].task_id == "legacy-task"
+    assert (migrated["legacy-memory-6"].scope, migrated["legacy-memory-6"].level) == (
+        "project",
+        "L3",
+    )
+    assert (migrated["legacy-memory-7"].scope, migrated["legacy-memory-7"].level) == (
+        "project",
+        "L1",
+    )
 
 
 def test_memory_from_row_preserves_scope_and_level(tmp_db, project):

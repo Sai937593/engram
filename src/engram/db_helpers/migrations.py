@@ -29,6 +29,70 @@ def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:
     """Add missing legacy memories columns for compatibility."""
     if not column_exists(cursor, "memories", "level"):
         cursor.execute("ALTER TABLE memories ADD COLUMN level TEXT")
+    backfill_legacy_memory_scope_levels(cursor)
+
+
+def backfill_legacy_memory_scope_levels(cursor: sqlite3.Cursor) -> None:
+    """Backfill legacy memory scope/level values to the project/task contract."""
+    cursor.execute(
+        """
+        UPDATE memories
+        SET scope = 'task',
+            level = NULL
+        WHERE task_id IS NOT NULL
+          AND type IN ('lesson', 'note', 'snippet')
+          AND (scope IS NULL OR scope = '' OR scope = 'project')
+          AND (scope != 'task' OR level IS NOT NULL)
+        """
+    )
+    cursor.execute(
+        """
+        UPDATE memories
+        SET level = NULL
+        WHERE scope = 'task'
+          AND level IS NOT NULL
+        """
+    )
+    cursor.execute(
+        """
+        UPDATE memories
+        SET scope = 'project',
+            level = 'L1'
+        WHERE type = 'constraint'
+          AND (scope IS NULL OR scope != 'task')
+          AND (scope != 'project' OR level IS NULL OR level != 'L1')
+        """
+    )
+    cursor.execute(
+        """
+        UPDATE memories
+        SET scope = 'project',
+            level = 'L2'
+        WHERE type = 'decision'
+          AND (scope IS NULL OR scope != 'task')
+          AND (scope != 'project' OR level IS NULL OR level != 'L2')
+        """
+    )
+    cursor.execute(
+        """
+        UPDATE memories
+        SET scope = 'project',
+            level = 'L1'
+        WHERE always_include = 1
+          AND scope != 'task'
+          AND type NOT IN ('constraint', 'decision', 'lesson', 'note', 'snippet')
+          AND (level IS NULL OR TRIM(level) = '')
+        """
+    )
+    cursor.execute(
+        """
+        UPDATE memories
+        SET scope = 'project',
+            level = 'L3'
+        WHERE scope != 'task'
+          AND (level IS NULL OR TRIM(level) = '')
+        """
+    )
 
 
 def backfill_legacy_phase_ids(cursor: sqlite3.Cursor) -> None:
