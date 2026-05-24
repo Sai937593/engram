@@ -1,7 +1,20 @@
 """Tests for context generation (startup and task context)."""
 
 from engram.context import get_startup_context, get_task_context
-from engram.context_helpers.startup import StartupContextOptions, build_startup_context
+from engram.context_helpers.startup import (
+    CONTEXT_TRUNCATION_MARKER,
+    STARTUP_HARD_CHAR_BUDGET,
+    STARTUP_HARD_TOKEN_BUDGET,
+    STARTUP_TARGET_CHAR_BUDGET_MAX,
+    STARTUP_TARGET_CHAR_BUDGET_MIN,
+    STARTUP_TARGET_TOKEN_BUDGET_MAX,
+    STARTUP_TARGET_TOKEN_BUDGET_MIN,
+    TOKEN_TO_CHAR_APPROX,
+    StartupContextOptions,
+    _compact_with_limit,
+    _enforce_hard_budget,
+    build_startup_context,
+)
 from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.task import Task
@@ -157,6 +170,58 @@ def test_startup_builder_compacts_text_and_enforces_hard_budget(project):
     assert "..." in ctx
     assert len(ctx) <= 450
     assert ctx.endswith("[Context truncated to fit budget.]")
+
+
+def test_startup_budget_constants_match_design_plan():
+    assert TOKEN_TO_CHAR_APPROX == 4
+    assert STARTUP_TARGET_TOKEN_BUDGET_MIN == 1500
+    assert STARTUP_TARGET_TOKEN_BUDGET_MAX == 2000
+    assert STARTUP_HARD_TOKEN_BUDGET == 3000
+    assert STARTUP_TARGET_CHAR_BUDGET_MIN == 6000
+    assert STARTUP_TARGET_CHAR_BUDGET_MAX == 8000
+    assert STARTUP_HARD_CHAR_BUDGET == 12000
+
+
+def test_compact_with_limit_boundaries_and_empty_input():
+    assert _compact_with_limit(None, 20) == ""
+    assert _compact_with_limit("", 20) == ""
+    assert _compact_with_limit("hello", 0) == ""
+    assert _compact_with_limit("abc", 3) == "abc"
+    assert _compact_with_limit("abcd", 3) == "abc"
+    assert _compact_with_limit("abcd", 4) == "abcd"
+    assert _compact_with_limit("abcde", 4) == "a..."
+
+
+def test_enforce_hard_budget_boundaries_and_marker():
+    exact = "abcd"
+    assert _enforce_hard_budget(exact, 4) == exact
+
+    over = "abcde"
+    result = _enforce_hard_budget(over, 4)
+    assert result == CONTEXT_TRUNCATION_MARKER[:4]
+
+    larger_budget_result = _enforce_hard_budget("x" * 100, 60)
+    assert len(larger_budget_result) <= 60
+    assert larger_budget_result.endswith("[Context truncated to fit budget.]")
+
+
+def test_startup_builder_placeholder_compaction_is_deterministic(project):
+    options = StartupContextOptions(
+        task_memory_placeholder_text="placeholder " + ("p" * 200),
+        task_memory_placeholder_char_limit=40,
+    )
+
+    first = build_startup_context(project=project, options=options)
+    second = build_startup_context(project=project, options=options)
+
+    assert first == second
+    assert "placeholder " in first
+    assert "placeholder " + ("p" * 200) not in first
+    placeholder_line = first.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
+        "\n", maxsplit=1
+    )[0]
+    assert placeholder_line.endswith("...")
+    assert len(placeholder_line) == 40
 
 
 def test_task_context_shows_title(task):

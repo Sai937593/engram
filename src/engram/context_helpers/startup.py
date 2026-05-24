@@ -10,16 +10,30 @@ from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title
 
+TOKEN_TO_CHAR_APPROX = 4
+STARTUP_TARGET_TOKEN_BUDGET_MIN = 1500
+STARTUP_TARGET_TOKEN_BUDGET_MAX = 2000
+STARTUP_HARD_TOKEN_BUDGET = 3000
+STARTUP_TARGET_CHAR_BUDGET_MIN = STARTUP_TARGET_TOKEN_BUDGET_MIN * TOKEN_TO_CHAR_APPROX
+STARTUP_TARGET_CHAR_BUDGET_MAX = STARTUP_TARGET_TOKEN_BUDGET_MAX * TOKEN_TO_CHAR_APPROX
+STARTUP_HARD_CHAR_BUDGET = STARTUP_HARD_TOKEN_BUDGET * TOKEN_TO_CHAR_APPROX
+CONTEXT_TRUNCATION_MARKER = "\n\n[Context truncated to fit budget.]"
+
 
 @dataclass(frozen=True)
 class StartupContextOptions:
     """Configuration for deterministic startup context rendering."""
 
-    hard_char_budget: int = 12000
+    target_char_budget: int = STARTUP_TARGET_CHAR_BUDGET_MAX
+    hard_char_budget: int = STARTUP_HARD_CHAR_BUDGET
     project_summary_char_limit: int = 400
     phase_text_char_limit: int = 400
     task_text_char_limit: int = 500
     guardrail_text_char_limit: int = 220
+    task_memory_placeholder_text: str = (
+        "Retrieval is not enabled in this phase. Placeholder section only."
+    )
+    task_memory_placeholder_char_limit: int = 220
     l1_guardrail_limit: int = 6
 
 
@@ -42,12 +56,11 @@ def _enforce_hard_budget(rendered: str, hard_char_budget: int) -> str:
     if len(rendered) <= hard_char_budget:
         return rendered
 
-    marker = "\n\n[Context truncated to fit budget.]"
-    if hard_char_budget <= len(marker):
-        return marker[:hard_char_budget]
+    if hard_char_budget <= len(CONTEXT_TRUNCATION_MARKER):
+        return CONTEXT_TRUNCATION_MARKER[:hard_char_budget]
 
-    visible = rendered[: hard_char_budget - len(marker)].rstrip()
-    return f"{visible}{marker}"
+    visible = rendered[: hard_char_budget - len(CONTEXT_TRUNCATION_MARKER)].rstrip()
+    return f"{visible}{CONTEXT_TRUNCATION_MARKER}"
 
 
 def _render_section(title: str, lines: list[str]) -> str:
@@ -139,10 +152,14 @@ def _build_guardrail_frame(project_id: str, options: StartupContextOptions) -> s
     return _render_section("PROJECT GUARDRAILS", lines)
 
 
-def _build_task_memory_placeholder() -> str:
+def _build_task_memory_placeholder(options: StartupContextOptions) -> str:
+    placeholder = _compact_with_limit(
+        options.task_memory_placeholder_text,
+        options.task_memory_placeholder_char_limit,
+    )
     return _render_section(
         "TASK MEMORY CANDIDATES",
-        ["Retrieval is not enabled in this phase. Placeholder section only."],
+        [placeholder],
     )
 
 
@@ -260,7 +277,7 @@ def build_startup_context(
         _build_phase_frame(active_phase, resolved_options),
         _build_task_frame(selected_task, resolved_options),
         _build_guardrail_frame(resolved_project.id, resolved_options),
-        _build_task_memory_placeholder(),
+        _build_task_memory_placeholder(resolved_options),
         _build_next_action(resolved_project, selected_task),
     ]
 
