@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(retrieval): implement deterministic task-memory selection and budgeted packing (Phase 6) with stable sorting, deduplication, content truncation, and metadata calculations.
 - feat(retrieval): add Phase 6 task-memory pack contracts (options, packed item, metadata, and result) with deterministic ordering metadata and budget-control defaults.
 - fix(retrieval): harden task-scope FTS candidate retrieval to return empty results with fallback metadata when FTS query execution fails (including malformed MATCH input or unavailable `memories_fts` table).
 - feat(retrieval): add task-scope FTS candidate retrieval helper with deterministic task_id/title/tag boosts, scope+project isolation filters, and debug metadata contracts.

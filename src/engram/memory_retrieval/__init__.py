@@ -13,6 +13,7 @@ from engram.memory_retrieval.pack_contract import (
     TaskMemoryPackMetadata,
     TaskMemoryPackOptions,
     TaskMemoryPackResult,
+    pack_task_memories,
     resolve_task_memory_pack_options,
 )
 from engram.memory_retrieval.query_builder import (
@@ -35,6 +36,7 @@ __all__ = [
     "TaskMemoryPackMetadata",
     "TaskMemoryPackResult",
     "resolve_task_memory_pack_options",
+    "pack_task_memories",
     "normalize_fts_query_text",
     "build_task_retrieval_query",
     "retrieve_task_memory_candidates",
