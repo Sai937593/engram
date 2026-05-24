@@ -4,6 +4,13 @@ import pytest
 from click.testing import CliRunner
 
 from engram.cli import cli
+from engram.memory_retrieval import (
+    StartupTaskMemoryRetrievalResult,
+    TaskMemoryPackedItem,
+    TaskMemoryPackMetadata,
+    TaskMemoryPackResult,
+    TaskMemoryRetrievalMetadata,
+)
 from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.task import Task
@@ -103,6 +110,63 @@ def test_start_context_uses_unified_startup_builder(tmp_db, project, mock_git, m
         content="Do this first",
         level=None,
     )
+    startup_result = StartupTaskMemoryRetrievalResult(
+        query=None,
+        retrieval_metadata=TaskMemoryRetrievalMetadata(
+            project_id=project.id,
+            query_task_id=task.id,
+            source="fts",
+            requested_query_text="query",
+            normalized_fts_query="query",
+            query_term_count=1,
+            query_was_empty=False,
+            fallback_used=False,
+            fallback_reason=None,
+            max_candidates=20,
+            scanned_row_count=1,
+            returned_candidate_count=1,
+        ),
+        pack_result=TaskMemoryPackResult(
+            items=(
+                TaskMemoryPackedItem(
+                    memory_id="tmem1",
+                    type="lesson",
+                    title="Selected task memory",
+                    content="Do this first",
+                    tags=("startup",),
+                    task_id=task.id,
+                    retrieval_source="fts",
+                    fts_rank=-0.2,
+                    boost_score=3,
+                    source_candidate_index=0,
+                    char_count=13,
+                    was_truncated=False,
+                ),
+            ),
+            metadata=TaskMemoryPackMetadata(
+                project_id=project.id,
+                query_task_id=task.id,
+                source="fts",
+                section_char_budget=3600,
+                preferred_k=6,
+                max_k=10,
+                max_item_chars=420,
+                input_candidate_count=1,
+                unique_candidate_count=1,
+                selected_item_count=1,
+                hidden_item_count=0,
+                truncated_item_count=0,
+                used_char_count=13,
+                section_budget_exhausted=False,
+                ordering_fields=("-boost_score", "fts_rank", "memory_id"),
+                dedupe_key="memory_id",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        lambda **kwargs: startup_result,
+    )
 
     runner = make_runner_with_project(monkeypatch, tmp_db, project)
     result = runner.invoke(cli, ["start"])
@@ -113,10 +177,9 @@ def test_start_context_uses_unified_startup_builder(tmp_db, project, mock_git, m
     assert "PROJECT GUARDRAILS" in result.output
     assert "TASK MEMORY CANDIDATES" in result.output
     assert "NEXT ACTION" in result.output
-    assert "Retrieval is not enabled in this phase. Placeholder section only." in result.output
+    assert "Selected task memory" in result.output
     assert "No secrets" in result.output
     assert "Use WAL" not in result.output
-    assert "Task note" not in result.output
 
 
 def test_start_blocks_when_dirty_and_switching_branch(tmp_db, project, mock_git, monkeypatch):
