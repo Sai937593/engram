@@ -25,16 +25,16 @@ def make_runner_with_project(monkeypatch, project) -> CliRunner:
 
 
 @pytest.mark.parametrize(
-    "type_name,default_always_include",
+    "type_name,default_scope,default_level,default_always_include",
     [
-        ("constraint", True),
-        ("lesson", True),
-        ("decision", True),
-        ("snippet", False),
+        ("constraint", "project", "L1", True),
+        ("lesson", "task", None, True),
+        ("decision", "project", "L2", True),
+        ("snippet", "task", None, False),
     ],
 )
 def test_type_add_creates_correct_memory(
-    type_name, default_always_include, tmp_db, project, monkeypatch
+    type_name, default_scope, default_level, default_always_include, tmp_db, project, monkeypatch
 ):
     """Each type add command creates a memory with the correct defaults."""
     runner = make_runner_with_project(monkeypatch, project)
@@ -47,7 +47,55 @@ def test_type_add_creates_correct_memory(
     assert created.type == type_name
     assert created.title == "Test title"
     assert created.content == "Test content"
+    assert created.scope == default_scope
+    assert created.level == default_level
+    assert created.task_id is None
     assert created.always_include is default_always_include
+
+
+@pytest.mark.parametrize("type_name", ["lesson", "snippet"])
+def test_task_scoped_type_add_defaults_task_id_to_active_task(
+    type_name, tmp_db, project, monkeypatch
+):
+    """Task-scope typed shortcuts link to the sole in-progress task by default."""
+    runner = make_runner_with_project(monkeypatch, project)
+    active_task = Task.create(project_id=project.id, title="Active work", status="in-progress")
+    Task.create(project_id=project.id, title="Other work", status="todo")
+
+    result = runner.invoke(cli, [type_name, "add", "Test title", "--content", "Test content"])
+    assert result.exit_code == 0, result.output
+
+    memories = Memory.list_by_type(project.id, type_name)
+    assert len(memories) == 1
+    assert memories[0].scope == "task"
+    assert memories[0].level is None
+    assert memories[0].task_id == active_task.id
+
+
+def test_lesson_add_project_flag_uses_project_default_level(tmp_db, project, monkeypatch):
+    """lesson add --project creates a project-scope memory at the lesson project default level."""
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(cli, ["lesson", "add", "Title", "--content", "Body", "--project"])
+    assert result.exit_code == 0, result.output
+
+    memories = Memory.list_by_type(project.id, "lesson")
+    assert len(memories) == 1
+    assert memories[0].scope == "project"
+    assert memories[0].level == "L3"
+    assert memories[0].task_id is None
+
+
+def test_lesson_add_level_sets_project_scope_and_level(tmp_db, project, monkeypatch):
+    """lesson add --level infers project scope and applies the requested level."""
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(cli, ["lesson", "add", "Title", "--content", "Body", "--level", "L1"])
+    assert result.exit_code == 0, result.output
+
+    memories = Memory.list_by_type(project.id, "lesson")
+    assert len(memories) == 1
+    assert memories[0].scope == "project"
+    assert memories[0].level == "L1"
+    assert memories[0].task_id is None
 
 
 @pytest.mark.parametrize("type_name", ["constraint", "lesson", "decision", "snippet"])

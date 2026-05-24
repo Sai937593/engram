@@ -28,12 +28,26 @@ DEFAULT_PROJECT_LEVEL_BY_TYPE = {
     "note": "L3",
     "snippet": "L3",
 }
+DEFAULT_TYPED_SCOPE_LEVEL_BY_TYPE = {
+    "constraint": ("project", "L1"),
+    "decision": ("project", "L2"),
+    "lesson": ("task", None),
+    "snippet": ("task", None),
+}
 NULLISH_VALUES = {"none", "null", "clear"}
 
 
 def default_scope_level_for_type(memory_type: str) -> tuple[str, str]:
     """Return the default scope/level for memory creation without explicit flags."""
     return "project", DEFAULT_PROJECT_LEVEL_BY_TYPE.get(memory_type, "L3")
+
+
+def default_typed_scope_level_for_type(memory_type: str) -> tuple[str, str | None]:
+    """Return default scope/level for typed shortcut commands."""
+    if memory_type in DEFAULT_TYPED_SCOPE_LEVEL_BY_TYPE:
+        return DEFAULT_TYPED_SCOPE_LEVEL_BY_TYPE[memory_type]
+    scope, level = default_scope_level_for_type(memory_type)
+    return scope, level
 
 
 def normalize_optional_value(value: str | None) -> str | None:
@@ -113,6 +127,42 @@ def resolve_memory_add_contract(
     )
 
 
+def resolve_typed_memory_add_contract(
+    *,
+    project_id: str,
+    memory_type: str,
+    scope: str | None = None,
+    level: str | None = None,
+    task_id: str | None = None,
+) -> tuple[str, str | None, str | None]:
+    """Resolve typed command defaults while honoring explicit scope/level/task overrides."""
+    requested_scope = normalize_optional_value(scope)
+    typed_default_scope, typed_default_level = default_typed_scope_level_for_type(memory_type)
+    if requested_scope is None:
+        requested_scope = typed_default_scope
+
+    requested_level = level
+    if requested_level is None and requested_scope == "project":
+        if requested_scope == typed_default_scope:
+            requested_level = typed_default_level
+        else:
+            requested_level = DEFAULT_PROJECT_LEVEL_BY_TYPE.get(memory_type, "L3")
+
+    requested_task_id = task_id
+    if requested_scope == "task" and normalize_optional_value(requested_task_id) is None:
+        tasks = Task.list_by_project(project_id)
+        in_progress_tasks = [task for task in tasks if task.status == "in-progress"]
+        if len(in_progress_tasks) == 1:
+            requested_task_id = in_progress_tasks[0].id
+
+    return validate_memory_scope_contract(
+        project_id=project_id,
+        scope=requested_scope,
+        level=requested_level,
+        task_id=requested_task_id,
+    )
+
+
 def resolve_memory_update_field_value(
     *,
     project_id: str,
@@ -184,17 +234,27 @@ def add_typed_memory(
     content: str,
     tags: str | None,
     always_include: bool,
+    scope: str | None = None,
+    level: str | None = None,
+    task_id: str | None = None,
 ) -> None:
     """Create a memory entry for a typed command group."""
     project = cli_root.get_current_project()
-    scope, level = default_scope_level_for_type(memory_type)
+    normalized_scope, normalized_level, normalized_task_id = resolve_typed_memory_add_contract(
+        project_id=project.id,
+        memory_type=memory_type,
+        scope=scope,
+        level=level,
+        task_id=task_id,
+    )
     memory = Memory.create(
         project_id=project.id,
         title=title,
         content=content,
         type=memory_type,
-        scope=scope,
-        level=level,
+        scope=normalized_scope,
+        level=normalized_level,
+        task_id=normalized_task_id,
         tags=tags.split(",") if tags else [],
         always_include=always_include,
     )

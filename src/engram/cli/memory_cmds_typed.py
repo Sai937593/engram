@@ -58,9 +58,36 @@ def lesson() -> None:
 @click.option("--content", required=True, help="What the problem was and how it was solved")
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--no-always-include", is_flag=True, default=False, help="Don't always include")
-def lesson_add(title: str, content: str, tags: str | None, no_always_include: bool) -> None:
+@click.option(
+    "--project",
+    "project_scope",
+    is_flag=True,
+    default=False,
+    help="Store this lesson as project scope (instead of task scope)",
+)
+@click.option("--level", help="Project level when using --project (L0, L1, L2, L3)")
+@click.option("--task-id", help="Optional linked/origin task ID")
+def lesson_add(
+    title: str,
+    content: str,
+    tags: str | None,
+    no_always_include: bool,
+    project_scope: bool,
+    level: str | None,
+    task_id: str | None,
+) -> None:
     """Record a lesson learned (always shown at startup by default)."""
-    add_typed_memory("lesson", title, content, tags, always_include=not no_always_include)
+    resolved_scope = "project" if project_scope or level else None
+    add_typed_memory(
+        "lesson",
+        title,
+        content,
+        tags,
+        always_include=not no_always_include,
+        scope=resolved_scope,
+        level=level,
+        task_id=task_id,
+    )
 
 
 @lesson.command(name="list")
@@ -130,9 +157,18 @@ def snippet() -> None:
 @click.option("--content", required=True, help="The reusable command or code")
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--always-include", is_flag=True, default=False, help="Always include in context")
-def snippet_add(title: str, content: str, tags: str | None, always_include: bool) -> None:
+@click.option("--task-id", help="Optional linked/origin task ID")
+def snippet_add(
+    title: str,
+    content: str,
+    tags: str | None,
+    always_include: bool,
+    task_id: str | None,
+) -> None:
     """Record a reusable command or code snippet (search on demand)."""
-    add_typed_memory("snippet", title, content, tags, always_include=always_include)
+    add_typed_memory(
+        "snippet", title, content, tags, always_include=always_include, task_id=task_id
+    )
 
 
 @snippet.command(name="list")

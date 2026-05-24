@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(cli): align typed memory shortcut defaults with Phase 2 scope contract (constraint=L1 project, decision=L2 project, lesson/snippet=task scope with active-task linkage) and add lesson override options for project scope/level.
 - feat(cli): include scope/level/task_id metadata in typed memory list/get output and normalize empty memory metadata display to `-` across generic and typed memory views.
 - feat(cli): add shared memory scope/level/task_id validation helpers for `engram memory add/update`, including project-scoped task_id checks and scope metadata in generic memory list/get output.
 - fix(db): backfill legacy memory scopes and levels according to the project/task memory contract.
