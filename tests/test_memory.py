@@ -65,6 +65,58 @@ def test_create_task_scope_accepts_empty_level(project):
     assert m.level is None
 
 
+def test_create_task_scope_without_task_id_preserves_null_on_load(project):
+    created = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Unlinked task memory",
+        content="Task-scoped memory with optional task_id.",
+        scope="task",
+        level=None,
+    )
+
+    loaded = Memory.get(created.id)
+    assert loaded is not None
+    assert loaded.scope == "task"
+    assert loaded.level is None
+    assert loaded.task_id is None
+
+
+def test_create_task_scope_with_task_id_preserves_origin_on_load(project):
+    created = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Linked task memory",
+        content="Task-scoped memory linked to an origin task.",
+        scope="task",
+        task_id="task-123",
+        level=None,
+    )
+
+    loaded = Memory.get(created.id)
+    assert loaded is not None
+    assert loaded.scope == "task"
+    assert loaded.level is None
+    assert loaded.task_id == "task-123"
+
+
+def test_create_project_scope_without_task_id_preserves_null_on_load(project):
+    created = Memory.create(
+        project_id=project.id,
+        type="decision",
+        title="Project memory",
+        content="Project-scoped memory should not require a task id.",
+        scope="project",
+        level="L2",
+    )
+
+    loaded = Memory.get(created.id)
+    assert loaded is not None
+    assert loaded.scope == "project"
+    assert loaded.level == "L2"
+    assert loaded.task_id is None
+
+
 def test_create_rejects_unknown_scope(project):
     with pytest.raises(ValueError, match="Invalid memory scope"):
         Memory.create(
