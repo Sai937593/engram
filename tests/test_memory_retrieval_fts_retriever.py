@@ -1,5 +1,7 @@
 """Tests for task-scope FTS retrieval candidates."""
 
+import sqlite3
+
 from engram.memory_retrieval.fts_retriever import retrieve_task_memory_candidates
 from engram.memory_retrieval.query_builder import RetrievalQueryMetadata, TaskRetrievalQuery
 from engram.models.memory import Memory
@@ -157,5 +159,67 @@ def test_retriever_handles_empty_or_malformed_queries_without_crashing(project) 
 
     assert result.candidates == ()
     assert result.metadata.query_was_empty is True
+    assert result.metadata.fallback_used is False
+    assert result.metadata.fallback_reason is None
+    assert result.metadata.scanned_row_count == 0
+    assert result.metadata.returned_candidate_count == 0
+
+
+def test_retriever_falls_back_when_fts_query_execution_fails(project, monkeypatch) -> None:
+    task = Task.create(project_id=project.id, title="Malformed FTS fallback")
+    retrieval_query = _build_test_query(
+        project_id=project.id,
+        task_id=task.id,
+        query_text="helper",
+    )
+
+    def _raise_fts_error(*, project_id: str, safe_fts_query: str, max_candidates: int):
+        raise sqlite3.OperationalError("malformed MATCH expression")
+
+    monkeypatch.setattr(
+        "engram.memory_retrieval.fts_retriever._fetch_task_scope_fts_rows",
+        _raise_fts_error,
+    )
+
+    result = retrieve_task_memory_candidates(retrieval_query)
+
+    assert result.candidates == ()
+    assert result.metadata.query_was_empty is False
+    assert result.metadata.fallback_used is True
+    assert result.metadata.fallback_reason == "malformed MATCH expression"
+    assert result.metadata.scanned_row_count == 0
+    assert result.metadata.returned_candidate_count == 0
+
+
+def test_retriever_falls_back_when_fts_table_is_unavailable(project) -> None:
+    task = Task.create(project_id=project.id, title="Missing FTS table fallback")
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Task memory",
+        content="Retriever should degrade gracefully.",
+        scope="task",
+        task_id=task.id,
+    )
+
+    from engram.db import get_db_connection
+
+    conn = get_db_connection()
+    conn.execute("DROP TABLE memories_fts")
+    conn.commit()
+    conn.close()
+
+    retrieval_query = _build_test_query(
+        project_id=project.id,
+        task_id=task.id,
+        query_text="retriever",
+    )
+    result = retrieve_task_memory_candidates(retrieval_query)
+
+    assert result.candidates == ()
+    assert result.metadata.query_was_empty is False
+    assert result.metadata.fallback_used is True
+    assert result.metadata.fallback_reason is not None
+    assert "no such table" in result.metadata.fallback_reason
     assert result.metadata.scanned_row_count == 0
     assert result.metadata.returned_candidate_count == 0

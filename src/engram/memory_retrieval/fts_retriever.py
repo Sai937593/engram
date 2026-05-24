@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from engram.db import get_db_connection
 from engram.memory_retrieval.fts_query import (
     EMPTY_FTS_QUERY,
@@ -43,29 +45,31 @@ def _fetch_task_scope_fts_rows(
 ) -> list[RawMemoryRow]:
     """Fetch task-scope FTS rows for one project in deterministic FTS order."""
     conn = get_db_connection()
-    rows = conn.execute(
-        """
-        SELECT
-            m.id,
-            m.project_id,
-            m.scope,
-            m.type,
-            m.task_id,
-            m.title,
-            m.content,
-            m.tags,
-            bm25(memories_fts) AS fts_rank
-        FROM memories AS m
-        JOIN memories_fts ON m.rowid = memories_fts.rowid
-        WHERE memories_fts MATCH ?
-          AND m.project_id = ?
-          AND m.scope = 'task'
-        ORDER BY fts_rank ASC, m.id ASC
-        LIMIT ?
-        """,
-        (safe_fts_query, project_id, max_candidates),
-    ).fetchall()
-    conn.close()
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                m.id,
+                m.project_id,
+                m.scope,
+                m.type,
+                m.task_id,
+                m.title,
+                m.content,
+                m.tags,
+                bm25(memories_fts) AS fts_rank
+            FROM memories AS m
+            JOIN memories_fts ON m.rowid = memories_fts.rowid
+            WHERE memories_fts MATCH ?
+              AND m.project_id = ?
+              AND m.scope = 'task'
+            ORDER BY fts_rank ASC, m.id ASC
+            LIMIT ?
+            """,
+            (safe_fts_query, project_id, max_candidates),
+        ).fetchall()
+    finally:
+        conn.close()
 
     return [
         RawMemoryRow(
@@ -107,17 +111,36 @@ def retrieve_task_memory_candidates(
             normalized_fts_query=safe_fts_query,
             query_term_count=0,
             query_was_empty=True,
+            fallback_used=False,
+            fallback_reason=None,
             max_candidates=resolved_options.max_candidates,
             scanned_row_count=0,
             returned_candidate_count=0,
         )
         return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
-    fts_rows = _fetch_task_scope_fts_rows(
-        project_id=project_id,
-        safe_fts_query=safe_fts_query,
-        max_candidates=resolved_options.max_candidates,
-    )
+    try:
+        fts_rows = _fetch_task_scope_fts_rows(
+            project_id=project_id,
+            safe_fts_query=safe_fts_query,
+            max_candidates=resolved_options.max_candidates,
+        )
+    except sqlite3.Error as exc:
+        metadata = TaskMemoryRetrievalMetadata(
+            project_id=project_id,
+            query_task_id=query_task_id,
+            source="fts",
+            requested_query_text=retrieval_query.query_text,
+            normalized_fts_query=safe_fts_query,
+            query_term_count=len(query_terms),
+            query_was_empty=False,
+            fallback_used=True,
+            fallback_reason=str(exc),
+            max_candidates=resolved_options.max_candidates,
+            scanned_row_count=0,
+            returned_candidate_count=0,
+        )
+        return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
     candidates: list[TaskMemoryCandidate] = []
     for row in fts_rows:
@@ -172,6 +195,8 @@ def retrieve_task_memory_candidates(
         normalized_fts_query=safe_fts_query,
         query_term_count=len(query_terms),
         query_was_empty=False,
+        fallback_used=False,
+        fallback_reason=None,
         max_candidates=resolved_options.max_candidates,
         scanned_row_count=len(fts_rows),
         returned_candidate_count=len(ordered_candidates),

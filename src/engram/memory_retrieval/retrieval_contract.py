@@ -50,6 +50,8 @@ class TaskMemoryRetrievalMetadata:
     normalized_fts_query: str
     query_term_count: int
     query_was_empty: bool
+    fallback_used: bool
+    fallback_reason: str | None
     max_candidates: int
     scanned_row_count: int
     returned_candidate_count: int
