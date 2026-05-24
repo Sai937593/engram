@@ -11,6 +11,32 @@ from engram.cli.memory_cmds_common import (
 )
 
 
+def _resolve_typed_override_scope(
+    *,
+    scope: str | None,
+    project_scope: bool,
+    level: str | None,
+    command_name: str,
+) -> str | None:
+    """Resolve explicit typed override inputs into an effective memory scope."""
+    normalized_scope = scope.lower() if scope else None
+    if project_scope and normalized_scope == "task":
+        raise click.ClickException(
+            f"{command_name} add received conflicting scope flags: use either --scope task or --project."
+        )
+    if project_scope:
+        normalized_scope = "project"
+
+    if level is not None and normalized_scope is None:
+        normalized_scope = "project"
+
+    if normalized_scope == "project" and level is None:
+        raise click.ClickException(
+            f"Project-scope {command_name}s require --level (L0, L1, L2, or L3)."
+        )
+    return normalized_scope
+
+
 @cli_root.cli.group()
 def constraint() -> None:
     """Constraints: hard rules agents must NEVER violate. Auto-surfaced at startup."""
@@ -58,9 +84,44 @@ def lesson() -> None:
 @click.option("--content", required=True, help="What the problem was and how it was solved")
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--no-always-include", is_flag=True, default=False, help="Don't always include")
-def lesson_add(title: str, content: str, tags: str | None, no_always_include: bool) -> None:
+@click.option(
+    "--scope",
+    type=click.Choice(["project", "task"], case_sensitive=False),
+    help="Override storage scope (project or task)",
+)
+@click.option(
+    "--project",
+    "project_scope",
+    is_flag=True,
+    default=False,
+    help="Alias for --scope project",
+)
+@click.option("--level", help="Project level for project scope (L0, L1, L2, L3)")
+@click.option("--task-id", help="Optional linked/origin task ID")
+def lesson_add(
+    title: str,
+    content: str,
+    tags: str | None,
+    no_always_include: bool,
+    scope: str | None,
+    project_scope: bool,
+    level: str | None,
+    task_id: str | None,
+) -> None:
     """Record a lesson learned (always shown at startup by default)."""
-    add_typed_memory("lesson", title, content, tags, always_include=not no_always_include)
+    resolved_scope = _resolve_typed_override_scope(
+        scope=scope, project_scope=project_scope, level=level, command_name="lesson"
+    )
+    add_typed_memory(
+        "lesson",
+        title,
+        content,
+        tags,
+        always_include=not no_always_include,
+        scope=resolved_scope,
+        level=level,
+        task_id=task_id,
+    )
 
 
 @lesson.command(name="list")
@@ -130,9 +191,44 @@ def snippet() -> None:
 @click.option("--content", required=True, help="The reusable command or code")
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--always-include", is_flag=True, default=False, help="Always include in context")
-def snippet_add(title: str, content: str, tags: str | None, always_include: bool) -> None:
+@click.option(
+    "--scope",
+    type=click.Choice(["project", "task"], case_sensitive=False),
+    help="Override storage scope (project or task)",
+)
+@click.option(
+    "--project",
+    "project_scope",
+    is_flag=True,
+    default=False,
+    help="Alias for --scope project",
+)
+@click.option("--level", help="Project level for project scope (L0, L1, L2, L3)")
+@click.option("--task-id", help="Optional linked/origin task ID")
+def snippet_add(
+    title: str,
+    content: str,
+    tags: str | None,
+    always_include: bool,
+    scope: str | None,
+    project_scope: bool,
+    level: str | None,
+    task_id: str | None,
+) -> None:
     """Record a reusable command or code snippet (search on demand)."""
-    add_typed_memory("snippet", title, content, tags, always_include=always_include)
+    resolved_scope = _resolve_typed_override_scope(
+        scope=scope, project_scope=project_scope, level=level, command_name="snippet"
+    )
+    add_typed_memory(
+        "snippet",
+        title,
+        content,
+        tags,
+        always_include=always_include,
+        scope=resolved_scope,
+        level=level,
+        task_id=task_id,
+    )
 
 
 @snippet.command(name="list")

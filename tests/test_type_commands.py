@@ -7,6 +7,7 @@ from click.testing import CliRunner
 
 from engram.cli import cli
 from engram.models.memory import Memory
+from engram.models.project import Project
 from engram.models.task import Task
 
 
@@ -25,16 +26,16 @@ def make_runner_with_project(monkeypatch, project) -> CliRunner:
 
 
 @pytest.mark.parametrize(
-    "type_name,default_always_include",
+    "type_name,default_scope,default_level,default_always_include",
     [
-        ("constraint", True),
-        ("lesson", True),
-        ("decision", True),
-        ("snippet", False),
+        ("constraint", "project", "L1", True),
+        ("lesson", "task", None, True),
+        ("decision", "project", "L2", True),
+        ("snippet", "task", None, False),
     ],
 )
 def test_type_add_creates_correct_memory(
-    type_name, default_always_include, tmp_db, project, monkeypatch
+    type_name, default_scope, default_level, default_always_include, tmp_db, project, monkeypatch
 ):
     """Each type add command creates a memory with the correct defaults."""
     runner = make_runner_with_project(monkeypatch, project)
@@ -47,7 +48,148 @@ def test_type_add_creates_correct_memory(
     assert created.type == type_name
     assert created.title == "Test title"
     assert created.content == "Test content"
+    assert created.scope == default_scope
+    assert created.level == default_level
+    assert created.task_id is None
     assert created.always_include is default_always_include
+
+
+@pytest.mark.parametrize("type_name", ["lesson", "snippet"])
+def test_task_scoped_type_add_defaults_task_id_to_active_task(
+    type_name, tmp_db, project, monkeypatch
+):
+    """Task-scope typed shortcuts link to the sole in-progress task by default."""
+    runner = make_runner_with_project(monkeypatch, project)
+    active_task = Task.create(project_id=project.id, title="Active work", status="in-progress")
+    Task.create(project_id=project.id, title="Other work", status="todo")
+
+    result = runner.invoke(cli, [type_name, "add", "Test title", "--content", "Test content"])
+    assert result.exit_code == 0, result.output
+
+    memories = Memory.list_by_type(project.id, type_name)
+    assert len(memories) == 1
+    assert memories[0].scope == "task"
+    assert memories[0].level is None
+    assert memories[0].task_id == active_task.id
+
+
+def test_lesson_add_project_scope_requires_explicit_level(tmp_db, project, monkeypatch):
+    """lesson add --project requires an explicit level override."""
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(cli, ["lesson", "add", "Title", "--content", "Body", "--project"])
+    assert result.exit_code != 0
+    assert "Error: Project-scope lessons require --level" in result.output
+
+
+def test_lesson_add_level_sets_project_scope_and_level(tmp_db, project, monkeypatch):
+    """lesson add --level infers project scope and applies the requested level."""
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(cli, ["lesson", "add", "Title", "--content", "Body", "--level", "L1"])
+    assert result.exit_code == 0, result.output
+
+    memories = Memory.list_by_type(project.id, "lesson")
+    assert len(memories) == 1
+    assert memories[0].scope == "project"
+    assert memories[0].level == "L1"
+    assert memories[0].task_id is None
+
+
+def test_snippet_add_project_scope_requires_explicit_level(tmp_db, project, monkeypatch):
+    """snippet add --scope project requires an explicit level override."""
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(
+        cli,
+        ["snippet", "add", "Title", "--content", "Body", "--scope", "project"],
+    )
+    assert result.exit_code != 0
+    assert "Error: Project-scope snippets require --level" in result.output
+
+
+@pytest.mark.parametrize("type_name", ["lesson", "snippet"])
+def test_task_scoped_type_add_accepts_same_project_task_id(type_name, tmp_db, project, monkeypatch):
+    """Task-scoped typed commands accept an explicit task_id from the current project."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(project_id=project.id, title=f"{type_name} task")
+
+    result = runner.invoke(
+        cli,
+        [type_name, "add", "Title", "--content", "Body", "--task-id", task.id],
+    )
+    assert result.exit_code == 0, result.output
+
+    memories = Memory.list_by_type(project.id, type_name)
+    assert len(memories) == 1
+    assert memories[0].scope == "task"
+    assert memories[0].level is None
+    assert memories[0].task_id == task.id
+
+
+@pytest.mark.parametrize("type_name", ["lesson", "snippet"])
+def test_task_scoped_type_add_rejects_foreign_task_id(type_name, tmp_db, project, monkeypatch):
+    """Task-scoped typed commands reject task_id values from other projects."""
+    runner = make_runner_with_project(monkeypatch, project)
+    other_project = Project.create("other", "Other", repo_paths=["/tmp/other"])
+    foreign_task = Task.create(project_id=other_project.id, title="Foreign task")
+
+    result = runner.invoke(
+        cli,
+        [type_name, "add", "Title", "--content", "Body", "--task-id", foreign_task.id],
+    )
+    assert result.exit_code != 0
+    assert f"Error: Task '{foreign_task.id}' not found in the current project." in result.output
+
+
+@pytest.mark.parametrize("type_name", ["lesson", "snippet"])
+def test_typed_add_accepts_explicit_project_scope_with_level(
+    type_name, tmp_db, project, monkeypatch
+):
+    """Typed task-default commands accept explicit project scope with a valid level."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            type_name,
+            "add",
+            "Title",
+            "--content",
+            "Body",
+            "--scope",
+            "project",
+            "--level",
+            "L0",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    memories = Memory.list_by_type(project.id, type_name)
+    assert len(memories) == 1
+    assert memories[0].scope == "project"
+    assert memories[0].level == "L0"
+    assert memories[0].task_id is None
+
+
+@pytest.mark.parametrize("type_name", ["lesson", "snippet"])
+def test_typed_add_rejects_task_scope_with_level(type_name, tmp_db, project, monkeypatch):
+    """Typed task-default commands reject task scope when a level is supplied."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            type_name,
+            "add",
+            "Title",
+            "--content",
+            "Body",
+            "--scope",
+            "task",
+            "--level",
+            "L1",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "Error: Task-scope memories must not define a level." in result.output
 
 
 @pytest.mark.parametrize("type_name", ["constraint", "lesson", "decision", "snippet"])
@@ -107,6 +249,68 @@ def test_type_get_shows_detail(type_name, tmp_db, project, monkeypatch):
     result = runner.invoke(cli, [type_name, "get", memory.id])
     assert result.exit_code == 0, result.output
     assert "Full content here" in result.output
+
+
+@pytest.mark.parametrize("type_name", ["constraint", "lesson", "decision", "snippet"])
+def test_type_list_and_get_show_scope_metadata_for_project_scope(
+    type_name, tmp_db, project, monkeypatch
+):
+    """type list/get render scope-level metadata for project memories."""
+    runner = make_runner_with_project(monkeypatch, project)
+    memory = Memory.create(
+        project_id=project.id,
+        type=type_name,
+        title="Scoped entry",
+        content="Scoped details",
+        scope="project",
+        level=_project_level_for_type(type_name),
+    )
+
+    list_result = runner.invoke(cli, [type_name, "list"])
+    assert list_result.exit_code == 0, list_result.output
+    assert "Scope" in list_result.output
+    assert "Level" in list_result.output
+    assert "Task ID" in list_result.output
+    assert "project" in list_result.output
+    assert "-" in list_result.output
+
+    get_result = runner.invoke(cli, [type_name, "get", memory.id])
+    assert get_result.exit_code == 0, get_result.output
+    assert "Scope: project" in get_result.output
+    assert f"Level: {_project_level_for_type(type_name)}" in get_result.output
+    assert "Task ID: -" in get_result.output
+
+
+@pytest.mark.parametrize("type_name", ["lesson", "snippet"])
+def test_type_list_and_get_show_scope_metadata_for_task_scope(
+    type_name, tmp_db, project, monkeypatch
+):
+    """type list/get render scope-level metadata for task-scope memories."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(project_id=project.id, title=f"{type_name} task")
+    memory = Memory.create(
+        project_id=project.id,
+        type=type_name,
+        title="Scoped entry",
+        content="Scoped details",
+        scope="task",
+        level=None,
+        task_id=task.id,
+    )
+
+    list_result = runner.invoke(cli, [type_name, "list"])
+    assert list_result.exit_code == 0, list_result.output
+    assert "Scope" in list_result.output
+    assert "Level" in list_result.output
+    assert "Task ID" in list_result.output
+    assert "task" in list_result.output
+    assert task.id in list_result.output
+
+    get_result = runner.invoke(cli, [type_name, "get", memory.id])
+    assert get_result.exit_code == 0, get_result.output
+    assert "Scope: task" in get_result.output
+    assert "Level: -" in get_result.output
+    assert f"Task ID: {task.id}" in get_result.output
 
 
 def test_commit_rejects_invalid_message(tmp_db, project, monkeypatch):

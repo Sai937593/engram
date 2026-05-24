@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): add explicit scope/level override handling for typed lesson/snippet commands, requiring level for project scope, validating task-scope task_id ownership, and adding override regression tests.
+- fix(cli): align typed memory shortcut defaults with Phase 2 scope contract (constraint=L1 project, decision=L2 project, lesson/snippet=task scope with active-task linkage) and add lesson override options for project scope/level.
+- feat(cli): include scope/level/task_id metadata in typed memory list/get output and normalize empty memory metadata display to `-` across generic and typed memory views.
+- feat(cli): add shared memory scope/level/task_id validation helpers for `engram memory add/update`, including project-scoped task_id checks and scope metadata in generic memory list/get output.
 - fix(db): backfill legacy memory scopes and levels according to the project/task memory contract.
 - feat(model): add deterministic memory scope listing helpers for project guardrail candidates (project L0/L1) and task-scope memories, with helper-level filtering/order tests.
 - fix(model): enforce memory scope/level validation in `Memory.create`/`Memory.update` (project requires L0-L3, task forbids level), and align memory command defaults/tests to the new contract.
