@@ -1,11 +1,25 @@
 """Shared helpers for memory CLI command modules."""
 
+import click
 from rich.table import Table
 
 import engram.cli as cli_root
-from engram.models.memory import Memory
+from engram.models.memory import (
+    VALID_MEMORY_SCOPES,
+    Memory,
+)
+from engram.models.task import Task
 
-VALID_MEMORY_FIELDS = {"title", "content", "type", "tags", "always_include"}
+VALID_MEMORY_FIELDS = {
+    "title",
+    "content",
+    "type",
+    "tags",
+    "always_include",
+    "scope",
+    "level",
+    "task_id",
+}
 VALID_MEMORY_TYPES = {"note", "lesson", "decision", "constraint", "snippet"}
 DEFAULT_PROJECT_LEVEL_BY_TYPE = {
     "constraint": "L1",
@@ -14,6 +28,7 @@ DEFAULT_PROJECT_LEVEL_BY_TYPE = {
     "note": "L3",
     "snippet": "L3",
 }
+NULLISH_VALUES = {"none", "null", "clear"}
 
 
 def default_scope_level_for_type(memory_type: str) -> tuple[str, str]:
@@ -21,11 +36,129 @@ def default_scope_level_for_type(memory_type: str) -> tuple[str, str]:
     return "project", DEFAULT_PROJECT_LEVEL_BY_TYPE.get(memory_type, "L3")
 
 
+def normalize_optional_value(value: str | None) -> str | None:
+    """Normalize optional CLI values so blank/null-like strings become None."""
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.casefold() in NULLISH_VALUES:
+        return None
+    return normalized
+
+
+def resolve_task_id_in_project(task_id: str | None, project_id: str) -> str | None:
+    """Validate that task_id, when present, belongs to the active project."""
+    normalized_task_id = normalize_optional_value(task_id)
+    if normalized_task_id is None:
+        return None
+
+    task = Task.get(normalized_task_id)
+    if not task or task.project_id != project_id:
+        raise click.ClickException(f"Task '{normalized_task_id}' not found in the current project.")
+    return task.id
+
+
+def validate_memory_scope_contract(
+    *,
+    project_id: str,
+    scope: str,
+    level: str | None,
+    task_id: str | None,
+) -> tuple[str, str | None, str | None]:
+    """Validate and normalize the shared memory scope/level/task contract."""
+    normalized_scope = scope.strip().lower()
+    if normalized_scope not in VALID_MEMORY_SCOPES:
+        allowed = ", ".join(sorted(VALID_MEMORY_SCOPES))
+        raise click.ClickException(f"Invalid memory scope '{scope}'. Allowed values: {allowed}.")
+
+    try:
+        normalized_level = Memory._validate_scope_level(scope=normalized_scope, level=level)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    normalized_task_id = resolve_task_id_in_project(task_id, project_id)
+    return normalized_scope, normalized_level, normalized_task_id
+
+
+def resolve_memory_add_contract(
+    *,
+    project_id: str,
+    memory_type: str,
+    scope: str | None,
+    level: str | None,
+    task_id: str | None,
+) -> tuple[str, str | None, str | None]:
+    """Resolve and validate memory add scope inputs with backward-compatible defaults."""
+    requested_scope = normalize_optional_value(scope)
+    if requested_scope is None:
+        requested_scope = default_scope_level_for_type(memory_type)[0]
+
+    requested_level = level
+    if level is None and requested_scope == "project":
+        if normalize_optional_value(scope) is None:
+            requested_level = default_scope_level_for_type(memory_type)[1]
+
+    return validate_memory_scope_contract(
+        project_id=project_id,
+        scope=requested_scope,
+        level=requested_level,
+        task_id=task_id,
+    )
+
+
+def resolve_memory_update_field_value(
+    *,
+    project_id: str,
+    memory: Memory,
+    field: str,
+    value: str,
+) -> dict[str, str | list[str] | bool | None]:
+    """Convert and validate a memory update field/value payload."""
+    if field == "tags":
+        return {"tags": value.split(",")}
+
+    if field == "always_include":
+        return {"always_include": value.lower() in ("true", "1", "yes")}
+
+    if field == "task_id":
+        normalized_task_id = resolve_task_id_in_project(value, project_id)
+        return {"task_id": normalized_task_id}
+
+    if field not in {"scope", "level"}:
+        return {field: value}
+
+    next_scope = memory.scope
+    next_level = memory.level
+    next_task_id = memory.task_id
+
+    if field == "scope":
+        next_scope = value
+        if normalize_optional_value(value) == "task":
+            next_level = None
+        elif normalize_optional_value(value) == "project" and memory.level is None:
+            next_level = default_scope_level_for_type(memory.type)[1]
+    elif field == "level":
+        next_level = value
+
+    normalized_scope, normalized_level, normalized_task_id = validate_memory_scope_contract(
+        project_id=project_id,
+        scope=next_scope,
+        level=next_level,
+        task_id=next_task_id,
+    )
+    return {"scope": normalized_scope, "level": normalized_level, "task_id": normalized_task_id}
+
+
 def print_memory_details(memory: Memory) -> None:
     """Render a single memory in full detail."""
     cli_root.console.print(f"[cyan]ID:[/cyan] {memory.id}")
     cli_root.console.print(f"[cyan]Title:[/cyan] {memory.title}")
     cli_root.console.print(f"[cyan]Type:[/cyan] {memory.type}")
+    cli_root.console.print(f"[cyan]Scope:[/cyan] {memory.scope}")
+    cli_root.console.print(f"[cyan]Level:[/cyan] {memory.level or 'N/A'}")
+    cli_root.console.print(f"[cyan]Task ID:[/cyan] {memory.task_id or 'N/A'}")
     cli_root.console.print(f"[cyan]Tags:[/cyan] {', '.join(memory.tags)}")
     cli_root.console.print(f"[cyan]Always Include:[/cyan] {memory.always_include}")
     cli_root.console.print(f"[cyan]Content:[/cyan]\n{memory.content}")

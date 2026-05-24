@@ -8,9 +8,10 @@ from engram.cli.memory_cmds import memory
 from engram.cli.memory_cmds_common import (
     VALID_MEMORY_FIELDS,
     VALID_MEMORY_TYPES,
-    default_scope_level_for_type,
     get_memory_or_print_error,
     print_memory_details,
+    resolve_memory_add_contract,
+    resolve_memory_update_field_value,
 )
 from engram.models.memory import Memory
 
@@ -26,23 +27,36 @@ from engram.models.memory import Memory
 )
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--always-include", is_flag=True, help="Always include in context")
+@click.option("--scope", help="Memory scope (project or task)")
+@click.option("--level", help="Project memory level (L0, L1, L2, L3)")
+@click.option("--task-id", help="Optional linked/origin task ID")
 def memory_add(
     title: str,
     content: str,
     type: str,
     tags: str | None,
     always_include: bool,
+    scope: str | None,
+    level: str | None,
+    task_id: str | None,
 ) -> None:
     """Add a new memory to the current project."""
     project = cli_root.get_current_project()
-    scope, level = default_scope_level_for_type(type)
+    normalized_scope, normalized_level, normalized_task_id = resolve_memory_add_contract(
+        project_id=project.id,
+        memory_type=type,
+        scope=scope,
+        level=level,
+        task_id=task_id,
+    )
     memory_item = Memory.create(
         project_id=project.id,
         title=title,
         content=content,
         type=type,
-        scope=scope,
-        level=level,
+        scope=normalized_scope,
+        level=normalized_level,
+        task_id=normalized_task_id,
         tags=tags.split(",") if tags else [],
         always_include=always_include,
     )
@@ -66,10 +80,19 @@ def memory_list() -> None:
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title", style="white")
     table.add_column("Type", style="magenta")
+    table.add_column("Scope", style="green")
+    table.add_column("Level", style="blue")
+    table.add_column("Task ID", style="cyan")
     table.add_column("Tags", style="dim blue")
     for memory_item in memories:
         table.add_row(
-            memory_item.id, memory_item.title, memory_item.type, ", ".join(memory_item.tags)
+            memory_item.id,
+            memory_item.title,
+            memory_item.type,
+            memory_item.scope,
+            memory_item.level or "N/A",
+            memory_item.task_id or "N/A",
+            ", ".join(memory_item.tags),
         )
     cli_root.console.print(table)
 
@@ -110,10 +133,14 @@ def memory_get(memory_id: str) -> None:
 
 @memory.command(name="update")
 @click.argument("memory_id")
-@click.option("--field", help="Field to update (title, content, type, tags, always_include)")
+@click.option(
+    "--field",
+    help="Field to update (title, content, type, tags, always_include, scope, level, task_id)",
+)
 @click.option("--value", help="New value for the field")
 def memory_update(memory_id: str, field: str | None, value: str | None) -> None:
     """Update a memory field."""
+    project = cli_root.get_current_project()
     memory_item = get_memory_or_print_error(memory_id)
     if not memory_item:
         return
@@ -134,13 +161,13 @@ def memory_update(memory_id: str, field: str | None, value: str | None) -> None:
         cli_root.console.print(f"[red]Error:[/red] Invalid type '{value}'. Valid: {valid_types}")
         return
 
-    converted_value: str | list[str] | bool = value
-    if field == "tags":
-        converted_value = value.split(",")
-    elif field == "always_include":
-        converted_value = value.lower() in ("true", "1", "yes")
-
-    memory_item.update(**{field: converted_value})
+    update_payload = resolve_memory_update_field_value(
+        project_id=project.id,
+        memory=memory_item,
+        field=field,
+        value=value,
+    )
+    memory_item.update(**update_payload)
     cli_root.console.print(f"[green]Memory '{memory_id}' updated.[/green]")
 
 
