@@ -4,9 +4,12 @@ Date: 2026-05-24
 
 ## Scope and Method
 
-- Evaluated current FTS-first behavior only (no code or ranking changes).
+- Evaluated FTS-first retrieval in two checkpoints during Phase 9:
+  - baseline examples to capture misses/false positives
+  - post-tuning verification after deterministic non-signal term filtering
 - Collected evidence with:
   - `engram memory related-to-task <task-id> --debug`
+  - `engram start --debug-retrieval`
   - `uv run python` script calling `build_task_retrieval_query`, `retrieve_task_memory_candidates`, and `pack_task_memories` to compare candidate vs selected IDs.
 
 ## Observed Defaults (Current Behavior)
@@ -14,10 +17,23 @@ Date: 2026-05-24
 - `max_candidates=20`
 - `selected_item_count=6` in all sampled runs (preferred-K cap)
 - `section_char_budget=3600`
+- `max_query_terms=48`
+- `max_term_chars=64`
 - Observed `used_char_count` range: `1428-1687`
 - `section_budget_exhausted=False` in all sampled runs
 
 Interpretation: hidden items in this sample are caused by preferred-K selection, not by section budget pressure.
+
+## Phase 9 Tuning Applied
+
+- Tuned query normalization to remove non-signal lexical terms before SQLite FTS `MATCH`.
+- Filter set includes structural labels and common filler/drift terms observed in evaluation, including:
+  - `task`, `title`, `description`, `acceptance`, `tags`, `phase`, `context`
+  - `debug`, `output`, `query`, `test`, `tests`
+  - `a`, `an`, `and`, `for`, `in`, `of`, `or`, `the`, `to`, `with`, `not`
+- Retrieval/packing defaults (`max_candidates`, preferred K, section budget) were not changed in this tuning step.
+
+Rationale: evaluation examples showed generic lexical overlap was a major source of false positives for non-retrieval tasks; removing non-signal terms addresses that drift without changing deterministic ordering or startup budget behavior.
 
 ## Evaluated Examples
 
@@ -37,11 +53,34 @@ Interpretation: hidden items in this sample are caused by preferred-K selection,
 2. **Generic-term lexical drift:** terms like "task", "debug", "output", "tests", and "query" pull retrieval-internal memories into unrelated tasks.
 3. **Preferred-K truncation of relevant candidates:** with many near-matches, at least one relevant candidate can be hidden at `selected_item_count=6`.
 
+## Known Strengths
+
+- Retrieval-focused tasks show strong recall for FTS normalization, fallback handling, and orchestration-related memories.
+- Deterministic ordering and metadata are stable enough to inspect with debug commands and regression tests.
+- Startup retrieval degrades safely when query/FTS paths fail (fallback metadata + empty candidate set).
+
 ## K and Budget Validation (Current Evidence)
 
 - Current packing budget (`3600`) is not the limiting factor in sampled runs.
 - Current selected count (`6`) is adequate for retrieval-heavy tasks, but often too permissive for non-retrieval tasks because irrelevant memories still fill all slots.
-- Evidence supports carrying these defaults into the next tuning task, with targeted follow-up on relevance thresholds/scope strategy rather than budget expansion.
+- Evidence supports carrying these defaults forward, with follow-up focused on scope strategy and lexical relevance thresholds rather than budget expansion.
+
+## Practical Debug Workflow
+
+1. Run `engram memory related-to-task <task-id> --debug` to inspect query text, normalized FTS terms, candidate ranks/boosts, selected items, hidden count, and budget usage.
+2. Run `engram start --debug-retrieval` to verify startup-path behavior uses the same query/retrieval/packing contracts.
+3. If expected project-level guidance is missing, verify whether the memory is `scope=project` (current task-memory retrieval intentionally excludes it).
+4. If unrelated retrieval-internal memories appear, inspect normalized query terms for lexical drift and compare against the non-signal term filter.
+5. Confirm whether a relevant item was retrieved but hidden by preferred-K (`selected_item_count=6`) versus excluded before selection.
+
+## Evidence Links (This Phase)
+
+- Example-driven evaluation artifact and failure-mode table: this document.
+- Regression coverage for observed misses/false positives:
+  - `tests/test_memory_retrieval_fts_retriever.py::test_phase9_scope_gap_still_misses_project_scope_docs_guidance`
+  - `tests/test_memory_retrieval_fts_retriever.py::test_phase9_generic_terms_do_not_pull_irrelevant_retrieval_internals`
+- Tuned FTS non-signal filtering implementation:
+  - `src/engram/memory_retrieval/fts_query.py` (`_NON_SIGNAL_TERMS`)
 
 ## Semantic Retrieval Recommendation
 
