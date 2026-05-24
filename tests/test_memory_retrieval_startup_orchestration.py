@@ -100,6 +100,36 @@ def test_startup_orchestration_returns_empty_pack_for_no_match(project) -> None:
     assert result.pack_result.metadata.selected_item_count == 0
 
 
+def test_startup_orchestration_prefers_empty_pack_over_weak_fill(project) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase Weak Fill", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Prepare release manual",
+        description="Write public docs checklist.",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Internal retrieval note",
+        content="release manual internals for unrelated debug checks",
+        scope="task",
+        task_id=None,
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    assert result.retrieval_metadata.returned_candidate_count == 1
+    assert result.pack_result.items == ()
+    assert result.pack_result.metadata.selected_item_count == 0
+    assert result.pack_result.metadata.relevance_filtered_count == 1
+
+
 def test_startup_orchestration_converts_retriever_exceptions_to_fallback_metadata(
     project,
     monkeypatch,

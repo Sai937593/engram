@@ -32,7 +32,9 @@ def format_retrieval_debug_output(result: StartupTaskMemoryRetrievalResult) -> s
         f"threshold_filtered_row_count={retrieval.threshold_filtered_row_count}",
         "pack candidate metadata: "
         f"input_candidate_count={pack.input_candidate_count}, "
-        f"unique_candidate_count={pack.unique_candidate_count}",
+        f"unique_candidate_count={pack.unique_candidate_count}, "
+        f"min_selection_boost_score={pack.min_selection_boost_score}, "
+        f"relevance_filtered_count={pack.relevance_filtered_count}",
         "selected counts: "
         f"selected_item_count={pack.selected_item_count}, "
         f"hidden_item_count={pack.hidden_item_count}, "
