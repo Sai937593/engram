@@ -169,8 +169,7 @@ def start():
     git_checkout_phase_branch(t)
 
     # Print the rich context
-    context_str = get_task_context(t.id)
-    # Also print the global rules if we want, or just rely on get_task_context which includes PROJECT KNOWLEDGE
+    context_str = get_task_context(t.id, hard_constraints_only=True)
     cli_root.console.print("\n" + "=" * 40)
     cli_root.console.print(context_str)
     cli_root.console.print("=" * 40 + "\n")

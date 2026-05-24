@@ -3,6 +3,18 @@ from typing import Any
 
 from engram.db import get_db_connection
 from engram.models.audit import AuditLog
+from engram.models.phase_persistence import (
+    fetch_phase_row,
+    fetch_project_phase_rows,
+    insert_phase,
+    resolve_next_order_index,
+    update_phase_fields,
+)
+from engram.models.phase_transitions import (
+    activate_phase,
+    demote_phase_to_planned,
+    list_other_active_phase_ids,
+)
 
 
 class Phase:
@@ -49,31 +61,18 @@ class Phase:
         conn = get_db_connection()
         resolved_order_index = order_index
         if resolved_order_index is None:
-            row = conn.execute(
-                """
-                SELECT COALESCE(MAX(order_index), -1) + 1 AS next_order_index
-                FROM phases
-                WHERE project_id = ?
-                """,
-                (project_id,),
-            ).fetchone()
-            resolved_order_index = int(row["next_order_index"])
+            resolved_order_index = resolve_next_order_index(conn, project_id)
 
-        conn.execute(
-            """
-            INSERT INTO phases (id, project_id, title, description, status, order_index, acceptance, evidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                phase_id,
-                project_id,
-                title,
-                description,
-                status,
-                resolved_order_index,
-                acceptance,
-                evidence,
-            ),
+        insert_phase(
+            conn=conn,
+            phase_id=phase_id,
+            project_id=project_id,
+            title=title,
+            description=description,
+            status=status,
+            order_index=resolved_order_index,
+            acceptance=acceptance,
+            evidence=evidence,
         )
         conn.commit()
         conn.close()
@@ -95,7 +94,7 @@ class Phase:
     def get(cls, id: str) -> "Phase | None":
         """Get a phase by id."""
         conn = get_db_connection()
-        row = conn.execute("SELECT * FROM phases WHERE id = ?", (id,)).fetchone()
+        row = fetch_phase_row(conn, id)
         conn.close()
         if row:
             return cls.from_row(row)
@@ -105,14 +104,7 @@ class Phase:
     def list_by_project(cls, project_id: str) -> list["Phase"]:
         """List project phases ordered by index."""
         conn = get_db_connection()
-        rows = conn.execute(
-            """
-            SELECT * FROM phases
-            WHERE project_id = ?
-            ORDER BY order_index ASC, created_at ASC
-            """,
-            (project_id,),
-        ).fetchall()
+        rows = fetch_project_phase_rows(conn, project_id)
         conn.close()
         return [cls.from_row(row) for row in rows]
 
@@ -132,8 +124,7 @@ class Phase:
 
     def update(self, **kwargs: Any) -> None:
         """Update mutable phase fields."""
-        updates = []
-        params = []
+        pending_updates: dict[str, Any] = {}
         allowed_fields = {"title", "description", "status", "order_index", "acceptance", "evidence"}
 
         for key, value in kwargs.items():
@@ -146,8 +137,7 @@ class Phase:
 
             old_value = getattr(self, key)
             if old_value != value:
-                updates.append(f"{key} = ?")
-                params.append(value)
+                pending_updates[key] = value
                 setattr(self, key, value)
                 AuditLog.log(
                     "phases",
@@ -158,14 +148,11 @@ class Phase:
                     new_value=str(value),
                 )
 
-        if not updates:
+        if not pending_updates:
             return
 
-        updates.append("updated_at = datetime('now')")
-        params.append(self.id)
-
         conn = get_db_connection()
-        conn.execute(f"UPDATE phases SET {', '.join(updates)} WHERE id = ?", params)
+        update_phase_fields(conn, self.id, pending_updates)
         conn.commit()
         conn.close()
 
@@ -178,25 +165,10 @@ class Phase:
 
         conn = get_db_connection()
         audit_events: list[dict[str, str]] = []
-        other_active_rows = conn.execute(
-            """
-            SELECT id
-            FROM phases
-            WHERE project_id = ? AND status = 'active' AND id != ?
-            """,
-            (phase.project_id, phase.id),
-        ).fetchall()
-        demoted_ids = [row["id"] for row in other_active_rows]
+        demoted_ids = list_other_active_phase_ids(conn, phase.project_id, phase.id)
 
         for demoted_id in demoted_ids:
-            conn.execute(
-                """
-                UPDATE phases
-                SET status = 'planned', updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                (demoted_id,),
-            )
+            demote_phase_to_planned(conn, demoted_id)
             audit_events.append(
                 {
                     "target_id": demoted_id,
@@ -206,14 +178,7 @@ class Phase:
             )
 
         if phase.status != "active":
-            conn.execute(
-                """
-                UPDATE phases
-                SET status = 'active', updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                (phase.id,),
-            )
+            activate_phase(conn, phase.id)
             audit_events.append(
                 {
                     "target_id": phase.id,

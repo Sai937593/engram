@@ -4,6 +4,7 @@ import pytest
 from click.testing import CliRunner
 
 from engram.cli import cli
+from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.task import Task
 
@@ -72,6 +73,42 @@ def test_start_success_when_clean(tmp_db, project, mock_git, monkeypatch):
     in_progress = [t for t in Task.list_by_project(project.id) if t.status == "in-progress"]
     assert len(in_progress) == 1
     assert in_progress[0].title == "Task 1"
+
+
+def test_start_context_includes_only_hard_constraints(tmp_db, project, mock_git, monkeypatch):
+    """engram start prints task context plus hard constraints only."""
+    task = Task.create(project_id=project.id, title="Task 1", phase="Phase 1", status="todo")
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="No secrets",
+        content="Use .env",
+        always_include=True,
+    )
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Use WAL",
+        content="Enable WAL mode",
+        always_include=True,
+    )
+    Memory.create(
+        project_id=project.id,
+        task_id=task.id,
+        type="note",
+        title="Task note",
+        content="Do this first",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "HARD CONSTRAINTS" in result.output
+    assert "No secrets" in result.output
+    assert "PROJECT KNOWLEDGE" not in result.output
+    assert "Use WAL" not in result.output
+    assert "LINKED MEMORIES" not in result.output
+    assert "Task note" not in result.output
 
 
 def test_start_blocks_when_dirty_and_switching_branch(tmp_db, project, mock_git, monkeypatch):

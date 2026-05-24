@@ -95,8 +95,8 @@ def _compact_text(text: str | None) -> str:
     return text.encode("ascii", errors="replace").decode("ascii")
 
 
-def get_task_context(task_id: str) -> str:
-    """Generate focused context for a specific task, including project-wide knowledge."""
+def get_task_context(task_id: str, hard_constraints_only: bool = False) -> str:
+    """Generate focused context for a specific task."""
     task = Task.get(task_id)
     if not task:
         return "Task not found."
@@ -129,17 +129,26 @@ def get_task_context(task_id: str) -> str:
     if task.acceptance:
         context.append(f"\nAcceptance Criteria:\n{task.acceptance}")
 
-    # Memories linked directly to this task
-    memories = Memory.list_by_project(task.project_id)
-    linked_memories = [m for m in memories if m.task_id == task_id]
-    if linked_memories:
-        context.append("\n## LINKED MEMORIES")
-        for m in linked_memories:
-            context.append(f"### {m.title} ({m.type})")
-            context.append(m.content)
+    if not hard_constraints_only:
+        # Memories linked directly to this task
+        memories = Memory.list_by_project(task.project_id)
+        linked_memories = [m for m in memories if m.task_id == task_id]
+        if linked_memories:
+            context.append("\n## LINKED MEMORIES")
+            for m in linked_memories:
+                context.append(f"### {m.title} ({m.type})")
+                context.append(m.content)
 
     # Project-wide knowledge every agent needs before touching any task
     constraints = Memory.list_by_type(task.project_id, "constraint")
+    if hard_constraints_only:
+        if constraints:
+            context.append("\n## HARD CONSTRAINTS")
+            for m in constraints:
+                context.append(f"### [CONSTRAINT] {m.title}")
+                context.append(m.content)
+        return "\n".join(context)
+
     lessons = Memory.list_by_type(task.project_id, "lesson")
     if constraints or lessons:
         context.append("\n## PROJECT KNOWLEDGE")

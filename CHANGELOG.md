@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(cli): limit `engram start` task context output to task details plus hard constraints only, excluding lessons and linked memories.
 - fix(cli): align remaining phase-task workflow gaps for start fallback, task next phase display, and manual docs.
 - feat(cli): completely remove output truncation across CLI commands including memory search snippets, phase list summaries, and startup active tasks.
 - docs: document task command phase options and phase_id/phase fields including clearing logic in USER_MANUAL.md.
