@@ -50,6 +50,76 @@ def test_memory_add_rejects_task_scope_with_level(tmp_db, project, monkeypatch) 
     assert "Error: Task-scope memories must not define a level" in result.output
 
 
+def test_memory_add_rejects_invalid_scope_value(tmp_db, project, monkeypatch) -> None:
+    """memory add rejects unsupported scope values with a clear error."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            "memory",
+            "add",
+            "Rule",
+            "--content",
+            "Use uv",
+            "--scope",
+            "phase",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Error: Invalid memory scope 'phase'" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_memory_add_rejects_invalid_level_value(tmp_db, project, monkeypatch) -> None:
+    """memory add rejects unsupported project level values with a clear error."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            "memory",
+            "add",
+            "Rule",
+            "--content",
+            "Use uv",
+            "--scope",
+            "project",
+            "--level",
+            "L9",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Error: Invalid memory level 'L9'" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_memory_add_uses_backward_compatible_defaults_when_optional_flags_omitted(
+    tmp_db, project, monkeypatch
+) -> None:
+    """memory add keeps legacy defaults when scope/level/task_id are not provided."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            "memory",
+            "add",
+            "Rule",
+            "--content",
+            "Use uv",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    created = Memory.list_by_project(project.id)[0]
+    assert created.scope == "project"
+    assert created.level == "L3"
+    assert created.task_id is None
+
+
 def test_memory_add_accepts_task_scope_with_same_project_task(tmp_db, project, monkeypatch) -> None:
     """memory add accepts task scope when task_id belongs to current project."""
     runner = make_runner_with_project(monkeypatch, project)
@@ -168,6 +238,48 @@ def test_memory_update_task_id_requires_current_project_task(tmp_db, project, mo
 
     assert result.exit_code != 0
     assert "Error: Task 'missing123' not found in the current project." in result.output
+
+
+def test_memory_update_rejects_invalid_scope_value(tmp_db, project, monkeypatch) -> None:
+    """memory update rejects unsupported scope values with a clear error."""
+    runner = make_runner_with_project(monkeypatch, project)
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Local note",
+        content="Body",
+        scope="project",
+        level="L3",
+    )
+
+    result = runner.invoke(
+        cli, ["memory", "update", memory.id, "--field", "scope", "--value", "phase"]
+    )
+
+    assert result.exit_code != 0
+    assert "Error: Invalid memory scope 'phase'" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_memory_update_rejects_invalid_level_value(tmp_db, project, monkeypatch) -> None:
+    """memory update rejects unsupported level values with a clear error."""
+    runner = make_runner_with_project(monkeypatch, project)
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Local note",
+        content="Body",
+        scope="project",
+        level="L3",
+    )
+
+    result = runner.invoke(
+        cli, ["memory", "update", memory.id, "--field", "level", "--value", "L9"]
+    )
+
+    assert result.exit_code != 0
+    assert "Error: Invalid memory level 'L9'" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_memory_list_and_get_show_scope_fields(tmp_db, project, monkeypatch) -> None:
