@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): add `engram memory related-to-task <task-id>` command to inspect packed task memories with clear missing/foreign task ID errors and beautiful Rich table rendering.
 - feat(cli): add optional `engram start --debug-retrieval` diagnostics with deterministic query/candidate/selection/budget metadata output while keeping default startup output unchanged.
 - fix(retrieval): harden startup task-memory orchestration with query/retrieval/packing fallback resilience, deterministic empty-pack fallbacks, and orchestration timeout safeguards that degrade to metadata-backed empty results.
 - feat(cli): render `TASK MEMORY CANDIDATES` in startup context from packed retrieval results with deterministic empty-state output, section separation from project guardrails, and hidden-candidate cap messaging.

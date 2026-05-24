@@ -309,3 +309,55 @@ def test_memory_list_and_get_show_scope_fields(tmp_db, project, monkeypatch) -> 
     assert "Scope: task" in get_result.output
     assert "Level: -" in get_result.output
     assert f"Task ID: {task.id}" in get_result.output
+
+
+def test_memory_related_to_task_missing_error(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task rejects completely missing task ID with clear error."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["memory", "related-to-task", "missing1"])
+
+    assert result.exit_code != 0
+    assert "Error: Task 'missing1' not found in the current project." in result.output
+    assert "Traceback" not in result.output
+
+
+def test_memory_related_to_task_foreign_error(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task rejects foreign task belonging to another project."""
+    runner = make_runner_with_project(monkeypatch, project)
+    other_project = Project.create("other", "Other", repo_paths=["/tmp/other"])
+    foreign_task = Task.create(project_id=other_project.id, title="Foreign task")
+
+    result = runner.invoke(cli, ["memory", "related-to-task", foreign_task.id])
+
+    assert result.exit_code != 0
+    assert (
+        f"Error: Task '{foreign_task.id}' is a foreign task belonging to another project."
+        in result.output
+    )
+    assert "Traceback" not in result.output
+
+
+def test_memory_related_to_task_success(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task displays packed memories in a Rich Table for a valid task."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(
+        project_id=project.id, title="Solve logic bug", description="FTS matches logic here"
+    )
+
+    # Create memory with matching terms
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Logic bug hint",
+        content="Always use logic and solve the bug cleanly",
+        scope="task",
+        task_id=task.id,
+    )
+
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id])
+
+    assert result.exit_code == 0, result.output
+    assert f"Related Memories for Task '{task.id}'" in result.output
+    assert memory.id in result.output
+    assert "Logic bug hint" in result.output
