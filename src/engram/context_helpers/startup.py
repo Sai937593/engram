@@ -1,84 +1,285 @@
 """Startup context rendering."""
 
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from engram.context_helpers.common import compact_text
 from engram.models.memory import Memory
+from engram.models.phase import Phase
 from engram.models.project import Project
-from engram.models.task import Task
+from engram.models.task import Task, get_effective_phase_title
+
+TOKEN_TO_CHAR_APPROX = 4
+STARTUP_TARGET_TOKEN_BUDGET_MIN = 1500
+STARTUP_TARGET_TOKEN_BUDGET_MAX = 2000
+STARTUP_HARD_TOKEN_BUDGET = 3000
+STARTUP_TARGET_CHAR_BUDGET_MIN = STARTUP_TARGET_TOKEN_BUDGET_MIN * TOKEN_TO_CHAR_APPROX
+STARTUP_TARGET_CHAR_BUDGET_MAX = STARTUP_TARGET_TOKEN_BUDGET_MAX * TOKEN_TO_CHAR_APPROX
+STARTUP_HARD_CHAR_BUDGET = STARTUP_HARD_TOKEN_BUDGET * TOKEN_TO_CHAR_APPROX
+CONTEXT_TRUNCATION_MARKER = "\n\n[Context truncated to fit budget.]"
 
 
-def build_startup_context(project_id: str) -> str:
-    """Generate a compact, agent-optimized startup context string."""
-    project = Project.get(project_id)
+@dataclass(frozen=True)
+class StartupContextOptions:
+    """Configuration for deterministic startup context rendering."""
 
-    constraints = Memory.list_by_type(project_id, "constraint")
-    lessons = Memory.list_by_type(project_id, "lesson")
-    decisions = Memory.list_by_type(project_id, "decision")
-    all_memories = Memory.list_by_project(project_id)
-    typed_ids = {memory.id for memory in constraints + lessons + decisions}
-    other_always_include = [
-        memory for memory in all_memories if memory.always_include and memory.id not in typed_ids
+    target_char_budget: int = STARTUP_TARGET_CHAR_BUDGET_MAX
+    hard_char_budget: int = STARTUP_HARD_CHAR_BUDGET
+    project_summary_char_limit: int = 400
+    phase_text_char_limit: int = 400
+    task_text_char_limit: int = 500
+    guardrail_text_char_limit: int = 220
+    task_memory_placeholder_text: str = (
+        "Retrieval is not enabled in this phase. Placeholder section only."
+    )
+    task_memory_placeholder_char_limit: int = 220
+    l1_guardrail_limit: int = 6
+
+
+def _compact_with_limit(text: str | None, char_limit: int) -> str:
+    """Convert text to ASCII and truncate deterministically when needed."""
+    compacted = compact_text(text)
+    if not compacted or char_limit <= 0:
+        return ""
+    if len(compacted) <= char_limit:
+        return compacted
+    if char_limit <= 3:
+        return compacted[:char_limit]
+    return compacted[: char_limit - 3].rstrip() + "..."
+
+
+def _enforce_hard_budget(rendered: str, hard_char_budget: int) -> str:
+    """Cap output length with a deterministic truncation marker."""
+    if hard_char_budget <= 0:
+        return ""
+    if len(rendered) <= hard_char_budget:
+        return rendered
+
+    if hard_char_budget <= len(CONTEXT_TRUNCATION_MARKER):
+        return CONTEXT_TRUNCATION_MARKER[:hard_char_budget]
+
+    visible = rendered[: hard_char_budget - len(CONTEXT_TRUNCATION_MARKER)].rstrip()
+    return f"{visible}{CONTEXT_TRUNCATION_MARKER}"
+
+
+def _render_section(title: str, lines: list[str]) -> str:
+    """Render one startup section block."""
+    rendered_lines = [f"## {title}"]
+    rendered_lines.extend(line for line in lines if line)
+    return "\n".join(rendered_lines)
+
+
+def _build_project_frame(project: Project, options: StartupContextOptions) -> str:
+    lines = [f"Name: {project.name}"]
+    summary = _compact_with_limit(project.summary, options.project_summary_char_limit)
+    if summary:
+        lines.append(f"Summary: {summary}")
+    return _render_section("PROJECT FRAME", lines)
+
+
+def _build_phase_frame(active_phase: Phase | None, options: StartupContextOptions) -> str:
+    if not active_phase:
+        return _render_section("CURRENT PHASE FRAME", ["No active phase selected."])
+
+    lines = [
+        f"Phase: {active_phase.title} ({active_phase.id})",
+        f"Status: {active_phase.status}",
     ]
+    goal = _compact_with_limit(active_phase.description, options.phase_text_char_limit)
+    acceptance = _compact_with_limit(active_phase.acceptance, options.phase_text_char_limit)
+    if goal:
+        lines.append(f"Goal: {goal}")
+    if acceptance:
+        lines.append(f"Acceptance: {acceptance}")
+    return _render_section("CURRENT PHASE FRAME", lines)
 
-    context: list[str] = []
-    context.append(f"# PROJECT: {project.name}")
-    if project.summary:
-        context.append(f"Summary: {project.summary}")
 
-    if constraints:
-        context.append("\n## CONSTRAINTS")
-        for memory in constraints:
-            context.append(f"### {memory.title}")
-            context.append(memory.content)
+def _build_task_frame(selected_task: Task | None, options: StartupContextOptions) -> str:
+    if not selected_task:
+        return _render_section("CURRENT/NEXT TASK FRAME", ["No current or next task selected."])
 
-    if lessons:
-        context.append("\n## LESSONS LEARNED")
-        for memory in lessons:
-            context.append(f"### {memory.title}")
-            context.append(memory.content)
+    task_slot = "current" if selected_task.status == "in-progress" else "next"
+    lines = [
+        f"Selected: {task_slot}",
+        f"Task: {selected_task.title} ({selected_task.id})",
+        f"Status: {selected_task.status}",
+        f"Priority: {selected_task.priority}",
+    ]
+    effective_phase_title = get_effective_phase_title(selected_task)
+    if effective_phase_title:
+        lines.append(f"Phase: {effective_phase_title}")
 
-    if decisions:
-        context.append("\n## KEY DECISIONS")
-        for memory in decisions:
-            context.append(f"### {memory.title}")
-            context.append(memory.content)
+    description = _compact_with_limit(selected_task.description, options.task_text_char_limit)
+    acceptance = _compact_with_limit(selected_task.acceptance, options.task_text_char_limit)
+    if description:
+        lines.append(f"Description: {description}")
+    if acceptance:
+        lines.append(f"Acceptance: {acceptance}")
+    if selected_task.tags:
+        lines.append(f"Tags: {', '.join(selected_task.tags)}")
 
-    if other_always_include:
-        context.append("\n## KEY MEMORIES")
-        for memory in other_always_include:
-            context.append(f"### {memory.title} ({memory.type})")
-            context.append(memory.content)
+    return _render_section("CURRENT/NEXT TASK FRAME", lines)
 
-    tasks = Task.list_by_project(project_id)
-    counts = Task.count_by_status(project_id)
-    total = sum(counts.values())
-    todo_tasks = [task for task in tasks if task.status in ("todo", "in-progress")]
 
-    if todo_tasks:
-        context.append("\n## ACTIVE TASKS")
-        for task in todo_tasks:
-            context.append(f"- [{task.status}] {task.title} ({task.id})")
+def _build_guardrail_frame(project_id: str, options: StartupContextOptions) -> str:
+    guardrails = Memory.list_project_guardrail_candidates(project_id)
+    l0_guardrails = [memory for memory in guardrails if memory.level == "L0"]
+    l1_guardrails = [memory for memory in guardrails if memory.level == "L1"]
+    capped_l1 = l1_guardrails[: options.l1_guardrail_limit]
+    hidden_l1_count = max(0, len(l1_guardrails) - len(capped_l1))
 
-    pending_count = len([task for task in tasks if task.status not in ("done", "cancelled")])
-    context.append(f"\nPending tasks: {pending_count}")
+    lines: list[str] = []
+    if not l0_guardrails and not capped_l1:
+        lines.append("No L0/L1 project guardrails found.")
+        return _render_section("PROJECT GUARDRAILS", lines)
 
-    if total == 0:
-        context.append(
-            "\n## STATUS: NO TASKS DEFINED\n"
-            "The next phase has not been planned. Before writing any code, ask the user\n"
-            "what the next phase of work should be, then add tasks:\n"
-            '  engram task add "<task title>" --phase "Phase N" --priority high'
-        )
-    elif pending_count == 0:
-        context.append(
-            "\n## STATUS: PHASE COMPLETE\n"
-            f"All {total} task(s) are done or cancelled. Confirm with the user whether\n"
-            "to plan the next phase or mark the project complete:\n"
-            '  engram task add "<next task>"  -- to continue\n'
-            "  engram project update --status archived  -- to close"
-        )
+    if l0_guardrails:
+        lines.append("L0 Identity:")
+        for memory in l0_guardrails:
+            content = _compact_with_limit(memory.content, options.guardrail_text_char_limit)
+            lines.append(f"- {memory.title}: {content}")
 
-    context.append(
-        "Tip: use 'engram task get <id>' for full detail,"
-        " 'engram memory search <topic>' to find context"
+    if capped_l1:
+        lines.append("L1 Constraints:")
+        for memory in capped_l1:
+            content = _compact_with_limit(memory.content, options.guardrail_text_char_limit)
+            lines.append(f"- {memory.title}: {content}")
+
+    if hidden_l1_count:
+        lines.append(f"... {hidden_l1_count} additional L1 guardrail(s) hidden by cap.")
+
+    return _render_section("PROJECT GUARDRAILS", lines)
+
+
+def _build_task_memory_placeholder(options: StartupContextOptions) -> str:
+    placeholder = _compact_with_limit(
+        options.task_memory_placeholder_text,
+        options.task_memory_placeholder_char_limit,
+    )
+    return _render_section(
+        "TASK MEMORY CANDIDATES",
+        [placeholder],
     )
 
-    return "\n".join(context)
+
+def _build_next_action(project: Project, selected_task: Task | None) -> str:
+    if selected_task:
+        return _render_section(
+            "NEXT ACTION",
+            [
+                f"Use this startup context to implement: {selected_task.title} ({selected_task.id}).",
+                f"If deeper context is needed: engram context task {selected_task.id}",
+            ],
+        )
+
+    counts = Task.count_by_status(project.id)
+    total = sum(counts.values())
+    pending = sum(count for status, count in counts.items() if status not in ("done", "cancelled"))
+
+    if total == 0:
+        return _render_section(
+            "NEXT ACTION",
+            [
+                "No tasks are defined yet.",
+                'Ask the user for the next phase and add work: engram task add "<task title>" --phase "Phase N" --priority high',
+            ],
+        )
+
+    if pending == 0:
+        return _render_section(
+            "NEXT ACTION",
+            [
+                f"All {total} tasks are done or cancelled.",
+                'Confirm whether to continue planning: engram task add "<next task>"',
+                "Or close the project: engram project update --status archived",
+            ],
+        )
+
+    blocked = counts.get("blocked", 0)
+    if blocked == pending:
+        return _render_section(
+            "NEXT ACTION",
+            [
+                f"All remaining tasks are blocked ({blocked}).",
+                "Resolve blockers or re-plan task ordering before running engram start again.",
+            ],
+        )
+
+    return _render_section(
+        "NEXT ACTION",
+        [
+            "No startup task selection was provided.",
+            "Run engram start to select the next actionable task.",
+        ],
+    )
+
+
+def _task_matches_phase(task: Task, phase: Phase) -> bool:
+    """Return True when task belongs to the phase via phase_id or legacy phase title."""
+    if task.phase_id == phase.id:
+        return True
+    if task.phase_id:
+        return False
+    return (
+        compact_text(task.phase).strip().casefold() == compact_text(phase.title).strip().casefold()
+    )
+
+
+def _resolve_default_startup_inputs(project_id: str) -> tuple[Phase | None, Task | None]:
+    """Resolve active phase and selected task for legacy project-id callers."""
+    phases = Phase.list_by_project(project_id)
+    active_phase = next((phase for phase in phases if phase.status == "active"), None)
+    tasks = Task.list_by_project(project_id)
+
+    if active_phase:
+        in_progress_active = [
+            task
+            for task in tasks
+            if task.status == "in-progress" and _task_matches_phase(task, active_phase)
+        ]
+        if in_progress_active:
+            return active_phase, in_progress_active[0]
+
+        next_active = Task.get_next_for_phase(project_id, active_phase.id, active_phase.title)
+        if next_active:
+            return active_phase, next_active
+
+        next_unphased = Task.get_next_unphased(project_id)
+        if next_unphased:
+            return active_phase, next_unphased
+
+    in_progress_any = [task for task in tasks if task.status == "in-progress"]
+    if in_progress_any:
+        return active_phase, in_progress_any[0]
+
+    return active_phase, Task.get_next(project_id)
+
+
+def build_startup_context(
+    project: Project | str,
+    active_phase: Phase | None = None,
+    selected_task: Task | None = None,
+    options: StartupContextOptions | None = None,
+) -> str:
+    """Generate the unified startup context from explicit startup inputs."""
+    resolved_options = options or StartupContextOptions()
+    resolved_project = project if isinstance(project, Project) else Project.get(project)
+    if not resolved_project:
+        return "Project not found."
+
+    if isinstance(project, str) and active_phase is None and selected_task is None:
+        active_phase, selected_task = _resolve_default_startup_inputs(resolved_project.id)
+
+    sections = [
+        "# STARTUP CONTEXT",
+        _build_project_frame(resolved_project, resolved_options),
+        _build_phase_frame(active_phase, resolved_options),
+        _build_task_frame(selected_task, resolved_options),
+        _build_guardrail_frame(resolved_project.id, resolved_options),
+        _build_task_memory_placeholder(resolved_options),
+        _build_next_action(resolved_project, selected_task),
+    ]
+
+    rendered = "\n\n".join(sections)
+    return _enforce_hard_budget(rendered, resolved_options.hard_char_budget)

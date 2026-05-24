@@ -350,7 +350,7 @@ def test_commit_warns_missing_task_id(tmp_db, project, monkeypatch, capsys):
 
 
 def test_startup_context_shows_constraints_first(tmp_db, project, monkeypatch):
-    """Startup context renders constraints before lessons."""
+    """Startup context includes guardrails and excludes non-guardrail lessons."""
     from engram.context import get_startup_context
 
     Memory.create(
@@ -371,26 +371,26 @@ def test_startup_context_shows_constraints_first(tmp_db, project, monkeypatch):
     )
 
     ctx = get_startup_context(project.id)
-    assert "## CONSTRAINTS" in ctx
-    assert "## LESSONS LEARNED" in ctx
-    assert ctx.index("## CONSTRAINTS") < ctx.index("## LESSONS LEARNED")
+    assert "## PROJECT GUARDRAILS" in ctx
+    assert "No pip" in ctx
+    assert "WAL mode" not in ctx
 
 
 def test_startup_context_no_tasks_phase_gap(tmp_db, project):
-    """Startup context shows NO TASKS DEFINED when project has zero tasks."""
+    """Startup context shows no-task guidance when project has zero tasks."""
     from engram.context import get_startup_context
 
     ctx = get_startup_context(project.id)
-    assert "NO TASKS DEFINED" in ctx
+    assert "No tasks are defined yet." in ctx
 
 
 def test_startup_context_phase_complete(tmp_db, project):
-    """Startup context shows PHASE COMPLETE when all work is finished."""
+    """Startup context shows completion guidance when all work is finished."""
     from engram.context import get_startup_context
 
     Task.create(project_id=project.id, title="Done", status="done")
     ctx = get_startup_context(project.id)
-    assert "PHASE COMPLETE" in ctx
+    assert "All 1 tasks are done or cancelled." in ctx
 
 
 def test_task_context_includes_project_knowledge(tmp_db, project, task):

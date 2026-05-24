@@ -1,7 +1,22 @@
 """Tests for context generation (startup and task context)."""
 
 from engram.context import get_startup_context, get_task_context
+from engram.context_helpers.startup import (
+    CONTEXT_TRUNCATION_MARKER,
+    STARTUP_HARD_CHAR_BUDGET,
+    STARTUP_HARD_TOKEN_BUDGET,
+    STARTUP_TARGET_CHAR_BUDGET_MAX,
+    STARTUP_TARGET_CHAR_BUDGET_MIN,
+    STARTUP_TARGET_TOKEN_BUDGET_MAX,
+    STARTUP_TARGET_TOKEN_BUDGET_MIN,
+    TOKEN_TO_CHAR_APPROX,
+    StartupContextOptions,
+    _compact_with_limit,
+    _enforce_hard_budget,
+    build_startup_context,
+)
 from engram.models.memory import Memory
+from engram.models.phase import Phase
 from engram.models.task import Task
 
 
@@ -33,6 +48,276 @@ def test_startup_context_no_crash_when_empty(project):
     """Startup context should work gracefully even with no tasks or sessions."""
     ctx = get_startup_context(project.id)
     assert "Test Project" in ctx
+
+
+def test_startup_builder_accepts_project_phase_and_task(project):
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Builder",
+        status="active",
+        description="Deliver the startup builder contract.",
+    )
+    task = Task.create(
+        project_id=project.id,
+        title="Implement startup builder",
+        phase_id=phase.id,
+        status="in-progress",
+        acceptance="Startup context uses unified sections.",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Local-first only",
+        content="Avoid remote dependencies.",
+        level="L1",
+    )
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
+
+    assert "## PROJECT FRAME" in ctx
+    assert "## CURRENT PHASE FRAME" in ctx
+    assert "## CURRENT/NEXT TASK FRAME" in ctx
+    assert "## PROJECT GUARDRAILS" in ctx
+    assert "## TASK MEMORY CANDIDATES" in ctx
+    assert "## NEXT ACTION" in ctx
+    assert "Implement startup builder" in ctx
+    assert "Local-first only" in ctx
+
+
+def test_startup_builder_handles_no_task_input(project):
+    phase = Phase.create(project_id=project.id, title="Phase Empty", status="active")
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=None)
+
+    assert "No current or next task selected." in ctx
+    assert "## NEXT ACTION" in ctx
+
+
+def test_startup_builder_caps_l1_guardrails(project):
+    Memory.create(
+        id="l0a00001",
+        project_id=project.id,
+        type="constraint",
+        title="Identity",
+        content="Core identity memory.",
+        level="L0",
+    )
+    Memory.create(
+        id="l1a00001",
+        project_id=project.id,
+        type="constraint",
+        title="Constraint A",
+        content="A",
+        level="L1",
+    )
+    Memory.create(
+        id="l1b00001",
+        project_id=project.id,
+        type="constraint",
+        title="Constraint B",
+        content="B",
+        level="L1",
+    )
+    Memory.create(
+        id="l1c00001",
+        project_id=project.id,
+        type="constraint",
+        title="Constraint C",
+        content="C",
+        level="L1",
+    )
+
+    ctx = build_startup_context(
+        project=project,
+        options=StartupContextOptions(l1_guardrail_limit=2),
+    )
+
+    assert "Identity" in ctx
+    assert "Constraint A" in ctx
+    assert "Constraint B" in ctx
+    assert "Constraint C" not in ctx
+    assert "hidden by cap" in ctx
+
+
+def test_startup_builder_guardrails_use_project_l0_l1_only_in_order(project):
+    Memory.create(
+        id="l1b00002",
+        project_id=project.id,
+        type="constraint",
+        title="L1 B",
+        content="Project L1 B",
+        scope="project",
+        level="L1",
+    )
+    Memory.create(
+        id="l2a00002",
+        project_id=project.id,
+        type="decision",
+        title="L2 decision",
+        content="Should not appear in guardrails.",
+        scope="project",
+        level="L2",
+    )
+    Memory.create(
+        id="l0a00002",
+        project_id=project.id,
+        type="constraint",
+        title="L0 Identity",
+        content="Project L0 identity",
+        scope="project",
+        level="L0",
+    )
+    Memory.create(
+        id="l1a00002",
+        project_id=project.id,
+        type="constraint",
+        title="L1 A",
+        content="Project L1 A",
+        scope="project",
+        level="L1",
+    )
+    task = Task.create(project_id=project.id, title="Scoped memory task", status="in-progress")
+    Memory.create(
+        id="taskm001",
+        project_id=project.id,
+        task_id=task.id,
+        type="lesson",
+        title="Task lesson",
+        content="Task-scope memory should not appear in guardrails.",
+        scope="task",
+    )
+    Memory.create(
+        id="l3a00002",
+        project_id=project.id,
+        type="snippet",
+        title="L3 snippet",
+        content="Should not appear in guardrails.",
+        scope="project",
+        level="L3",
+    )
+
+    ctx = build_startup_context(project=project)
+
+    guardrails_section = ctx.split("## PROJECT GUARDRAILS\n", maxsplit=1)[1].split(
+        "\n## TASK MEMORY CANDIDATES", maxsplit=1
+    )[0]
+    assert "L0 Identity" in guardrails_section
+    assert "L1 A" in guardrails_section
+    assert "L1 B" in guardrails_section
+    assert "L2 decision" not in guardrails_section
+    assert "L3 snippet" not in guardrails_section
+    assert "Task lesson" not in guardrails_section
+    assert guardrails_section.find("L0 Identity") < guardrails_section.find("L1 A")
+    assert guardrails_section.find("L1 A") < guardrails_section.find("L1 B")
+
+
+def test_startup_builder_guardrails_empty_and_separate_from_task_memory_placeholder(project):
+    ctx = build_startup_context(project=project)
+
+    assert "No L0/L1 project guardrails found." in ctx
+    guardrails_index = ctx.index("## PROJECT GUARDRAILS")
+    task_memory_index = ctx.index("## TASK MEMORY CANDIDATES")
+    assert guardrails_index < task_memory_index
+
+    guardrails_section = ctx.split("## PROJECT GUARDRAILS\n", maxsplit=1)[1].split(
+        "\n## TASK MEMORY CANDIDATES", maxsplit=1
+    )[0]
+    task_memory_section = ctx.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
+        "\n## NEXT ACTION", maxsplit=1
+    )[0]
+    assert (
+        "Retrieval is not enabled in this phase. Placeholder section only." in task_memory_section
+    )
+    assert "No L0/L1 project guardrails found." not in task_memory_section
+    assert (
+        "Retrieval is not enabled in this phase. Placeholder section only."
+        not in guardrails_section
+    )
+
+
+def test_startup_builder_compacts_text_and_enforces_hard_budget(project):
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Long",
+        status="active",
+        description="phase " + ("p" * 200),
+    )
+    task = Task.create(
+        project_id=project.id,
+        title="Task Long",
+        phase_id=phase.id,
+        status="todo",
+        description="desc " + ("d" * 200),
+    )
+    project.update(summary="summary " + ("s" * 200))
+
+    ctx = build_startup_context(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+        options=StartupContextOptions(
+            hard_char_budget=450,
+            project_summary_char_limit=40,
+            phase_text_char_limit=40,
+            task_text_char_limit=40,
+        ),
+    )
+
+    assert "..." in ctx
+    assert len(ctx) <= 450
+    assert ctx.endswith("[Context truncated to fit budget.]")
+
+
+def test_startup_budget_constants_match_design_plan():
+    assert TOKEN_TO_CHAR_APPROX == 4
+    assert STARTUP_TARGET_TOKEN_BUDGET_MIN == 1500
+    assert STARTUP_TARGET_TOKEN_BUDGET_MAX == 2000
+    assert STARTUP_HARD_TOKEN_BUDGET == 3000
+    assert STARTUP_TARGET_CHAR_BUDGET_MIN == 6000
+    assert STARTUP_TARGET_CHAR_BUDGET_MAX == 8000
+    assert STARTUP_HARD_CHAR_BUDGET == 12000
+
+
+def test_compact_with_limit_boundaries_and_empty_input():
+    assert _compact_with_limit(None, 20) == ""
+    assert _compact_with_limit("", 20) == ""
+    assert _compact_with_limit("hello", 0) == ""
+    assert _compact_with_limit("abc", 3) == "abc"
+    assert _compact_with_limit("abcd", 3) == "abc"
+    assert _compact_with_limit("abcd", 4) == "abcd"
+    assert _compact_with_limit("abcde", 4) == "a..."
+
+
+def test_enforce_hard_budget_boundaries_and_marker():
+    exact = "abcd"
+    assert _enforce_hard_budget(exact, 4) == exact
+
+    over = "abcde"
+    result = _enforce_hard_budget(over, 4)
+    assert result == CONTEXT_TRUNCATION_MARKER[:4]
+
+    larger_budget_result = _enforce_hard_budget("x" * 100, 60)
+    assert len(larger_budget_result) <= 60
+    assert larger_budget_result.endswith("[Context truncated to fit budget.]")
+
+
+def test_startup_builder_placeholder_compaction_is_deterministic(project):
+    options = StartupContextOptions(
+        task_memory_placeholder_text="placeholder " + ("p" * 200),
+        task_memory_placeholder_char_limit=40,
+    )
+
+    first = build_startup_context(project=project, options=options)
+    second = build_startup_context(project=project, options=options)
+
+    assert first == second
+    assert "placeholder " in first
+    assert "placeholder " + ("p" * 200) not in first
+    placeholder_line = first.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
+        "\n", maxsplit=1
+    )[0]
+    assert placeholder_line.endswith("...")
+    assert len(placeholder_line) == 40
 
 
 def test_task_context_shows_title(task):
