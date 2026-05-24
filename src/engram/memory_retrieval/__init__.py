@@ -8,6 +8,13 @@ from engram.memory_retrieval.fts_retriever import (
     TaskMemoryRetrievalResult,
     retrieve_task_memory_candidates,
 )
+from engram.memory_retrieval.pack_contract import (
+    TaskMemoryPackedItem,
+    TaskMemoryPackMetadata,
+    TaskMemoryPackOptions,
+    TaskMemoryPackResult,
+    resolve_task_memory_pack_options,
+)
 from engram.memory_retrieval.query_builder import (
     RetrievalQueryBuilderOptions,
     RetrievalQueryMetadata,
@@ -23,6 +30,11 @@ __all__ = [
     "TaskMemoryRetrievalMetadata",
     "TaskMemoryRetrievalOptions",
     "TaskMemoryRetrievalResult",
+    "TaskMemoryPackOptions",
+    "TaskMemoryPackedItem",
+    "TaskMemoryPackMetadata",
+    "TaskMemoryPackResult",
+    "resolve_task_memory_pack_options",
     "normalize_fts_query_text",
     "build_task_retrieval_query",
     "retrieve_task_memory_candidates",
