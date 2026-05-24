@@ -108,9 +108,12 @@ def test_start_context_uses_unified_startup_builder(tmp_db, project, mock_git, m
     result = runner.invoke(cli, ["start"])
     assert result.exit_code == 0
     assert "PROJECT FRAME" in result.output
+    assert "CURRENT PHASE FRAME" in result.output
     assert "CURRENT/NEXT TASK FRAME" in result.output
     assert "PROJECT GUARDRAILS" in result.output
     assert "TASK MEMORY CANDIDATES" in result.output
+    assert "NEXT ACTION" in result.output
+    assert "Retrieval is not enabled in this phase. Placeholder section only." in result.output
     assert "No secrets" in result.output
     assert "Use WAL" not in result.output
     assert "Task note" not in result.output
