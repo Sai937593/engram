@@ -12,6 +12,7 @@ class TaskMemoryRetrievalOptions:
     """Deterministic knobs for task-memory FTS retrieval."""
 
     max_candidates: int = 20
+    orchestration_timeout_seconds: float | None = 1.0
     max_query_terms: int = MAX_FTS_TERMS
     max_term_chars: int = MAX_FTS_TERM_CHARS
     task_id_match_boost: int = 3
