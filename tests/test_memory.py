@@ -323,6 +323,15 @@ def test_list_task_scope_for_project_excludes_project_scope_and_other_projects(p
         level=None,
     )
 
+    # Normalize timestamps so ordering does not depend on second-level SQLite precision.
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE memories SET created_at = ? WHERE id IN (?, ?)",
+        ("2026-01-01 00:00:00", "task-memory-a", "task-memory-b"),
+    )
+    conn.commit()
+    conn.close()
+
     task_scope_memories = Memory.list_task_scope_for_project(project.id)
 
     assert [m.id for m in task_scope_memories] == ["task-memory-a", "task-memory-b"]
