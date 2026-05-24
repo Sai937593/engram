@@ -411,3 +411,45 @@ def test_memory_related_to_task_debug_empty(tmp_db, project, monkeypatch) -> Non
     assert "retrieval mode:" in result.output
     assert "selected_item_count=0" in result.output
     assert "No relevant task memories selected." not in result.output
+
+
+def test_memory_related_to_task_no_mutation(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task guarantees that task status and git branch remain completely unchanged."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    # 1. Create a task with 'todo' status
+    task = Task.create(project_id=project.id, title="Check no mutation task", status="todo")
+
+    # 2. Spy on subprocess.run to verify no git checkout or switch calls are made
+    subprocess_calls = []
+
+    def dummy_run(args, **kwargs):
+        subprocess_calls.append(args)
+
+        class DummyProcess:
+            returncode = 0
+            stdout = "main"
+            stderr = ""
+
+        return DummyProcess()
+
+    monkeypatch.setattr("subprocess.run", dummy_run)
+
+    # Verify task status is 'todo' initially
+    assert task.status == "todo"
+
+    # 3. Invoke engram memory related-to-task
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id])
+
+    # 4. Assert command succeeded
+    assert result.exit_code == 0, result.output
+
+    # 5. Assert task status is completely unchanged
+    refreshed_task = Task.get(task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.status == "todo"
+
+    # 6. Assert no git checkout/switch command was executed
+    for call in subprocess_calls:
+        if isinstance(call, list) and len(call) > 1 and call[0] == "git":
+            assert call[1] not in ("checkout", "switch"), f"Git checkout/switch was called: {call}"
