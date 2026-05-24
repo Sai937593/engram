@@ -185,6 +185,171 @@ def test_list_by_project(project):
     assert "Lesson B" in titles
 
 
+def test_list_project_guardrail_candidates_returns_project_l0_l1_only(project):
+    Memory.create(
+        id="guardrail-l1-b",
+        project_id=project.id,
+        type="constraint",
+        title="L1 guardrail B",
+        content="Project constraint B.",
+        scope="project",
+        level="L1",
+    )
+    Memory.create(
+        id="task-memory-1",
+        project_id=project.id,
+        type="note",
+        title="Task memory",
+        content="Task-only memory.",
+        scope="task",
+        task_id="task-123",
+        level=None,
+    )
+    Memory.create(
+        id="guardrail-l0-a",
+        project_id=project.id,
+        type="decision",
+        title="L0 identity",
+        content="Project identity.",
+        scope="project",
+        level="L0",
+    )
+    Memory.create(
+        id="project-l2",
+        project_id=project.id,
+        type="lesson",
+        title="L2 lesson",
+        content="Not a guardrail candidate.",
+        scope="project",
+        level="L2",
+    )
+    Memory.create(
+        id="guardrail-l1-a",
+        project_id=project.id,
+        type="constraint",
+        title="L1 guardrail A",
+        content="Project constraint A.",
+        scope="project",
+        level="L1",
+    )
+
+    guardrails = Memory.list_project_guardrail_candidates(project.id)
+
+    assert [(m.id, m.level) for m in guardrails] == [
+        ("guardrail-l0-a", "L0"),
+        ("guardrail-l1-a", "L1"),
+        ("guardrail-l1-b", "L1"),
+    ]
+    assert [
+        (m.id, m.title, m.type, m.scope, m.level, m.task_id, m.content) for m in guardrails
+    ] == [
+        (
+            "guardrail-l0-a",
+            "L0 identity",
+            "decision",
+            "project",
+            "L0",
+            None,
+            "Project identity.",
+        ),
+        (
+            "guardrail-l1-a",
+            "L1 guardrail A",
+            "constraint",
+            "project",
+            "L1",
+            None,
+            "Project constraint A.",
+        ),
+        (
+            "guardrail-l1-b",
+            "L1 guardrail B",
+            "constraint",
+            "project",
+            "L1",
+            None,
+            "Project constraint B.",
+        ),
+    ]
+
+
+def test_list_task_scope_for_project_excludes_project_scope_and_other_projects(project):
+    from engram.models.project import Project
+
+    other_project = Project.create(
+        id="other-project",
+        name="Other Project",
+        summary="",
+        repo_paths=["/tmp/other"],
+    )
+
+    Memory.create(
+        id="task-memory-b",
+        project_id=project.id,
+        type="note",
+        title="Task memory B",
+        content="Task memory in current project.",
+        scope="task",
+        task_id="task-b",
+        level=None,
+    )
+    Memory.create(
+        id="project-guardrail",
+        project_id=project.id,
+        type="constraint",
+        title="Project guardrail",
+        content="Should be excluded from task-scope helper.",
+        scope="project",
+        level="L1",
+    )
+    Memory.create(
+        id="task-memory-a",
+        project_id=project.id,
+        type="note",
+        title="Task memory A",
+        content="Second task memory in current project.",
+        scope="task",
+        task_id="task-a",
+        level=None,
+    )
+    Memory.create(
+        id="other-project-task-memory",
+        project_id=other_project.id,
+        type="note",
+        title="Other project task memory",
+        content="Should be excluded from current project scope.",
+        scope="task",
+        task_id="task-z",
+        level=None,
+    )
+
+    task_scope_memories = Memory.list_task_scope_for_project(project.id)
+
+    assert [m.id for m in task_scope_memories] == ["task-memory-a", "task-memory-b"]
+    assert [
+        (m.id, m.title, m.type, m.scope, m.level, m.task_id, m.content) for m in task_scope_memories
+    ] == [
+        (
+            "task-memory-a",
+            "Task memory A",
+            "note",
+            "task",
+            None,
+            "task-a",
+            "Second task memory in current project.",
+        ),
+        (
+            "task-memory-b",
+            "Task memory B",
+            "note",
+            "task",
+            None,
+            "task-b",
+            "Task memory in current project.",
+        ),
+    ]
+
+
 def test_list_always_include(project):
     Memory.create(
         project_id=project.id,

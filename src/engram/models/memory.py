@@ -112,6 +112,41 @@ class Memory:
         return [cls.from_row(row) for row in rows]
 
     @classmethod
+    def list_project_guardrail_candidates(cls, project_id: str) -> list["Memory"]:
+        """Return project-scope L0/L1 memories ordered for deterministic guardrail retrieval."""
+        conn = get_db_connection()
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM memories
+            WHERE project_id = ? AND scope = 'project' AND level IN ('L0', 'L1')
+            ORDER BY
+                CASE level WHEN 'L0' THEN 0 WHEN 'L1' THEN 1 ELSE 2 END,
+                created_at ASC,
+                id ASC
+            """,
+            (project_id,),
+        ).fetchall()
+        conn.close()
+        return [cls.from_row(row) for row in rows]
+
+    @classmethod
+    def list_task_scope_for_project(cls, project_id: str) -> list["Memory"]:
+        """Return task-scope memories for a project in deterministic order."""
+        conn = get_db_connection()
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM memories
+            WHERE project_id = ? AND scope = 'task'
+            ORDER BY created_at ASC, id ASC
+            """,
+            (project_id,),
+        ).fetchall()
+        conn.close()
+        return [cls.from_row(row) for row in rows]
+
+    @classmethod
     def list_always_include(cls, project_id):
         conn = get_db_connection()
         rows = conn.execute(

@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(model): add deterministic memory scope listing helpers for project guardrail candidates (project L0/L1) and task-scope memories, with helper-level filtering/order tests.
 - fix(model): enforce memory scope/level validation in `Memory.create`/`Memory.update` (project requires L0-L3, task forbids level), and align memory command defaults/tests to the new contract.
 - feat(db): add idempotent `memories.level` schema migration and preserve memory `level` values in `Memory.from_row` loading paths.
 - fix(cli): limit `engram start` task context output to task details plus hard constraints only, excluding lessons and linked memories.
