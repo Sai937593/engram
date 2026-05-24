@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- docs(retrieval): add Phase 9 evaluation artifact with real-task retrieval examples, expected-vs-actual selections, misses, false positives, and observed failure modes.
 - feat(cli): add `--debug` flag to `engram memory related-to-task <task-id>` showing FTS queries, candidates, selected memories, ranks/boosts, hidden counts, and budget diagnostics.
 - feat(cli): add `engram memory related-to-task <task-id>` command to inspect packed task memories with clear missing/foreign task ID errors and beautiful Rich table rendering.
 
