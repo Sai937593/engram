@@ -29,6 +29,55 @@ def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:
     """Add missing legacy memories columns for compatibility."""
     if not column_exists(cursor, "memories", "level"):
         cursor.execute("ALTER TABLE memories ADD COLUMN level TEXT")
+    backfill_legacy_memory_scope_and_level(cursor)
+
+
+def backfill_legacy_memory_scope_and_level(cursor: sqlite3.Cursor) -> None:
+    """Backfill scope/level defaults for legacy memories that have no level."""
+    legacy_level_filter = "(level IS NULL OR TRIM(level) = '')"
+
+    cursor.execute(
+        f"""
+        UPDATE memories
+        SET scope = 'project', level = 'L1'
+        WHERE type = 'constraint' AND {legacy_level_filter}
+        """
+    )
+    cursor.execute(
+        f"""
+        UPDATE memories
+        SET scope = 'project', level = 'L2'
+        WHERE type = 'decision' AND {legacy_level_filter}
+        """
+    )
+    cursor.execute(
+        f"""
+        UPDATE memories
+        SET scope = 'task', level = NULL
+        WHERE type IN ('lesson', 'note', 'snippet')
+          AND task_id IS NOT NULL
+          AND TRIM(task_id) != ''
+          AND COALESCE(scope, '') != 'task'
+          AND {legacy_level_filter}
+        """
+    )
+    cursor.execute(
+        f"""
+        UPDATE memories
+        SET scope = 'project', level = 'L1'
+        WHERE always_include = 1
+          AND NOT (type IN ('lesson', 'note', 'snippet') AND task_id IS NOT NULL AND TRIM(task_id) != '')
+          AND {legacy_level_filter}
+        """
+    )
+    cursor.execute(
+        f"""
+        UPDATE memories
+        SET scope = 'project', level = 'L3'
+        WHERE scope != 'task'
+          AND {legacy_level_filter}
+        """
+    )
 
 
 def backfill_legacy_phase_ids(cursor: sqlite3.Cursor) -> None:

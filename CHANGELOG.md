@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(db): backfill legacy memory scope/level defaults during `init_db` with idempotent precedence for constraint, decision, task-linked, and always-include records.
 - feat(hooks): enforce a strict 200-line limit for newly added staged Python files via a repository-local pre-commit check.
 - feat(db): add idempotent `memories.level` schema migration and preserve memory `level` values in `Memory.from_row` loading paths.
 - fix(cli): limit `engram start` task context output to task details plus hard constraints only, excluding lessons and linked memories.
