@@ -17,6 +17,7 @@ def test_startup_context_shows_always_include_memories(project):
         title="Never write to prod",
         content="Do not touch production DB.",
         always_include=True,
+        level="L1",
     )
     ctx = get_startup_context(project.id)
     assert "Never write to prod" in ctx

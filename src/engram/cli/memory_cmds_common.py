@@ -7,6 +7,18 @@ from engram.models.memory import Memory
 
 VALID_MEMORY_FIELDS = {"title", "content", "type", "tags", "always_include"}
 VALID_MEMORY_TYPES = {"note", "lesson", "decision", "constraint", "snippet"}
+DEFAULT_PROJECT_LEVEL_BY_TYPE = {
+    "constraint": "L1",
+    "decision": "L2",
+    "lesson": "L3",
+    "note": "L3",
+    "snippet": "L3",
+}
+
+
+def default_scope_level_for_type(memory_type: str) -> tuple[str, str]:
+    """Return the default scope/level for memory creation without explicit flags."""
+    return "project", DEFAULT_PROJECT_LEVEL_BY_TYPE.get(memory_type, "L3")
 
 
 def print_memory_details(memory: Memory) -> None:
@@ -37,11 +49,14 @@ def add_typed_memory(
 ) -> None:
     """Create a memory entry for a typed command group."""
     project = cli_root.get_current_project()
+    scope, level = default_scope_level_for_type(memory_type)
     memory = Memory.create(
         project_id=project.id,
         title=title,
         content=content,
         type=memory_type,
+        scope=scope,
+        level=level,
         tags=tags.split(",") if tags else [],
         always_include=always_include,
     )

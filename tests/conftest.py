@@ -57,4 +57,5 @@ def memory(project):
         title="Use SQLite",
         content="SQLite is good enough for local-first tools.",
         tags=["storage"],
+        level="L2",
     )

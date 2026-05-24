@@ -4,6 +4,9 @@ from typing import Any
 from engram.db import get_db_connection
 from engram.models.audit import AuditLog
 
+VALID_MEMORY_SCOPES = {"project", "task"}
+VALID_PROJECT_LEVELS = {"L0", "L1", "L2", "L3"}
+
 
 class Memory:
     def __init__(
@@ -46,6 +49,7 @@ class Memory:
     ) -> "Memory":
         if not id:
             id = uuid.uuid4().hex[:8]
+        normalized_level = cls._validate_scope_level(scope=scope, level=level)
 
         conn = get_db_connection()
         conn.execute(
@@ -62,7 +66,7 @@ class Memory:
                 title,
                 content,
                 scope,
-                level,
+                normalized_level,
                 task_id,
                 ",".join(tags or []),
                 1 if always_include else 0,
@@ -74,7 +78,16 @@ class Memory:
         AuditLog.log("memories", id, "create")
 
         return cls(
-            id, project_id, type, title, content, scope, task_id, tags, always_include, level
+            id,
+            project_id,
+            type,
+            title,
+            content,
+            scope,
+            task_id,
+            tags,
+            always_include,
+            normalized_level,
         )
 
     @classmethod
@@ -133,6 +146,12 @@ class Memory:
         )
 
     def update(self, **kwargs):
+        next_scope = kwargs.get("scope", self.scope)
+        next_level = kwargs.get("level", self.level)
+        normalized_level = self._validate_scope_level(scope=next_scope, level=next_level)
+        if "level" in kwargs:
+            kwargs["level"] = normalized_level
+
         updates = []
         params = []
 
@@ -169,6 +188,35 @@ class Memory:
         conn.execute(query, params)
         conn.commit()
         conn.close()
+
+    @staticmethod
+    def _normalize_level(level: str | None) -> str | None:
+        if level is None:
+            return None
+        normalized_level = level.strip()
+        if not normalized_level:
+            return None
+        return normalized_level
+
+    @classmethod
+    def _validate_scope_level(cls, scope: str, level: str | None) -> str | None:
+        if scope not in VALID_MEMORY_SCOPES:
+            raise ValueError(
+                f"Invalid memory scope '{scope}'. Allowed values: {', '.join(sorted(VALID_MEMORY_SCOPES))}."
+            )
+
+        normalized_level = cls._normalize_level(level)
+        if normalized_level is not None and normalized_level not in VALID_PROJECT_LEVELS:
+            raise ValueError(
+                f"Invalid memory level '{normalized_level}'. Allowed values: {', '.join(sorted(VALID_PROJECT_LEVELS))}."
+            )
+
+        if scope == "project" and normalized_level is None:
+            raise ValueError("Project-scope memories require a valid level (L0, L1, L2, or L3).")
+        if scope == "task" and normalized_level is not None:
+            raise ValueError("Task-scope memories must not define a level.")
+
+        return normalized_level
 
     def delete(self):
         conn = get_db_connection()

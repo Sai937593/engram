@@ -10,6 +10,14 @@ from engram.models.memory import Memory
 from engram.models.task import Task
 
 
+def _project_level_for_type(memory_type: str) -> str:
+    if memory_type == "constraint":
+        return "L1"
+    if memory_type == "decision":
+        return "L2"
+    return "L3"
+
+
 def make_runner_with_project(monkeypatch, project) -> CliRunner:
     """Return a CliRunner with current-project resolution patched."""
     monkeypatch.setattr("engram.cli.get_current_project", lambda: project)
@@ -60,8 +68,14 @@ def test_type_add_no_always_include_flag(type_name, tmp_db, project, monkeypatch
 def test_type_list_shows_only_own_type(type_name, tmp_db, project, monkeypatch):
     """type list only shows memories of that specific type."""
     runner = make_runner_with_project(monkeypatch, project)
-    Memory.create(project_id=project.id, type=type_name, title="Mine", content="A")
-    Memory.create(project_id=project.id, type="note", title="Not mine", content="B")
+    Memory.create(
+        project_id=project.id,
+        type=type_name,
+        title="Mine",
+        content="A",
+        level=_project_level_for_type(type_name),
+    )
+    Memory.create(project_id=project.id, type="note", title="Not mine", content="B", level="L3")
 
     result = runner.invoke(cli, [type_name, "list"])
     assert result.exit_code == 0, result.output
@@ -87,6 +101,7 @@ def test_type_get_shows_detail(type_name, tmp_db, project, monkeypatch):
         type=type_name,
         title="Detail test",
         content="Full content here",
+        level=_project_level_for_type(type_name),
     )
 
     result = runner.invoke(cli, [type_name, "get", memory.id])
@@ -140,6 +155,7 @@ def test_startup_context_shows_constraints_first(tmp_db, project, monkeypatch):
         title="No pip",
         content="Use uv run",
         always_include=True,
+        level="L1",
     )
     Memory.create(
         project_id=project.id,
@@ -147,6 +163,7 @@ def test_startup_context_shows_constraints_first(tmp_db, project, monkeypatch):
         title="WAL mode",
         content="Enable WAL",
         always_include=True,
+        level="L3",
     )
 
     ctx = get_startup_context(project.id)
@@ -176,8 +193,20 @@ def test_task_context_includes_project_knowledge(tmp_db, project, task):
     """Task context includes project-wide constraints and lessons."""
     from engram.context import get_task_context
 
-    Memory.create(project_id=project.id, type="constraint", title="No secrets", content="Use .env")
-    Memory.create(project_id=project.id, type="lesson", title="Use WAL", content="Enable WAL mode")
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="No secrets",
+        content="Use .env",
+        level="L1",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Use WAL",
+        content="Enable WAL mode",
+        level="L3",
+    )
 
     ctx = get_task_context(task.id)
     assert "PROJECT KNOWLEDGE" in ctx

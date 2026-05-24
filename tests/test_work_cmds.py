@@ -84,6 +84,7 @@ def test_start_context_includes_only_hard_constraints(tmp_db, project, mock_git,
         title="No secrets",
         content="Use .env",
         always_include=True,
+        level="L1",
     )
     Memory.create(
         project_id=project.id,
@@ -91,13 +92,16 @@ def test_start_context_includes_only_hard_constraints(tmp_db, project, mock_git,
         title="Use WAL",
         content="Enable WAL mode",
         always_include=True,
+        level="L3",
     )
     Memory.create(
         project_id=project.id,
+        scope="task",
         task_id=task.id,
         type="note",
         title="Task note",
         content="Do this first",
+        level=None,
     )
 
     runner = make_runner_with_project(monkeypatch, tmp_db, project)
