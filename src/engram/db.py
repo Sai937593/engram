@@ -4,6 +4,7 @@ from pathlib import Path
 
 from engram.db_helpers.connection import create_db_connection
 from engram.db_helpers.migrations import (
+    apply_memories_column_migrations,
     apply_task_status_migrations,
     apply_tasks_column_migrations,
     backfill_legacy_phase_ids,
@@ -37,6 +38,7 @@ def init_db(db_path=None):
     create_phases_table(cursor)
     apply_tasks_column_migrations(cursor)
     create_memories_table(cursor)
+    apply_memories_column_migrations(cursor)
     create_audit_log_table(cursor)
 
     try:
