@@ -66,6 +66,25 @@ def test_list_by_project(project):
     assert "Task B" in titles
 
 
+def test_count_by_status_empty(tmp_db, project):
+    """count_by_status returns empty dict when no tasks exist."""
+    counts = Task.count_by_status(project.id)
+    assert counts == {}
+
+
+def test_count_by_status_mixed(tmp_db, project):
+    """count_by_status returns accurate counts across statuses."""
+    Task.create(project_id=project.id, title="A", status="todo")
+    Task.create(project_id=project.id, title="B", status="todo")
+    Task.create(project_id=project.id, title="C", status="done")
+    Task.create(project_id=project.id, title="D", status="blocked")
+
+    counts = Task.count_by_status(project.id)
+    assert counts["todo"] == 2
+    assert counts["done"] == 1
+    assert counts["blocked"] == 1
+
+
 def test_update_task_status(task):
     task.update(status="in-progress")
     refreshed = Task.get(task.id)
