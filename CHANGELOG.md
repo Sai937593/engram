@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(hooks): enforce a strict 200-line limit for newly added staged Python files via a repository-local pre-commit check.
 - feat(db): add idempotent `memories.level` schema migration and preserve memory `level` values in `Memory.from_row` loading paths.
 - fix(cli): limit `engram start` task context output to task details plus hard constraints only, excluding lessons and linked memories.
 - fix(cli): align remaining phase-task workflow gaps for start fallback, task next phase display, and manual docs.
