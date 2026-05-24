@@ -23,6 +23,9 @@ class TaskMemoryPackOptions:
     preferred_k: int = 6
     max_k: int = 10
     max_item_chars: int = 420
+    max_title_chars: int = 80
+    max_tag_chars: int = 20
+    max_tags_count: int = 5
     ordering_fields: tuple[str, ...] = DEFAULT_TASK_MEMORY_PACK_ORDERING
     dedupe_key: str = "memory_id"
 
@@ -142,12 +145,48 @@ def pack_task_memories(
             # Excluded by K limit, do not add
             continue
 
-        original_content = cand.content or ""
-        was_truncated = len(original_content) > opts.max_item_chars
+        # Title compaction
+        title_truncated = len(cand.title or "") > opts.max_title_chars
+        if title_truncated:
+            if opts.max_title_chars <= 3:
+                packed_title = (cand.title or "")[: opts.max_title_chars]
+            else:
+                packed_title = (cand.title or "")[: opts.max_title_chars - 3].rstrip() + "..."
+        else:
+            packed_title = cand.title or ""
+
+        # Tags compaction
+        tags_truncated = False
+        packed_tags_list = []
+        original_tags = cand.tags or ()
+        if len(original_tags) > opts.max_tags_count:
+            tags_truncated = True
+            tags_to_process = original_tags[: opts.max_tags_count]
+        else:
+            tags_to_process = original_tags
+
+        for tag in tags_to_process:
+            if len(tag) > opts.max_tag_chars:
+                tags_truncated = True
+                if opts.max_tag_chars <= 3:
+                    packed_tag = tag[: opts.max_tag_chars]
+                else:
+                    packed_tag = tag[: opts.max_tag_chars - 3].rstrip() + "..."
+            else:
+                packed_tag = tag
+            packed_tags_list.append(packed_tag)
+        packed_tags = tuple(packed_tags_list)
+
+        # Content compaction
+        content_truncated = len(cand.content or "") > opts.max_item_chars
         packed_content = (
-            original_content[: opts.max_item_chars] if was_truncated else original_content
+            (cand.content or "")[: opts.max_item_chars]
+            if content_truncated
+            else (cand.content or "")
         )
         item_char_count = len(packed_content)
+
+        item_was_truncated = title_truncated or tags_truncated or content_truncated
 
         if used_char_count + item_char_count > opts.section_char_budget:
             # Excluded by character budget limit
@@ -158,20 +197,20 @@ def pack_task_memories(
         packed_item = TaskMemoryPackedItem(
             memory_id=cand.memory_id,
             type=cand.type,
-            title=cand.title,
+            title=packed_title,
             content=packed_content,
-            tags=cand.tags,
+            tags=packed_tags,
             task_id=cand.task_id,
             retrieval_source=cand.retrieval_source,
             fts_rank=cand.fts_rank,
             boost_score=cand.boost_score,
             source_candidate_index=original_idx,
             char_count=item_char_count,
-            was_truncated=was_truncated,
+            was_truncated=item_was_truncated,
         )
         selected_items.append(packed_item)
         used_char_count += item_char_count
-        if was_truncated:
+        if item_was_truncated:
             truncated_item_count += 1
 
     # 4. Generate metadata and return result

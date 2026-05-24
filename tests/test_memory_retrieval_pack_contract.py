@@ -220,3 +220,93 @@ def test_pack_task_memories_truncates_long_contents() -> None:
     assert result.items[0].was_truncated is True
     assert result.items[0].char_count == 10
     assert result.metadata.truncated_item_count == 1
+
+
+def test_pack_task_memories_truncates_long_titles() -> None:
+    # A candidate with a title of 20 characters
+    cand = TaskMemoryCandidate(
+        memory_id="mem-1",
+        project_id="proj-01",
+        scope="task",
+        type="lesson",
+        task_id=None,
+        title="VeryLongMemoryTitleHere",  # 23 characters
+        content="short content",
+        tags=("tag1",),
+        retrieval_source="fts",
+        fts_rank=1.0,
+        boost_score=0,
+        task_id_match=False,
+        title_term_hits=(),
+        tag_term_hits=(),
+    )
+
+    # Limit title to 10 characters.
+    # Compacted title should be "VeryLon..." (length 10)
+    options = TaskMemoryPackOptions(max_title_chars=10)
+    result = pack_task_memories((cand,), _mock_retrieval_metadata(), options)
+
+    assert len(result.items) == 1
+    assert result.items[0].title == "VeryLon..."
+    assert result.items[0].was_truncated is True
+    assert result.metadata.truncated_item_count == 1
+
+
+def test_pack_task_memories_truncates_long_tags() -> None:
+    cand = TaskMemoryCandidate(
+        memory_id="mem-1",
+        project_id="proj-01",
+        scope="task",
+        type="lesson",
+        task_id=None,
+        title="Title",
+        content="short content",
+        tags=("extremelylongtagname", "tag2", "tag3"),
+        retrieval_source="fts",
+        fts_rank=1.0,
+        boost_score=0,
+        task_id_match=False,
+        title_term_hits=(),
+        tag_term_hits=(),
+    )
+
+    # Limit to max_tags_count = 2 and max_tag_chars = 8
+    # "extremelylongtagname" should be compacted to "extre..." (length 8)
+    # The tag list should be capped to 2 tags: ("extre...", "tag2")
+    options = TaskMemoryPackOptions(max_tags_count=2, max_tag_chars=8)
+    result = pack_task_memories((cand,), _mock_retrieval_metadata(), options)
+
+    assert len(result.items) == 1
+    assert result.items[0].tags == ("extre...", "tag2")
+    assert result.items[0].was_truncated is True
+    assert result.metadata.truncated_item_count == 1
+
+
+def test_pack_task_memories_short_limits_edge_cases() -> None:
+    cand = TaskMemoryCandidate(
+        memory_id="mem-1",
+        project_id="proj-01",
+        scope="task",
+        type="lesson",
+        task_id=None,
+        title="LongTitle",
+        content="short content",
+        tags=("longtag",),
+        retrieval_source="fts",
+        fts_rank=1.0,
+        boost_score=0,
+        task_id_match=False,
+        title_term_hits=(),
+        tag_term_hits=(),
+    )
+
+    # Set very small limits where limits <= 3
+    # Title truncated to exactly 3 chars, Tag truncated to exactly 2 chars
+    options = TaskMemoryPackOptions(max_title_chars=3, max_tag_chars=2)
+    result = pack_task_memories((cand,), _mock_retrieval_metadata(), options)
+
+    assert len(result.items) == 1
+    assert result.items[0].title == "Lon"
+    assert result.items[0].tags == ("lo",)
+    assert result.items[0].was_truncated is True
+    assert result.metadata.truncated_item_count == 1
