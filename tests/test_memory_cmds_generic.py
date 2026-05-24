@@ -361,3 +361,53 @@ def test_memory_related_to_task_success(tmp_db, project, monkeypatch) -> None:
     assert f"Related Memories for Task '{task.id}'" in result.output
     assert memory.id in result.output
     assert "Logic bug hint" in result.output
+
+
+def test_memory_related_to_task_debug_success(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task with --debug prints retrieval query, candidate, and packing diagnostics."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(
+        project_id=project.id, title="Solve logic bug", description="FTS matches logic here"
+    )
+
+    # Create memory with matching terms
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Logic bug hint",
+        content="Always use logic and solve the bug cleanly",
+        scope="task",
+        task_id=task.id,
+    )
+
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id, "--debug"])
+
+    assert result.exit_code == 0, result.output
+    assert "RETRIEVAL DEBUG" in result.output
+    assert "query text:" in result.output
+    assert "retrieval mode:" in result.output
+    assert "fts candidate metadata:" in result.output
+    assert "pack candidate metadata:" in result.output
+    assert "selected counts:" in result.output
+    assert "selected memory ids:" in result.output
+    assert "budget usage:" in result.output
+    assert "selected item metadata:" in result.output
+    assert memory.id in result.output
+    assert "Logic bug hint" in result.output
+
+
+def test_memory_related_to_task_debug_empty(tmp_db, project, monkeypatch) -> None:
+    """memory related-to-task with --debug prints retrieval diagnostics even when no memories match."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(
+        project_id=project.id, title="Solve logic bug", description="FTS matches logic here"
+    )
+
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id, "--debug"])
+
+    assert result.exit_code == 0, result.output
+    assert "RETRIEVAL DEBUG" in result.output
+    assert "query text:" in result.output
+    assert "retrieval mode:" in result.output
+    assert "selected_item_count=0" in result.output
+    assert "No relevant task memories selected." not in result.output

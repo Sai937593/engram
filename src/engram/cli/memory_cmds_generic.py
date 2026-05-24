@@ -235,13 +235,19 @@ def resolve_task_by_id_or_prefix(project_id: str, value: str) -> Task:
 
 @memory.command(name="related-to-task")
 @click.argument("task_id")
-def memory_related_to_task(task_id: str) -> None:
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    help="Print retrieval query, candidate, and packing diagnostics.",
+)
+def memory_related_to_task(task_id: str, debug: bool) -> None:
     """Inspect related memories for a task without mutating state."""
     project = cli_root.get_current_project()
     task_item = resolve_task_by_id_or_prefix(project.id, task_id)
 
     # Try resolving active phase if it matches the task's phase context
-    from engram.cli.work_cmds_helpers import get_active_phase
+    from engram.cli.work_cmds_helpers import format_retrieval_debug_output, get_active_phase
 
     active_phase = get_active_phase(project.id)
     if active_phase:
@@ -263,9 +269,13 @@ def memory_related_to_task(task_id: str) -> None:
         selected_task=task_item,
     )
 
+    if debug:
+        cli_root.console.print(format_retrieval_debug_output(result))
+
     packed_items = result.pack_result.items
     if not packed_items:
-        cli_root.console.print("No relevant task memories selected.")
+        if not debug:
+            cli_root.console.print("No relevant task memories selected.")
         return
 
     # Render using premium Rich Table
