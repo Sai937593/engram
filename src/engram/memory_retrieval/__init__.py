@@ -22,6 +22,10 @@ from engram.memory_retrieval.query_builder import (
     TaskRetrievalQuery,
     build_task_retrieval_query,
 )
+from engram.memory_retrieval.startup_orchestration import (
+    StartupTaskMemoryRetrievalResult,
+    orchestrate_startup_task_memory_retrieval,
+)
 
 __all__ = [
     "RetrievalQueryBuilderOptions",
@@ -35,9 +39,11 @@ __all__ = [
     "TaskMemoryPackedItem",
     "TaskMemoryPackMetadata",
     "TaskMemoryPackResult",
+    "StartupTaskMemoryRetrievalResult",
     "resolve_task_memory_pack_options",
     "pack_task_memories",
     "normalize_fts_query_text",
     "build_task_retrieval_query",
     "retrieve_task_memory_candidates",
+    "orchestrate_startup_task_memory_retrieval",
 ]

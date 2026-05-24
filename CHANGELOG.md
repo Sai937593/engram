@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): add optional `engram start --debug-retrieval` diagnostics with deterministic query/candidate/selection/budget metadata output while keeping default startup output unchanged.
+- fix(retrieval): harden startup task-memory orchestration with query/retrieval/packing fallback resilience, deterministic empty-pack fallbacks, and orchestration timeout safeguards that degrade to metadata-backed empty results.
+- feat(cli): render `TASK MEMORY CANDIDATES` in startup context from packed retrieval results with deterministic empty-state output, section separation from project guardrails, and hidden-candidate cap messaging.
+- feat(retrieval): add a startup task-memory orchestration helper that composes query building, FTS retrieval, and budgeted packing with deterministic no-task/no-match and exception-fallback metadata contracts.
 - fix(retrieval): enforce preferred-K task-memory packing before the hard max-K limit.
 - fix(test): stabilize task-scope memory ordering regression by normalizing created_at timestamps before asserting deterministic id tie-break ordering.
 - feat(retrieval): enforce memory pack character budgets and compaction limits (title, content, tags) with deterministic truncation and budget-used metadata.

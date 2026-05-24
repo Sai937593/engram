@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from engram.context_helpers.common import compact_text
+from engram.memory_retrieval import (
+    StartupTaskMemoryRetrievalResult,
+    orchestrate_startup_task_memory_retrieval,
+)
 from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.project import Project
@@ -30,10 +34,10 @@ class StartupContextOptions:
     phase_text_char_limit: int = 400
     task_text_char_limit: int = 500
     guardrail_text_char_limit: int = 220
-    task_memory_placeholder_text: str = (
-        "Retrieval is not enabled in this phase. Placeholder section only."
-    )
-    task_memory_placeholder_char_limit: int = 220
+    task_memory_empty_state_text: str = "No relevant task memories selected."
+    task_memory_empty_state_char_limit: int = 220
+    task_memory_item_title_char_limit: int = 100
+    task_memory_item_content_char_limit: int = 260
     l1_guardrail_limit: int = 6
 
 
@@ -152,15 +156,48 @@ def _build_guardrail_frame(project_id: str, options: StartupContextOptions) -> s
     return _render_section("PROJECT GUARDRAILS", lines)
 
 
-def _build_task_memory_placeholder(options: StartupContextOptions) -> str:
-    placeholder = _compact_with_limit(
-        options.task_memory_placeholder_text,
-        options.task_memory_placeholder_char_limit,
+def _build_task_memory_candidates_frame(
+    project: Project,
+    active_phase: Phase | None,
+    selected_task: Task | None,
+    options: StartupContextOptions,
+    retrieval_result: StartupTaskMemoryRetrievalResult | None = None,
+) -> str:
+    result = retrieval_result or orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=active_phase,
+        selected_task=selected_task,
     )
-    return _render_section(
-        "TASK MEMORY CANDIDATES",
-        [placeholder],
-    )
+    lines: list[str] = []
+    packed_items = result.pack_result.items
+
+    if not packed_items:
+        empty_state = _compact_with_limit(
+            options.task_memory_empty_state_text,
+            options.task_memory_empty_state_char_limit,
+        )
+        if empty_state:
+            lines.append(empty_state)
+        return _render_section("TASK MEMORY CANDIDATES", lines)
+
+    for item in packed_items:
+        item_type = _compact_with_limit(item.type, 30)
+        title = _compact_with_limit(item.title, options.task_memory_item_title_char_limit)
+        content = _compact_with_limit(item.content, options.task_memory_item_content_char_limit)
+        if title and content:
+            lines.append(f"- [{item_type}] {title}: {content}")
+        elif title:
+            lines.append(f"- [{item_type}] {title}")
+        elif content:
+            lines.append(f"- [{item_type}] {content}")
+        else:
+            lines.append(f"- [{item_type}]")
+
+    hidden_count = result.pack_result.metadata.hidden_item_count
+    if hidden_count > 0:
+        lines.append(f"... {hidden_count} additional task memory candidate(s) hidden by cap.")
+
+    return _render_section("TASK MEMORY CANDIDATES", lines)
 
 
 def _build_next_action(project: Project, selected_task: Task | None) -> str:
@@ -261,6 +298,7 @@ def build_startup_context(
     active_phase: Phase | None = None,
     selected_task: Task | None = None,
     options: StartupContextOptions | None = None,
+    startup_task_memory_result: StartupTaskMemoryRetrievalResult | None = None,
 ) -> str:
     """Generate the unified startup context from explicit startup inputs."""
     resolved_options = options or StartupContextOptions()
@@ -277,7 +315,13 @@ def build_startup_context(
         _build_phase_frame(active_phase, resolved_options),
         _build_task_frame(selected_task, resolved_options),
         _build_guardrail_frame(resolved_project.id, resolved_options),
-        _build_task_memory_placeholder(resolved_options),
+        _build_task_memory_candidates_frame(
+            resolved_project,
+            active_phase,
+            selected_task,
+            resolved_options,
+            startup_task_memory_result,
+        ),
         _build_next_action(resolved_project, selected_task),
     ]
 
