@@ -33,49 +33,61 @@ def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:
 
 
 def backfill_legacy_memory_scope_and_level(cursor: sqlite3.Cursor) -> None:
-    """Backfill scope/level defaults for legacy memories that have no level."""
-    legacy_level_filter = "(level IS NULL OR TRIM(level) = '')"
-
+    """Backfill legacy memory scope/level values to the project/task contract."""
     cursor.execute(
-        f"""
+        """
         UPDATE memories
-        SET scope = 'project', level = 'L1'
-        WHERE type = 'constraint' AND {legacy_level_filter}
+        SET scope = 'task',
+            level = NULL
+        WHERE task_id IS NOT NULL
+          AND type IN ('lesson', 'note', 'snippet')
+          AND (scope IS NULL OR scope = '' OR scope = 'project')
+          AND (scope != 'task' OR level IS NOT NULL)
         """
     )
     cursor.execute(
-        f"""
+        """
         UPDATE memories
-        SET scope = 'project', level = 'L2'
-        WHERE type = 'decision' AND {legacy_level_filter}
+        SET level = NULL
+        WHERE scope = 'task'
+          AND level IS NOT NULL
         """
     )
     cursor.execute(
-        f"""
+        """
         UPDATE memories
-        SET scope = 'task', level = NULL
-        WHERE type IN ('lesson', 'note', 'snippet')
-          AND task_id IS NOT NULL
-          AND TRIM(task_id) != ''
-          AND COALESCE(scope, '') != 'task'
-          AND {legacy_level_filter}
+        SET scope = 'project',
+            level = 'L1'
+        WHERE type = 'constraint'
+          AND (scope IS NULL OR scope != 'project' OR level IS NULL OR level != 'L1')
         """
     )
     cursor.execute(
-        f"""
+        """
         UPDATE memories
-        SET scope = 'project', level = 'L1'
+        SET scope = 'project',
+            level = 'L2'
+        WHERE type = 'decision'
+          AND (scope IS NULL OR scope != 'project' OR level IS NULL OR level != 'L2')
+        """
+    )
+    cursor.execute(
+        """
+        UPDATE memories
+        SET scope = 'project',
+            level = 'L1'
         WHERE always_include = 1
-          AND NOT (type IN ('lesson', 'note', 'snippet') AND task_id IS NOT NULL AND TRIM(task_id) != '')
-          AND {legacy_level_filter}
+          AND (scope IS NULL OR scope != 'task')
+          AND (level IS NULL OR TRIM(level) = '')
         """
     )
     cursor.execute(
-        f"""
+        """
         UPDATE memories
-        SET scope = 'project', level = 'L3'
-        WHERE scope != 'task'
-          AND {legacy_level_filter}
+        SET scope = 'project',
+            level = 'L3'
+        WHERE (scope IS NULL OR scope != 'task')
+          AND (level IS NULL OR TRIM(level) = '')
         """
     )
 

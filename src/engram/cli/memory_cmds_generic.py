@@ -8,6 +8,7 @@ from engram.cli.memory_cmds import memory
 from engram.cli.memory_cmds_common import (
     VALID_MEMORY_FIELDS,
     VALID_MEMORY_TYPES,
+    default_scope_level_for_type,
     get_memory_or_print_error,
     print_memory_details,
 )
@@ -34,11 +35,14 @@ def memory_add(
 ) -> None:
     """Add a new memory to the current project."""
     project = cli_root.get_current_project()
+    scope, level = default_scope_level_for_type(type)
     memory_item = Memory.create(
         project_id=project.id,
         title=title,
         content=content,
         type=type,
+        scope=scope,
+        level=level,
         tags=tags.split(",") if tags else [],
         always_include=always_include,
     )

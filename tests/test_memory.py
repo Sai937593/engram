@@ -2,6 +2,8 @@
 
 import sqlite3
 
+import pytest
+
 from engram.db import get_db_connection, init_db
 from engram.models.memory import Memory
 
@@ -13,6 +15,7 @@ def test_create_memory(project):
         title="Use SQLite",
         content="SQLite is ideal for local-first apps.",
         tags=["storage", "arch"],
+        level="L2",
     )
     assert m.title == "Use SQLite"
     assert m.type == "decision"
@@ -27,8 +30,140 @@ def test_create_memory_always_include(project):
         title="No production writes",
         content="Never write to production DB directly.",
         always_include=True,
+        level="L1",
     )
     assert m.always_include is True
+
+
+@pytest.mark.parametrize("level", ["L0", "L1", "L2", "L3"])
+def test_create_project_scope_accepts_level_l0_l3(project, level):
+    m = Memory.create(
+        project_id=project.id,
+        type="decision",
+        title=f"Project memory {level}",
+        content="Valid project level memory.",
+        scope="project",
+        level=level,
+    )
+
+    assert m.scope == "project"
+    assert m.level == level
+
+
+def test_create_task_scope_accepts_empty_level(project):
+    m = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Task memory",
+        content="Task scoped memory.",
+        scope="task",
+        task_id="task-123",
+        level=None,
+    )
+
+    assert m.scope == "task"
+    assert m.level is None
+
+
+def test_create_task_scope_without_task_id_preserves_null_on_load(project):
+    created = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Unlinked task memory",
+        content="Task-scoped memory with optional task_id.",
+        scope="task",
+        level=None,
+    )
+
+    loaded = Memory.get(created.id)
+    assert loaded is not None
+    assert loaded.scope == "task"
+    assert loaded.level is None
+    assert loaded.task_id is None
+
+
+def test_create_task_scope_with_task_id_preserves_origin_on_load(project):
+    created = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Linked task memory",
+        content="Task-scoped memory linked to an origin task.",
+        scope="task",
+        task_id="task-123",
+        level=None,
+    )
+
+    loaded = Memory.get(created.id)
+    assert loaded is not None
+    assert loaded.scope == "task"
+    assert loaded.level is None
+    assert loaded.task_id == "task-123"
+
+
+def test_create_project_scope_without_task_id_preserves_null_on_load(project):
+    created = Memory.create(
+        project_id=project.id,
+        type="decision",
+        title="Project memory",
+        content="Project-scoped memory should not require a task id.",
+        scope="project",
+        level="L2",
+    )
+
+    loaded = Memory.get(created.id)
+    assert loaded is not None
+    assert loaded.scope == "project"
+    assert loaded.level == "L2"
+    assert loaded.task_id is None
+
+
+def test_create_rejects_unknown_scope(project):
+    with pytest.raises(ValueError, match="Invalid memory scope"):
+        Memory.create(
+            project_id=project.id,
+            type="decision",
+            title="Unknown scope",
+            content="Should fail.",
+            scope="phase",
+            level="L2",
+        )
+
+
+def test_create_rejects_unknown_level(project):
+    with pytest.raises(ValueError, match="Invalid memory level"):
+        Memory.create(
+            project_id=project.id,
+            type="decision",
+            title="Unknown level",
+            content="Should fail.",
+            scope="project",
+            level="L9",
+        )
+
+
+def test_create_rejects_project_scope_without_level(project):
+    with pytest.raises(ValueError, match="Project-scope memories require"):
+        Memory.create(
+            project_id=project.id,
+            type="decision",
+            title="Missing level",
+            content="Should fail.",
+            scope="project",
+            level=None,
+        )
+
+
+def test_create_rejects_task_scope_with_level(project):
+    with pytest.raises(ValueError, match="Task-scope memories must not"):
+        Memory.create(
+            project_id=project.id,
+            type="note",
+            title="Invalid task level",
+            content="Should fail.",
+            scope="task",
+            task_id="task-123",
+            level="L1",
+        )
 
 
 def test_get_memory(memory):
@@ -42,20 +177,195 @@ def test_get_nonexistent_memory(tmp_db):
 
 
 def test_list_by_project(project):
-    Memory.create(project_id=project.id, type="note", title="Note A", content="...")
-    Memory.create(project_id=project.id, type="lesson", title="Lesson B", content="...")
+    Memory.create(project_id=project.id, type="note", title="Note A", content="...", level="L3")
+    Memory.create(project_id=project.id, type="lesson", title="Lesson B", content="...", level="L3")
     memories = Memory.list_by_project(project.id)
     titles = [m.title for m in memories]
     assert "Note A" in titles
     assert "Lesson B" in titles
 
 
-def test_list_always_include(project):
+def test_list_project_guardrail_candidates_returns_project_l0_l1_only(project):
     Memory.create(
-        project_id=project.id, type="constraint", title="Always", content="x", always_include=True
+        id="guardrail-l1-b",
+        project_id=project.id,
+        type="constraint",
+        title="L1 guardrail B",
+        content="Project constraint B.",
+        scope="project",
+        level="L1",
     )
     Memory.create(
-        project_id=project.id, type="note", title="Not always", content="y", always_include=False
+        id="task-memory-1",
+        project_id=project.id,
+        type="note",
+        title="Task memory",
+        content="Task-only memory.",
+        scope="task",
+        task_id="task-123",
+        level=None,
+    )
+    Memory.create(
+        id="guardrail-l0-a",
+        project_id=project.id,
+        type="decision",
+        title="L0 identity",
+        content="Project identity.",
+        scope="project",
+        level="L0",
+    )
+    Memory.create(
+        id="project-l2",
+        project_id=project.id,
+        type="lesson",
+        title="L2 lesson",
+        content="Not a guardrail candidate.",
+        scope="project",
+        level="L2",
+    )
+    Memory.create(
+        id="guardrail-l1-a",
+        project_id=project.id,
+        type="constraint",
+        title="L1 guardrail A",
+        content="Project constraint A.",
+        scope="project",
+        level="L1",
+    )
+
+    guardrails = Memory.list_project_guardrail_candidates(project.id)
+
+    assert [(m.id, m.level) for m in guardrails] == [
+        ("guardrail-l0-a", "L0"),
+        ("guardrail-l1-a", "L1"),
+        ("guardrail-l1-b", "L1"),
+    ]
+    assert [
+        (m.id, m.title, m.type, m.scope, m.level, m.task_id, m.content) for m in guardrails
+    ] == [
+        (
+            "guardrail-l0-a",
+            "L0 identity",
+            "decision",
+            "project",
+            "L0",
+            None,
+            "Project identity.",
+        ),
+        (
+            "guardrail-l1-a",
+            "L1 guardrail A",
+            "constraint",
+            "project",
+            "L1",
+            None,
+            "Project constraint A.",
+        ),
+        (
+            "guardrail-l1-b",
+            "L1 guardrail B",
+            "constraint",
+            "project",
+            "L1",
+            None,
+            "Project constraint B.",
+        ),
+    ]
+
+
+def test_list_task_scope_for_project_excludes_project_scope_and_other_projects(project):
+    from engram.models.project import Project
+
+    other_project = Project.create(
+        id="other-project",
+        name="Other Project",
+        summary="",
+        repo_paths=["/tmp/other"],
+    )
+
+    Memory.create(
+        id="task-memory-b",
+        project_id=project.id,
+        type="note",
+        title="Task memory B",
+        content="Task memory in current project.",
+        scope="task",
+        task_id="task-b",
+        level=None,
+    )
+    Memory.create(
+        id="project-guardrail",
+        project_id=project.id,
+        type="constraint",
+        title="Project guardrail",
+        content="Should be excluded from task-scope helper.",
+        scope="project",
+        level="L1",
+    )
+    Memory.create(
+        id="task-memory-a",
+        project_id=project.id,
+        type="note",
+        title="Task memory A",
+        content="Second task memory in current project.",
+        scope="task",
+        task_id="task-a",
+        level=None,
+    )
+    Memory.create(
+        id="other-project-task-memory",
+        project_id=other_project.id,
+        type="note",
+        title="Other project task memory",
+        content="Should be excluded from current project scope.",
+        scope="task",
+        task_id="task-z",
+        level=None,
+    )
+
+    task_scope_memories = Memory.list_task_scope_for_project(project.id)
+
+    assert [m.id for m in task_scope_memories] == ["task-memory-a", "task-memory-b"]
+    assert [
+        (m.id, m.title, m.type, m.scope, m.level, m.task_id, m.content) for m in task_scope_memories
+    ] == [
+        (
+            "task-memory-a",
+            "Task memory A",
+            "note",
+            "task",
+            None,
+            "task-a",
+            "Second task memory in current project.",
+        ),
+        (
+            "task-memory-b",
+            "Task memory B",
+            "note",
+            "task",
+            None,
+            "task-b",
+            "Task memory in current project.",
+        ),
+    ]
+
+
+def test_list_always_include(project):
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Always",
+        content="x",
+        always_include=True,
+        level="L1",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Not always",
+        content="y",
+        always_include=False,
+        level="L3",
     )
     results = Memory.list_always_include(project.id)
     assert len(results) == 1
@@ -80,6 +390,63 @@ def test_update_memory_always_include(memory):
     assert refreshed.always_include is True
 
 
+def test_update_rejects_unknown_scope(project):
+    memory = Memory.create(
+        project_id=project.id,
+        type="decision",
+        title="Known level",
+        content="Valid base memory.",
+        scope="project",
+        level="L2",
+    )
+
+    with pytest.raises(ValueError, match="Invalid memory scope"):
+        memory.update(scope="phase")
+
+
+def test_update_rejects_unknown_level(project):
+    memory = Memory.create(
+        project_id=project.id,
+        type="decision",
+        title="Known level",
+        content="Valid base memory.",
+        scope="project",
+        level="L2",
+    )
+
+    with pytest.raises(ValueError, match="Invalid memory level"):
+        memory.update(level="L9")
+
+
+def test_update_rejects_project_scope_without_level(project):
+    memory = Memory.create(
+        project_id=project.id,
+        type="decision",
+        title="Will drop level",
+        content="Valid base memory.",
+        scope="project",
+        level="L2",
+    )
+
+    with pytest.raises(ValueError, match="Project-scope memories require"):
+        memory.update(level=None)
+
+
+def test_update_rejects_task_scope_with_level(project):
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Task base memory",
+        content="Valid task memory.",
+        scope="task",
+        task_id="task-123",
+        level=None,
+    )
+
+    with pytest.raises(ValueError, match="Task-scope memories must not"):
+        memory.update(level="L1")
+
+
 def test_delete_memory(memory):
     memory.delete()
     assert Memory.get(memory.id) is None
@@ -91,12 +458,14 @@ def test_fts_search(project):
         type="lesson",
         title="WAL mode",
         content="WAL mode needed for concurrent reads in SQLite.",
+        level="L3",
     )
     Memory.create(
         project_id=project.id,
         type="note",
         title="Unrelated",
         content="Something completely different.",
+        level="L3",
     )
     results = Memory.search("WAL concurrent")
     titles = [m.title for m in results]
@@ -166,6 +535,36 @@ def test_init_db_adds_memories_level_column_for_legacy_databases(tmp_path):
         VALUES ('legacy-memory-2', 'legacy-proj', 'note', 'Task Note', 'Scoped to a task', 'task', 'legacy-task', 'task', 0)
         """
     )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-3', 'legacy-proj', 'decision', 'Legacy Decision', 'Use local storage', 'project', NULL, 'architecture', 0)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-4', 'legacy-proj', 'lesson', 'Project Lesson', 'Useful project-level knowledge', 'project', NULL, 'lesson', 0)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-5', 'legacy-proj', 'lesson', 'Task Lesson', 'Useful task-derived knowledge', 'project', 'legacy-task', 'lesson', 0)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-6', 'legacy-proj', 'snippet', 'Project Snippet', 'Reusable command', 'project', NULL, 'snippet', 0)
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES ('legacy-memory-7', 'legacy-proj', 'custom', 'Pinned Custom', 'Pinned unknown-type memory', 'project', NULL, 'pinned', 1)
+        """
+    )
     legacy_conn.commit()
     legacy_conn.close()
 
@@ -174,16 +573,42 @@ def test_init_db_adds_memories_level_column_for_legacy_databases(tmp_path):
 
     conn = get_db_connection(db_path)
     memory_columns = {row["name"] for row in conn.execute("PRAGMA table_info(memories)").fetchall()}
-    memory_count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-    migrated_row = conn.execute("SELECT * FROM memories WHERE id = 'legacy-memory-2'").fetchone()
+    migrated_rows = conn.execute("SELECT * FROM memories").fetchall()
     conn.close()
 
     assert "level" in memory_columns
-    assert memory_count == 2
-    migrated_memory = Memory.from_row(migrated_row)
-    assert migrated_memory.scope == "task"
-    assert migrated_memory.task_id == "legacy-task"
-    assert migrated_memory.level is None
+    assert len(migrated_rows) == 7
+    migrated = {row["id"]: Memory.from_row(row) for row in migrated_rows}
+    assert (migrated["legacy-memory-1"].scope, migrated["legacy-memory-1"].level) == (
+        "project",
+        "L1",
+    )
+    assert (migrated["legacy-memory-2"].scope, migrated["legacy-memory-2"].level) == (
+        "task",
+        None,
+    )
+    assert migrated["legacy-memory-2"].task_id == "legacy-task"
+    assert (migrated["legacy-memory-3"].scope, migrated["legacy-memory-3"].level) == (
+        "project",
+        "L2",
+    )
+    assert (migrated["legacy-memory-4"].scope, migrated["legacy-memory-4"].level) == (
+        "project",
+        "L3",
+    )
+    assert (migrated["legacy-memory-5"].scope, migrated["legacy-memory-5"].level) == (
+        "task",
+        None,
+    )
+    assert migrated["legacy-memory-5"].task_id == "legacy-task"
+    assert (migrated["legacy-memory-6"].scope, migrated["legacy-memory-6"].level) == (
+        "project",
+        "L3",
+    )
+    assert (migrated["legacy-memory-7"].scope, migrated["legacy-memory-7"].level) == (
+        "project",
+        "L1",
+    )
 
 
 def test_memory_from_row_preserves_scope_and_level(tmp_db, project):
