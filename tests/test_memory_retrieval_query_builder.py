@@ -26,6 +26,9 @@ def test_query_builder_handles_minimal_task():
     assert "task.acceptance" in query.metadata.omitted_fields
     assert "task.tags" in query.metadata.omitted_fields
     assert "task.evidence" in query.metadata.omitted_fields
+    assert query.metadata.max_query_chars == 1200
+    assert query.metadata.field_char_limit == 220
+    assert query.metadata.uncapped_query_char_count == len(query.query_text)
 
 
 def test_query_builder_is_deterministic_with_phase_and_context():
@@ -122,3 +125,61 @@ def test_query_builder_does_not_perform_database_search(monkeypatch):
 
     assert query.query_text.startswith("task.title: No DB query required")
     assert search_call_count["count"] == 0
+
+
+def test_query_builder_compacts_long_task_and_phase_fields():
+    task = Task(
+        id="task006",
+        project_id="proj001",
+        title="Title " + ("x" * 120),
+        description="Description " + ("y" * 140),
+        acceptance="Acceptance " + ("z" * 140),
+        evidence="Evidence should be omitted " + ("e" * 140),
+    )
+    phase = Phase(
+        id="phase006",
+        project_id="proj001",
+        title="Phase " + ("p" * 80),
+        description="Phase description " + ("d" * 140),
+        acceptance="Phase acceptance " + ("a" * 140),
+        evidence="Phase evidence omitted " + ("v" * 140),
+    )
+    options = RetrievalQueryBuilderOptions(field_char_limit=40, max_query_chars=1200)
+
+    query = build_task_retrieval_query(task, active_phase=phase, options=options)
+
+    assert query.metadata.query_was_capped is False
+    assert "task.evidence" in query.metadata.omitted_fields
+    assert "phase.evidence" in query.metadata.omitted_fields
+    assert "Evidence should be omitted" not in query.query_text
+    assert "Phase evidence omitted" not in query.query_text
+    assert "task.title" in query.metadata.truncated_fields
+    assert "task.description" in query.metadata.truncated_fields
+    assert "task.acceptance" in query.metadata.truncated_fields
+    assert "phase.title" in query.metadata.truncated_fields
+    assert "phase.description" in query.metadata.truncated_fields
+    assert "phase.acceptance" in query.metadata.truncated_fields
+    assert "task.title: " + ("x" * 40) not in query.query_text
+    assert "phase.description: " + ("d" * 40) not in query.query_text
+
+
+def test_query_builder_hard_budget_boundary_is_deterministic():
+    task = Task(
+        id="task007",
+        project_id="proj001",
+        title="Very long retrieval title " + ("t" * 160),
+        description="Very long retrieval description " + ("d" * 200),
+        acceptance="Very long retrieval acceptance " + ("a" * 200),
+        tags=["tag-one", "tag-two"],
+    )
+    options = RetrievalQueryBuilderOptions(field_char_limit=120, max_query_chars=90)
+
+    first = build_task_retrieval_query(task, options=options)
+    second = build_task_retrieval_query(task, options=options)
+
+    assert first == second
+    assert first.metadata.query_was_capped is True
+    assert first.metadata.max_query_chars == 90
+    assert first.metadata.query_char_count == 90
+    assert len(first.query_text) == 90
+    assert first.metadata.uncapped_query_char_count > first.metadata.query_char_count

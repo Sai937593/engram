@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(retrieval): add explicit retrieval query budget metadata and regression coverage for long-field compaction, evidence omission, and deterministic hard character caps.
 - feat(retrieval): include deterministic phase context in retrieval query text via active phase, task phase_id resolution, and legacy task.phase fallback with dedicated query-builder regression tests.
 - feat(retrieval): add a backend-agnostic task retrieval query builder API with deterministic query text/metadata and unit coverage for minimal-task and no-db-search paths.
 - feat(cli): add explicit startup token/character budget constants from the memory-retrieval design, configurable task-memory placeholder compaction, and deterministic helper boundary tests for truncation markers and repeated output stability.

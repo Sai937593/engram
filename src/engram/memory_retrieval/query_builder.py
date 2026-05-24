@@ -33,6 +33,9 @@ class RetrievalQueryMetadata:
     included_fields: tuple[str, ...]
     omitted_fields: tuple[str, ...]
     truncated_fields: tuple[str, ...]
+    max_query_chars: int
+    field_char_limit: int
+    uncapped_query_char_count: int
     query_char_count: int
     query_was_capped: bool
 
@@ -181,9 +184,9 @@ def build_task_retrieval_query(
         if truncated:
             truncated_fields.append(field_name)
 
-    query_text = " | ".join(fragments)
+    uncapped_query_text = " | ".join(fragments)
     capped_query_text, query_was_capped = _truncate_with_limit(
-        query_text,
+        uncapped_query_text,
         resolved_options.max_query_chars,
     )
 
@@ -195,6 +198,9 @@ def build_task_retrieval_query(
         included_fields=tuple(included_fields),
         omitted_fields=tuple(omitted_fields),
         truncated_fields=tuple(truncated_fields),
+        max_query_chars=resolved_options.max_query_chars,
+        field_char_limit=resolved_options.field_char_limit,
+        uncapped_query_char_count=len(uncapped_query_text),
         query_char_count=len(capped_query_text),
         query_was_capped=query_was_capped,
     )
