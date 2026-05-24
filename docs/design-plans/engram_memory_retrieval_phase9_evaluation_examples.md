@@ -59,6 +59,27 @@ Rationale: evaluation examples showed generic lexical overlap was a major source
 - Deterministic ordering and metadata are stable enough to inspect with debug commands and regression tests.
 - Startup retrieval degrades safely when query/FTS paths fail (fallback metadata + empty candidate set).
 
+## Phase 10 Follow-up Outcomes (Scope + Threshold + Weak-Pack Filtering)
+
+Phase 10 introduced three deterministic controls on top of Phase 9 tuning:
+- project-scope candidate channel for `scope=project`, `level in (L2, L3)`, `type in (lesson, decision)`
+- lexical thresholding for weak content-only matches (single-term overlap filtered)
+- pack-level weak-candidate filtering (`min_selection_boost_score=1`) so startup can return fewer than preferred-K
+
+| Task Pattern | Phase 9 Baseline | Phase 10 Outcome |
+| --- | --- | --- |
+| Retrieval-focused implementation tasks | Usually selected 6 memories with good recall; occasional tangential picks remained due preferred-K fill. | Still retrieves relevant retrieval memories; weak content-only drift is filtered earlier, and packer can return fewer than `preferred_k` instead of filling with low-signal tails. |
+| Docs-focused tasks (for example `Create User Manual`) | Missed project-level docs guidance; retrieval internals could dominate selected set. | Project-scope L2/L3 lesson/decision guidance is now eligible; L0/L1 guardrails remain excluded from task-memory candidates. |
+| Export-focused tasks (for example `Implement Exports`) | Missed project-level decisions and selected mostly retrieval internals. | Project decisions in eligible scope/level channel can now be retrieved and selected when they lexically match strongly. |
+| Release-readiness tasks (for example `Prepare repository for public release`) | Generic engineering overlap could still fill selected set with weak retrieval internals. | Weak candidate rows can now be filtered by lexical threshold and/or pack boost threshold, producing concise empty or smaller packs when strong signal is absent. |
+
+Evidence hooks for Phase 10 behavior:
+- `tests/test_memory_retrieval_fts_retriever.py::test_retriever_includes_eligible_project_scope_guidance_without_l0_l1_guardrails`
+- `tests/test_memory_retrieval_fts_retriever.py::test_retriever_threshold_filters_weak_single_term_content_only_match`
+- `tests/test_memory_retrieval_startup_orchestration.py::test_startup_orchestration_prefers_empty_pack_over_weak_fill`
+- `tests/test_memory_retrieval_pack_contract.py::test_pack_task_memories_can_return_fewer_than_preferred_k_for_weak_candidates`
+- `tests/test_memory_retrieval_pack_contract.py::test_pack_task_memories_weak_only_candidates_yield_concise_empty_pack`
+
 ## K and Budget Validation (Current Evidence)
 
 - Current packing budget (`3600`) is not the limiting factor in sampled runs.
@@ -67,9 +88,9 @@ Rationale: evaluation examples showed generic lexical overlap was a major source
 
 ## Practical Debug Workflow
 
-1. Run `engram memory related-to-task <task-id> --debug` to inspect query text, normalized FTS terms, candidate ranks/boosts, selected items, hidden count, and budget usage.
-2. Run `engram start --debug-retrieval` to verify startup-path behavior uses the same query/retrieval/packing contracts.
-3. If expected project-level guidance is missing, verify whether the memory is `scope=project` (current task-memory retrieval intentionally excludes it).
+1. Run `engram memory related-to-task <task-id> --debug` to inspect query text, normalized FTS terms, scope channel counts, threshold filtering counts, selected IDs, hidden IDs, and budget usage.
+2. Run `engram start --debug-retrieval` to verify startup-path behavior uses the same query/retrieval/packing contracts and empty-state decisions.
+3. If expected project-level guidance is missing, verify eligibility first (`scope=project`, `level in L2/L3`, `type in lesson/decision`) and then inspect lexical/pack thresholds.
 4. If unrelated retrieval-internal memories appear, inspect normalized query terms for lexical drift and compare against the non-signal term filter.
 5. Confirm whether a relevant item was retrieved but hidden by preferred-K (`selected_item_count=6`) versus excluded before selection.
 

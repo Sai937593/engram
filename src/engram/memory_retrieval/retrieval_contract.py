@@ -60,6 +60,12 @@ class TaskMemoryRetrievalMetadata:
     returned_candidate_count: int
     threshold_min_content_term_hits_without_title_or_tag: int = 0
     threshold_filtered_row_count: int = 0
+    scanned_task_scope_row_count: int = 0
+    scanned_project_scope_row_count: int = 0
+    returned_task_scope_candidate_count: int = 0
+    returned_project_scope_candidate_count: int = 0
+    threshold_filtered_task_scope_count: int = 0
+    threshold_filtered_project_scope_count: int = 0
 
 
 @dataclass(frozen=True)

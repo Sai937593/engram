@@ -165,6 +165,12 @@ def retrieve_task_memory_candidates(
                 resolved_options.min_content_term_hits_without_title_or_tag
             ),
             threshold_filtered_row_count=0,
+            scanned_task_scope_row_count=0,
+            scanned_project_scope_row_count=0,
+            returned_task_scope_candidate_count=0,
+            returned_project_scope_candidate_count=0,
+            threshold_filtered_task_scope_count=0,
+            threshold_filtered_project_scope_count=0,
         )
         return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
@@ -192,11 +198,21 @@ def retrieve_task_memory_candidates(
                 resolved_options.min_content_term_hits_without_title_or_tag
             ),
             threshold_filtered_row_count=0,
+            scanned_task_scope_row_count=0,
+            scanned_project_scope_row_count=0,
+            returned_task_scope_candidate_count=0,
+            returned_project_scope_candidate_count=0,
+            threshold_filtered_task_scope_count=0,
+            threshold_filtered_project_scope_count=0,
         )
         return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
     candidates: list[TaskMemoryCandidate] = []
     threshold_filtered_row_count = 0
+    threshold_filtered_task_scope_count = 0
+    threshold_filtered_project_scope_count = 0
+    scanned_task_scope_row_count = sum(1 for row in fts_rows if row.scope == "task")
+    scanned_project_scope_row_count = sum(1 for row in fts_rows if row.scope == "project")
     for row in fts_rows:
         title_folded = row.title.casefold()
         content_tokens = _extract_token_set(row.content)
@@ -217,6 +233,10 @@ def retrieve_task_memory_candidates(
             ),
         ):
             threshold_filtered_row_count += 1
+            if row.scope == "task":
+                threshold_filtered_task_scope_count += 1
+            elif row.scope == "project":
+                threshold_filtered_project_scope_count += 1
             continue
 
         boost_score = (
@@ -273,5 +293,15 @@ def retrieve_task_memory_candidates(
             resolved_options.min_content_term_hits_without_title_or_tag
         ),
         threshold_filtered_row_count=threshold_filtered_row_count,
+        scanned_task_scope_row_count=scanned_task_scope_row_count,
+        scanned_project_scope_row_count=scanned_project_scope_row_count,
+        returned_task_scope_candidate_count=sum(
+            1 for candidate in ordered_candidates if candidate.scope == "task"
+        ),
+        returned_project_scope_candidate_count=sum(
+            1 for candidate in ordered_candidates if candidate.scope == "project"
+        ),
+        threshold_filtered_task_scope_count=threshold_filtered_task_scope_count,
+        threshold_filtered_project_scope_count=threshold_filtered_project_scope_count,
     )
     return TaskMemoryRetrievalResult(candidates=ordered_candidates, metadata=metadata)

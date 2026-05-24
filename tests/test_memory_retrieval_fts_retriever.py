@@ -301,6 +301,8 @@ def test_retriever_includes_eligible_project_scope_guidance_without_l0_l1_guardr
     assert retrieval_internal.id not in returned_ids
     assert any(candidate.scope == "project" for candidate in result.candidates)
     assert result.metadata.scanned_row_count >= 2
+    assert result.metadata.returned_project_scope_candidate_count >= 2
+    assert result.metadata.returned_task_scope_candidate_count == 0
 
 
 def test_phase9_generic_terms_do_not_pull_irrelevant_retrieval_internals(project) -> None:
@@ -355,6 +357,8 @@ def test_retriever_threshold_filters_weak_single_term_content_only_match(project
     assert result.metadata.returned_candidate_count == 0
     assert result.metadata.threshold_filtered_row_count == 1
     assert result.metadata.threshold_min_content_term_hits_without_title_or_tag == 2
+    assert result.metadata.threshold_filtered_task_scope_count == 1
+    assert result.metadata.threshold_filtered_project_scope_count == 0
 
 
 def test_retriever_threshold_keeps_multi_term_content_and_task_linked_matches(project) -> None:
