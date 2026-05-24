@@ -1,7 +1,9 @@
 """Tests for context generation (startup and task context)."""
 
 from engram.context import get_startup_context, get_task_context
+from engram.context_helpers.startup import StartupContextOptions, build_startup_context
 from engram.models.memory import Memory
+from engram.models.phase import Phase
 from engram.models.task import Task
 
 
@@ -33,6 +35,128 @@ def test_startup_context_no_crash_when_empty(project):
     """Startup context should work gracefully even with no tasks or sessions."""
     ctx = get_startup_context(project.id)
     assert "Test Project" in ctx
+
+
+def test_startup_builder_accepts_project_phase_and_task(project):
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Builder",
+        status="active",
+        description="Deliver the startup builder contract.",
+    )
+    task = Task.create(
+        project_id=project.id,
+        title="Implement startup builder",
+        phase_id=phase.id,
+        status="in-progress",
+        acceptance="Startup context uses unified sections.",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Local-first only",
+        content="Avoid remote dependencies.",
+        level="L1",
+    )
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
+
+    assert "## PROJECT FRAME" in ctx
+    assert "## CURRENT PHASE FRAME" in ctx
+    assert "## CURRENT/NEXT TASK FRAME" in ctx
+    assert "## PROJECT GUARDRAILS" in ctx
+    assert "## TASK MEMORY CANDIDATES" in ctx
+    assert "## NEXT ACTION" in ctx
+    assert "Implement startup builder" in ctx
+    assert "Local-first only" in ctx
+
+
+def test_startup_builder_handles_no_task_input(project):
+    phase = Phase.create(project_id=project.id, title="Phase Empty", status="active")
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=None)
+
+    assert "No current or next task selected." in ctx
+    assert "## NEXT ACTION" in ctx
+
+
+def test_startup_builder_caps_l1_guardrails(project):
+    Memory.create(
+        id="l0a00001",
+        project_id=project.id,
+        type="constraint",
+        title="Identity",
+        content="Core identity memory.",
+        level="L0",
+    )
+    Memory.create(
+        id="l1a00001",
+        project_id=project.id,
+        type="constraint",
+        title="Constraint A",
+        content="A",
+        level="L1",
+    )
+    Memory.create(
+        id="l1b00001",
+        project_id=project.id,
+        type="constraint",
+        title="Constraint B",
+        content="B",
+        level="L1",
+    )
+    Memory.create(
+        id="l1c00001",
+        project_id=project.id,
+        type="constraint",
+        title="Constraint C",
+        content="C",
+        level="L1",
+    )
+
+    ctx = build_startup_context(
+        project=project,
+        options=StartupContextOptions(l1_guardrail_limit=2),
+    )
+
+    assert "Identity" in ctx
+    assert "Constraint A" in ctx
+    assert "Constraint B" in ctx
+    assert "Constraint C" not in ctx
+    assert "hidden by cap" in ctx
+
+
+def test_startup_builder_compacts_text_and_enforces_hard_budget(project):
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Long",
+        status="active",
+        description="phase " + ("p" * 200),
+    )
+    task = Task.create(
+        project_id=project.id,
+        title="Task Long",
+        phase_id=phase.id,
+        status="todo",
+        description="desc " + ("d" * 200),
+    )
+    project.update(summary="summary " + ("s" * 200))
+
+    ctx = build_startup_context(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+        options=StartupContextOptions(
+            hard_char_budget=450,
+            project_summary_char_limit=40,
+            phase_text_char_limit=40,
+            task_text_char_limit=40,
+        ),
+    )
+
+    assert "..." in ctx
+    assert len(ctx) <= 450
+    assert ctx.endswith("[Context truncated to fit budget.]")
 
 
 def test_task_context_shows_title(task):

@@ -75,8 +75,8 @@ def test_start_success_when_clean(tmp_db, project, mock_git, monkeypatch):
     assert in_progress[0].title == "Task 1"
 
 
-def test_start_context_includes_only_hard_constraints(tmp_db, project, mock_git, monkeypatch):
-    """engram start prints task context plus hard constraints only."""
+def test_start_context_uses_unified_startup_builder(tmp_db, project, mock_git, monkeypatch):
+    """engram start prints the unified startup context sections."""
     task = Task.create(project_id=project.id, title="Task 1", phase="Phase 1", status="todo")
     Memory.create(
         project_id=project.id,
@@ -107,11 +107,12 @@ def test_start_context_includes_only_hard_constraints(tmp_db, project, mock_git,
     runner = make_runner_with_project(monkeypatch, tmp_db, project)
     result = runner.invoke(cli, ["start"])
     assert result.exit_code == 0
-    assert "HARD CONSTRAINTS" in result.output
+    assert "PROJECT FRAME" in result.output
+    assert "CURRENT/NEXT TASK FRAME" in result.output
+    assert "PROJECT GUARDRAILS" in result.output
+    assert "TASK MEMORY CANDIDATES" in result.output
     assert "No secrets" in result.output
-    assert "PROJECT KNOWLEDGE" not in result.output
     assert "Use WAL" not in result.output
-    assert "LINKED MEMORIES" not in result.output
     assert "Task note" not in result.output
 
 

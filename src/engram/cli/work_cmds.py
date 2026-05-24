@@ -6,6 +6,7 @@ import click
 
 import engram.cli as cli_root
 from engram.cli.work_cmds_helpers import (
+    get_active_phase,
     get_current_branch,
     get_target_branch,
     git_checkout_phase_branch,
@@ -15,7 +16,7 @@ from engram.cli.work_cmds_helpers import (
     select_task_to_start,
     slugify,
 )
-from engram.context import get_task_context
+from engram.context_helpers.startup import build_startup_context
 from engram.models.task import Task, get_effective_phase_title
 
 
@@ -23,31 +24,18 @@ from engram.models.task import Task, get_effective_phase_title
 def start():
     """Start the next task in the workflow."""
     project = cli_root.get_current_project()
+    active_phase = get_active_phase(project.id)
     task, is_resuming = select_task_to_start(project.id)
 
     if not task:
-        counts = Task.count_by_status(project.id)
-        total = sum(counts.values())
-        if total == 0:
-            cli_root.console.print(
-                "[yellow]No tasks defined.[/yellow] The next phase has not been planned yet."
-            )
-            cli_root.console.print(
-                "Action: Ask the user what the next phase of work should be, then run:"
-            )
-            cli_root.console.print(
-                '  [cyan]engram task add "<task title>" --phase "Phase N" --priority high[/cyan]'
-            )
-        elif all(status in ("done", "cancelled") for status in counts):
-            cli_root.console.print("[green]All tasks complete.[/green] This project is done.")
-            cli_root.console.print(
-                "Action: Confirm with the user whether to plan the next phase or close the project."
-            )
-        else:
-            blocked = counts.get("blocked", 0)
-            cli_root.console.print(
-                f"[red]All remaining tasks are blocked[/red] ({blocked} blocked)."
-            )
+        context_str = build_startup_context(
+            project=project,
+            active_phase=active_phase,
+            selected_task=None,
+        )
+        cli_root.console.print("\n" + "=" * 40)
+        cli_root.console.print(context_str)
+        cli_root.console.print("=" * 40 + "\n")
         return
 
     target_branch = get_target_branch(task)
@@ -68,7 +56,11 @@ def start():
 
     git_checkout_phase_branch(task)
 
-    context_str = get_task_context(task.id, hard_constraints_only=True)
+    context_str = build_startup_context(
+        project=project,
+        active_phase=active_phase,
+        selected_task=task,
+    )
     cli_root.console.print("\n" + "=" * 40)
     cli_root.console.print(context_str)
     cli_root.console.print("=" * 40 + "\n")

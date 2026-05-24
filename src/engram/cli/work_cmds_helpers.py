@@ -107,6 +107,12 @@ def select_task_to_start(project_id: str) -> tuple[Task | None, bool]:
     return Task.get_next(project_id), False
 
 
+def get_active_phase(project_id: str) -> Phase | None:
+    """Return the currently active phase for a project, if one exists."""
+    phases = Phase.list_by_project(project_id)
+    return next((phase for phase in phases if phase.status == "active"), None)
+
+
 def resolve_commit_type(task: Task, requested_type: str | None, allowed_types: set[str]) -> str:
     """Resolve the commit type from explicit input or task tags."""
     if requested_type:

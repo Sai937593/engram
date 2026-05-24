@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): introduce a unified startup context builder for `engram start` with project/phase/task frames, capped L0/L1 guardrails, deterministic character budgeting, and retrieval-placeholder sectioning while preserving focused task context helpers.
 - feat(cli): add explicit scope/level override handling for typed lesson/snippet commands, requiring level for project scope, validating task-scope task_id ownership, and adding override regression tests.
 - fix(cli): align typed memory shortcut defaults with Phase 2 scope contract (constraint=L1 project, decision=L2 project, lesson/snippet=task scope with active-task linkage) and add lesson override options for project scope/level.
 - feat(cli): include scope/level/task_id metadata in typed memory list/get output and normalize empty memory metadata display to `-` across generic and typed memory views.
