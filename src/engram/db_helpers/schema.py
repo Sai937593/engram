@@ -68,6 +68,7 @@ def create_memories_table(cursor: sqlite3.Cursor) -> None:
         title          TEXT NOT NULL,
         content        TEXT NOT NULL,
         scope          TEXT DEFAULT 'project',
+        level          TEXT,
         task_id        TEXT REFERENCES tasks(id),
         tags           TEXT,
         always_include BOOLEAN DEFAULT 0,

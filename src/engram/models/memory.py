@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 from engram.db import get_db_connection
 from engram.models.audit import AuditLog
@@ -7,22 +8,24 @@ from engram.models.audit import AuditLog
 class Memory:
     def __init__(
         self,
-        id,
-        project_id,
-        type,
-        title,
-        content,
-        scope="project",
-        task_id=None,
-        tags=None,
-        always_include=False,
-    ):
+        id: str,
+        project_id: str,
+        type: str,
+        title: str,
+        content: str,
+        scope: str = "project",
+        task_id: str | None = None,
+        tags: list[str] | None = None,
+        always_include: bool = False,
+        level: str | None = None,
+    ) -> None:
         self.id = id
         self.project_id = project_id
         self.type = type
         self.title = title
         self.content = content
         self.scope = scope
+        self.level = level
         self.task_id = task_id
         self.tags = tags or []
         self.always_include = always_include
@@ -30,24 +33,27 @@ class Memory:
     @classmethod
     def create(
         cls,
-        project_id,
-        type,
-        title,
-        content,
-        scope="project",
-        task_id=None,
-        tags=None,
-        always_include=False,
-        id=None,
-    ):
+        project_id: str,
+        type: str,
+        title: str,
+        content: str,
+        scope: str = "project",
+        task_id: str | None = None,
+        tags: list[str] | None = None,
+        always_include: bool = False,
+        level: str | None = None,
+        id: str | None = None,
+    ) -> "Memory":
         if not id:
             id = uuid.uuid4().hex[:8]
 
         conn = get_db_connection()
         conn.execute(
             """
-            INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO memories (
+                id, project_id, type, title, content, scope, level, task_id, tags, always_include
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 id,
@@ -56,6 +62,7 @@ class Memory:
                 title,
                 content,
                 scope,
+                level,
                 task_id,
                 ",".join(tags or []),
                 1 if always_include else 0,
@@ -66,7 +73,9 @@ class Memory:
 
         AuditLog.log("memories", id, "create")
 
-        return cls(id, project_id, type, title, content, scope, task_id, tags, always_include)
+        return cls(
+            id, project_id, type, title, content, scope, task_id, tags, always_include, level
+        )
 
     @classmethod
     def list_by_project(cls, project_id: str) -> list["Memory"]:
@@ -108,7 +117,8 @@ class Memory:
         return None
 
     @classmethod
-    def from_row(cls, row):
+    def from_row(cls, row: Any) -> "Memory":
+        level = row["level"] if "level" in row.keys() else None
         return cls(
             row["id"],
             row["project_id"],
@@ -119,6 +129,7 @@ class Memory:
             row["task_id"],
             row["tags"].split(",") if row["tags"] else [],
             bool(row["always_include"]),
+            level,
         )
 
     def update(self, **kwargs):

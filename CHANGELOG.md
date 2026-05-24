@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(db): add idempotent `memories.level` schema migration and preserve memory `level` values in `Memory.from_row` loading paths.
 - fix(cli): limit `engram start` task context output to task details plus hard constraints only, excluding lessons and linked memories.
 - fix(cli): align remaining phase-task workflow gaps for start fallback, task next phase display, and manual docs.
 - feat(cli): completely remove output truncation across CLI commands including memory search snippets, phase list summaries, and startup active tasks.

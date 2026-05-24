@@ -25,6 +25,12 @@ def apply_tasks_column_migrations(cursor: sqlite3.Cursor) -> None:
         cursor.execute("ALTER TABLE tasks ADD COLUMN phase_id TEXT REFERENCES phases(id)")
 
 
+def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:
+    """Add missing legacy memories columns for compatibility."""
+    if not column_exists(cursor, "memories", "level"):
+        cursor.execute("ALTER TABLE memories ADD COLUMN level TEXT")
+
+
 def backfill_legacy_phase_ids(cursor: sqlite3.Cursor) -> None:
     """Create first-class phases from legacy task.phase text and backfill phase_id."""
     legacy_rows = cursor.execute(
