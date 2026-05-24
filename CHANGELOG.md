@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(retrieval): enforce preferred-K task-memory packing before the hard max-K limit.
 - fix(test): stabilize task-scope memory ordering regression by normalizing created_at timestamps before asserting deterministic id tie-break ordering.
 - feat(retrieval): enforce memory pack character budgets and compaction limits (title, content, tags) with deterministic truncation and budget-used metadata.
 - feat(retrieval): implement deterministic task-memory selection and budgeted packing (Phase 6) with stable sorting, deduplication, content truncation, and metadata calculations.

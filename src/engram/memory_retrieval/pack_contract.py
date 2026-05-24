@@ -139,9 +139,10 @@ def pack_task_memories(
     used_char_count = 0
     section_budget_exhausted = False
     truncated_item_count = 0
+    effective_k_limit = max(0, min(opts.preferred_k, opts.max_k))
 
     for cand, original_idx in unique_sorted_candidates:
-        if len(selected_items) >= opts.max_k:
+        if len(selected_items) >= effective_k_limit:
             # Excluded by K limit, do not add
             continue
 

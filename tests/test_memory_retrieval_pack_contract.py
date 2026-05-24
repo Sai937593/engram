@@ -190,6 +190,19 @@ def test_pack_task_memories_enforces_max_k_limit() -> None:
     assert [item.memory_id for item in result.items] == [f"mem-{i}" for i in range(5)]
 
 
+def test_pack_task_memories_enforces_preferred_k_before_max_k() -> None:
+    candidates = tuple(_mock_candidate(f"mem-{i}", boost_score=20 - i) for i in range(8))
+    options = TaskMemoryPackOptions(preferred_k=3, max_k=6)
+
+    result = pack_task_memories(candidates, _mock_retrieval_metadata(), options)
+
+    assert len(result.items) == 3
+    assert result.metadata.selected_item_count == 3
+    assert result.metadata.unique_candidate_count == 8
+    assert result.metadata.hidden_item_count == 5
+    assert [item.memory_id for item in result.items] == ["mem-0", "mem-1", "mem-2"]
+
+
 def test_pack_task_memories_enforces_section_char_budget() -> None:
     cand1 = _mock_candidate("mem-1", content="hello", boost_score=10)  # 5 chars
     cand2 = _mock_candidate("mem-2", content="world!", boost_score=9)  # 6 chars
