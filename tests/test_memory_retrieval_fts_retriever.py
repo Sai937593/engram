@@ -229,8 +229,8 @@ def test_retriever_falls_back_when_fts_table_is_unavailable(project) -> None:
     assert result.metadata.returned_candidate_count == 0
 
 
-def test_phase9_scope_gap_misses_project_scope_docs_guidance(project) -> None:
-    """Phase 9 regression: docs guidance in project scope is missed for user-manual tasks."""
+def test_phase9_scope_gap_still_misses_project_scope_docs_guidance(project) -> None:
+    """Phase 9 regression: project-scope docs guidance is still out of task-scope retrieval."""
     task = Task.create(
         project_id=project.id,
         title="Create User Manual",
@@ -260,12 +260,13 @@ def test_phase9_scope_gap_misses_project_scope_docs_guidance(project) -> None:
     returned_ids = [candidate.memory_id for candidate in result.candidates]
 
     assert docs_guidance.id not in returned_ids
-    assert retrieval_internal.id in returned_ids
-    assert all(candidate.scope == "task" for candidate in result.candidates)
+    assert retrieval_internal.id not in returned_ids
+    assert result.candidates == ()
+    assert result.metadata.scanned_row_count == 0
 
 
-def test_phase9_generic_terms_can_pull_irrelevant_retrieval_internals(project) -> None:
-    """Phase 9 regression: generic terms can pull retrieval internals into release tasks."""
+def test_phase9_generic_terms_do_not_pull_irrelevant_retrieval_internals(project) -> None:
+    """Phase 9 regression: generic terms should not pull retrieval internals into release tasks."""
     task = Task.create(
         project_id=project.id,
         title="Prepare repository for public release",
@@ -283,6 +284,6 @@ def test_phase9_generic_terms_can_pull_irrelevant_retrieval_internals(project) -
 
     result = retrieve_task_memory_candidates(retrieval_query)
 
-    assert [candidate.memory_id for candidate in result.candidates] == [retrieval_internal.id]
-    assert result.candidates[0].task_id_match is False
-    assert "task" in result.candidates[0].title_term_hits
+    assert retrieval_internal.id not in [candidate.memory_id for candidate in result.candidates]
+    assert result.candidates == ()
+    assert result.metadata.scanned_row_count == 0

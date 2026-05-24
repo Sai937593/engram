@@ -42,3 +42,9 @@ Interpretation: hidden items in this sample are caused by preferred-K selection,
 - Current packing budget (`3600`) is not the limiting factor in sampled runs.
 - Current selected count (`6`) is adequate for retrieval-heavy tasks, but often too permissive for non-retrieval tasks because irrelevant memories still fill all slots.
 - Evidence supports carrying these defaults into the next tuning task, with targeted follow-up on relevance thresholds/scope strategy rather than budget expansion.
+
+## Semantic Retrieval Recommendation
+
+- **Recommendation: No-go for now (Phase 9).**
+- Rationale: Observed misses/false positives can still be addressed with deterministic FTS-first tuning (query-term filtering, scope strategy, and lexical thresholds) without introducing local embedding/index complexity yet.
+- Revisit trigger: proceed to semantic retrieval only if post-tuning regressions still show material misses that cannot be corrected via bounded FTS-first adjustments.
