@@ -11,6 +11,7 @@ from engram.memory_retrieval import (
     TaskMemoryPackResult,
     TaskMemoryRetrievalMetadata,
 )
+from engram.memory_retrieval.query_builder import RetrievalQueryMetadata, TaskRetrievalQuery
 from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.task import Task
@@ -180,6 +181,181 @@ def test_start_context_uses_unified_startup_builder(tmp_db, project, mock_git, m
     assert "Selected task memory" in result.output
     assert "No secrets" in result.output
     assert "Use WAL" not in result.output
+
+
+def test_start_debug_retrieval_is_hidden_by_default(tmp_db, project, mock_git, monkeypatch):
+    """engram start keeps retrieval diagnostics disabled unless explicitly requested."""
+    task = Task.create(project_id=project.id, title="Task 1", phase="Phase 1", status="todo")
+    startup_result = StartupTaskMemoryRetrievalResult(
+        query=TaskRetrievalQuery(
+            query_text="task.title: Task 1",
+            fragments=("task.title: Task 1",),
+            metadata=RetrievalQueryMetadata(
+                task_id=task.id,
+                project_id=project.id,
+                phase_id=None,
+                phase_title=None,
+                included_fields=("task.title",),
+                omitted_fields=(),
+                truncated_fields=(),
+                max_query_chars=1200,
+                field_char_limit=220,
+                uncapped_query_char_count=18,
+                query_char_count=18,
+                query_was_capped=False,
+            ),
+        ),
+        retrieval_metadata=TaskMemoryRetrievalMetadata(
+            project_id=project.id,
+            query_task_id=task.id,
+            source="fts",
+            requested_query_text="task.title: Task 1",
+            normalized_fts_query="task AND title AND task AND 1",
+            query_term_count=4,
+            query_was_empty=False,
+            fallback_used=False,
+            fallback_reason=None,
+            max_candidates=20,
+            scanned_row_count=3,
+            returned_candidate_count=2,
+        ),
+        pack_result=TaskMemoryPackResult(
+            items=(),
+            metadata=TaskMemoryPackMetadata(
+                project_id=project.id,
+                query_task_id=task.id,
+                source="fts",
+                section_char_budget=3600,
+                preferred_k=6,
+                max_k=10,
+                max_item_chars=420,
+                input_candidate_count=2,
+                unique_candidate_count=2,
+                selected_item_count=0,
+                hidden_item_count=2,
+                truncated_item_count=0,
+                used_char_count=0,
+                section_budget_exhausted=False,
+                ordering_fields=("-boost_score", "fts_rank", "memory_id"),
+                dedupe_key="memory_id",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        lambda **kwargs: startup_result,
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0
+    assert "RETRIEVAL DEBUG" not in result.output
+    assert "query text: task.title: Task 1" not in result.output
+
+
+def test_start_debug_retrieval_prints_diagnostics_when_enabled(
+    tmp_db, project, mock_git, monkeypatch
+):
+    """engram start --debug-retrieval prints deterministic retrieval diagnostics."""
+    task = Task.create(project_id=project.id, title="Task 1", phase="Phase 1", status="todo")
+    startup_result = StartupTaskMemoryRetrievalResult(
+        query=TaskRetrievalQuery(
+            query_text="task.title: Task 1 | task.description: Retrieve memory",
+            fragments=(
+                "task.title: Task 1",
+                "task.description: Retrieve memory",
+            ),
+            metadata=RetrievalQueryMetadata(
+                task_id=task.id,
+                project_id=project.id,
+                phase_id=None,
+                phase_title=None,
+                included_fields=("task.title", "task.description"),
+                omitted_fields=(),
+                truncated_fields=(),
+                max_query_chars=1200,
+                field_char_limit=220,
+                uncapped_query_char_count=54,
+                query_char_count=54,
+                query_was_capped=False,
+            ),
+        ),
+        retrieval_metadata=TaskMemoryRetrievalMetadata(
+            project_id=project.id,
+            query_task_id=task.id,
+            source="fts",
+            requested_query_text="task.title: Task 1 | task.description: Retrieve memory",
+            normalized_fts_query="task AND 1 AND retrieve AND memory",
+            query_term_count=4,
+            query_was_empty=False,
+            fallback_used=True,
+            fallback_reason="fts timeout fallback",
+            max_candidates=20,
+            scanned_row_count=4,
+            returned_candidate_count=2,
+        ),
+        pack_result=TaskMemoryPackResult(
+            items=(
+                TaskMemoryPackedItem(
+                    memory_id="mem-1",
+                    type="lesson",
+                    title="Memory one",
+                    content="Useful memory.",
+                    tags=("startup",),
+                    task_id=task.id,
+                    retrieval_source="fts",
+                    fts_rank=-0.15,
+                    boost_score=3,
+                    source_candidate_index=0,
+                    char_count=14,
+                    was_truncated=False,
+                ),
+            ),
+            metadata=TaskMemoryPackMetadata(
+                project_id=project.id,
+                query_task_id=task.id,
+                source="fts",
+                section_char_budget=3600,
+                preferred_k=6,
+                max_k=10,
+                max_item_chars=420,
+                input_candidate_count=2,
+                unique_candidate_count=2,
+                selected_item_count=1,
+                hidden_item_count=1,
+                truncated_item_count=0,
+                used_char_count=14,
+                section_budget_exhausted=False,
+                ordering_fields=("-boost_score", "fts_rank", "memory_id"),
+                dedupe_key="memory_id",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        lambda **kwargs: startup_result,
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start", "--debug-retrieval"])
+    assert result.exit_code == 0
+    assert "RETRIEVAL DEBUG" in result.output
+    assert "query text: task.title: Task 1 | task.description: Retrieve memory" in result.output
+    assert "retrieval mode: fts" in result.output
+    assert "fts candidate metadata:" in result.output
+    assert "max_candidates=20" in result.output
+    assert "scanned_row_count=4" in result.output
+    assert "returned_candidate_count=2" in result.output
+    assert "selected counts:" in result.output
+    assert "selected_item_count=1" in result.output
+    assert "hidden_item_count=1" in result.output
+    assert "truncated_item_count=0" in result.output
+    assert "selected memory ids: mem-1" in result.output
+    assert "budget usage:" in result.output
+    assert "used_char_count=14/3600" in result.output
+    assert "section_budget_exhausted=False" in result.output
+    assert "fallback reason: fts timeout fallback" in result.output
+    assert "memory_id=mem-1, retrieval_source=fts, fts_rank=-0.150000" in result.output
 
 
 def test_start_blocks_when_dirty_and_switching_branch(tmp_db, project, mock_git, monkeypatch):
