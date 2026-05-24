@@ -6,8 +6,6 @@ repos:
       - id: end-of-file-fixer
       - id: check-toml
       - id: check-yaml
-      - id: check-added-large-files
-        args: ['--maxkb=5000']
       - id: check-merge-conflict
       - id: debug-statements
       - id: detect-private-key
@@ -21,6 +19,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: max-lines-new-py
+        name: max-lines-new-py
+        entry: uv run python -m engram.hooks.max_lines_new_py --max-lines 200
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: pytest
         name: pytest
         entry: uv run pytest tests/ -v --tb=short

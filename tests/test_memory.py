@@ -667,3 +667,211 @@ def test_memory_from_row_preserves_scope_and_level(tmp_db, project):
     assert project_memory.level == "L2"
     assert task_memory.scope == "task"
     assert task_memory.level is None
+
+
+def test_init_db_backfills_legacy_memory_scope_and_level_defaults(tmp_path):
+    db_path = tmp_path / "legacy_memory_backfill.db"
+    legacy_conn = sqlite3.connect(db_path)
+    legacy_conn.execute("""
+    CREATE TABLE projects (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        summary     TEXT,
+        status      TEXT DEFAULT 'active',
+        repo_paths  TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    legacy_conn.execute("""
+    CREATE TABLE tasks (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL REFERENCES projects(id),
+        title       TEXT NOT NULL,
+        description TEXT,
+        status      TEXT DEFAULT 'todo',
+        priority    TEXT DEFAULT 'medium',
+        phase       TEXT,
+        acceptance  TEXT,
+        evidence    TEXT,
+        tags        TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    legacy_conn.execute("""
+    CREATE TABLE memories (
+        id             TEXT PRIMARY KEY,
+        project_id     TEXT NOT NULL REFERENCES projects(id),
+        type           TEXT NOT NULL,
+        title          TEXT NOT NULL,
+        content        TEXT NOT NULL,
+        scope          TEXT DEFAULT 'project',
+        task_id        TEXT REFERENCES tasks(id),
+        tags           TEXT,
+        always_include BOOLEAN DEFAULT 0,
+        created_at     TEXT DEFAULT (datetime('now')),
+        updated_at     TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    legacy_conn.execute(
+        "INSERT INTO projects (id, name, repo_paths) VALUES ('legacy-proj', 'Legacy', '[]')"
+    )
+    legacy_conn.execute(
+        "INSERT INTO tasks (id, project_id, title) VALUES ('legacy-task', 'legacy-proj', 'Legacy Task')"
+    )
+
+    fixture_rows = [
+        (
+            "legacy-constraint",
+            "constraint",
+            "Constraint",
+            "No production writes",
+            "task",
+            "legacy-task",
+            "guardrail",
+            0,
+        ),
+        (
+            "legacy-decision",
+            "decision",
+            "Decision",
+            "Use sqlite",
+            "task",
+            "legacy-task",
+            "architecture",
+            0,
+        ),
+        (
+            "legacy-task-lesson",
+            "lesson",
+            "Task Lesson",
+            "Task linked lesson",
+            "project",
+            "legacy-task",
+            "lesson",
+            0,
+        ),
+        (
+            "legacy-task-snippet",
+            "snippet",
+            "Task Snippet",
+            "Task linked snippet",
+            "project",
+            "legacy-task",
+            "snippet",
+            1,
+        ),
+        (
+            "legacy-project-lesson",
+            "lesson",
+            "Project Lesson",
+            "Project lesson",
+            "project",
+            None,
+            "lesson",
+            0,
+        ),
+        (
+            "legacy-project-note-always",
+            "note",
+            "Pinned Note",
+            "Important note",
+            "project",
+            None,
+            "note",
+            1,
+        ),
+        (
+            "legacy-custom-always",
+            "custom",
+            "Custom Pinned",
+            "Pinned custom memory",
+            "project",
+            None,
+            "custom",
+            1,
+        ),
+        (
+            "legacy-custom-plain",
+            "custom",
+            "Custom Plain",
+            "Plain custom memory",
+            "project",
+            None,
+            "custom",
+            0,
+        ),
+    ]
+    legacy_conn.executemany(
+        """
+        INSERT INTO memories (id, project_id, type, title, content, scope, task_id, tags, always_include)
+        VALUES (?, 'legacy-proj', ?, ?, ?, ?, ?, ?, ?)
+        """,
+        fixture_rows,
+    )
+    legacy_conn.commit()
+    legacy_conn.close()
+
+    init_db(db_path)
+    init_db(db_path)
+
+    conn = get_db_connection(db_path)
+    rows = conn.execute(
+        """
+        SELECT id, type, content, scope, level, task_id, tags, always_include
+        FROM memories
+        WHERE project_id = 'legacy-proj'
+        """
+    ).fetchall()
+    conn.close()
+
+    by_id = {row["id"]: row for row in rows}
+    assert set(by_id) == {row[0] for row in fixture_rows}
+
+    assert by_id["legacy-constraint"]["scope"] == "project"
+    assert by_id["legacy-constraint"]["level"] == "L1"
+    assert by_id["legacy-constraint"]["task_id"] == "legacy-task"
+
+    assert by_id["legacy-decision"]["scope"] == "project"
+    assert by_id["legacy-decision"]["level"] == "L2"
+    assert by_id["legacy-decision"]["task_id"] == "legacy-task"
+
+    assert by_id["legacy-task-lesson"]["scope"] == "task"
+    assert by_id["legacy-task-lesson"]["level"] is None
+    assert by_id["legacy-task-lesson"]["task_id"] == "legacy-task"
+
+    assert by_id["legacy-task-snippet"]["scope"] == "task"
+    assert by_id["legacy-task-snippet"]["level"] is None
+    assert by_id["legacy-task-snippet"]["task_id"] == "legacy-task"
+
+    assert by_id["legacy-project-lesson"]["scope"] == "project"
+    assert by_id["legacy-project-lesson"]["level"] == "L3"
+    assert by_id["legacy-project-lesson"]["task_id"] is None
+
+    assert by_id["legacy-project-note-always"]["scope"] == "project"
+    assert by_id["legacy-project-note-always"]["level"] == "L1"
+    assert by_id["legacy-project-note-always"]["task_id"] is None
+
+    assert by_id["legacy-custom-always"]["scope"] == "project"
+    assert by_id["legacy-custom-always"]["level"] == "L1"
+    assert by_id["legacy-custom-always"]["task_id"] is None
+
+    assert by_id["legacy-custom-plain"]["scope"] == "project"
+    assert by_id["legacy-custom-plain"]["level"] == "L3"
+    assert by_id["legacy-custom-plain"]["task_id"] is None
+
+    for (
+        fixture_id,
+        _,
+        _,
+        fixture_content,
+        _,
+        _,
+        fixture_tags,
+        fixture_always_include,
+    ) in fixture_rows:
+        migrated_row = by_id[fixture_id]
+        assert migrated_row["content"] == fixture_content
+        assert migrated_row["tags"] == fixture_tags
+        assert migrated_row["always_include"] == fixture_always_include

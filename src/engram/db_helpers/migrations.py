@@ -29,10 +29,10 @@ def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:
     """Add missing legacy memories columns for compatibility."""
     if not column_exists(cursor, "memories", "level"):
         cursor.execute("ALTER TABLE memories ADD COLUMN level TEXT")
-    backfill_legacy_memory_scope_levels(cursor)
+    backfill_legacy_memory_scope_and_level(cursor)
 
 
-def backfill_legacy_memory_scope_levels(cursor: sqlite3.Cursor) -> None:
+def backfill_legacy_memory_scope_and_level(cursor: sqlite3.Cursor) -> None:
     """Backfill legacy memory scope/level values to the project/task contract."""
     cursor.execute(
         """
@@ -59,8 +59,7 @@ def backfill_legacy_memory_scope_levels(cursor: sqlite3.Cursor) -> None:
         SET scope = 'project',
             level = 'L1'
         WHERE type = 'constraint'
-          AND (scope IS NULL OR scope != 'task')
-          AND (scope != 'project' OR level IS NULL OR level != 'L1')
+          AND (scope IS NULL OR scope != 'project' OR level IS NULL OR level != 'L1')
         """
     )
     cursor.execute(
@@ -69,8 +68,7 @@ def backfill_legacy_memory_scope_levels(cursor: sqlite3.Cursor) -> None:
         SET scope = 'project',
             level = 'L2'
         WHERE type = 'decision'
-          AND (scope IS NULL OR scope != 'task')
-          AND (scope != 'project' OR level IS NULL OR level != 'L2')
+          AND (scope IS NULL OR scope != 'project' OR level IS NULL OR level != 'L2')
         """
     )
     cursor.execute(
@@ -79,8 +77,7 @@ def backfill_legacy_memory_scope_levels(cursor: sqlite3.Cursor) -> None:
         SET scope = 'project',
             level = 'L1'
         WHERE always_include = 1
-          AND scope != 'task'
-          AND type NOT IN ('constraint', 'decision', 'lesson', 'note', 'snippet')
+          AND (scope IS NULL OR scope != 'task')
           AND (level IS NULL OR TRIM(level) = '')
         """
     )
@@ -89,7 +86,7 @@ def backfill_legacy_memory_scope_levels(cursor: sqlite3.Cursor) -> None:
         UPDATE memories
         SET scope = 'project',
             level = 'L3'
-        WHERE scope != 'task'
+        WHERE (scope IS NULL OR scope != 'task')
           AND (level IS NULL OR TRIM(level) = '')
         """
     )

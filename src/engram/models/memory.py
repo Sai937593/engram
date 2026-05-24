@@ -122,7 +122,6 @@ class Memory:
             WHERE project_id = ? AND scope = 'project' AND level IN ('L0', 'L1')
             ORDER BY
                 CASE level WHEN 'L0' THEN 0 WHEN 'L1' THEN 1 ELSE 2 END,
-                created_at ASC,
                 id ASC
             """,
             (project_id,),
