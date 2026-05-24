@@ -1,7 +1,11 @@
 """Tests for task retrieval query builder."""
 
+from dataclasses import asdict
+
+import engram.cli as cli_root
 from engram.memory_retrieval.query_builder import (
     RetrievalQueryBuilderOptions,
+    RetrievalQueryMetadata,
     build_task_retrieval_query,
 )
 from engram.models.phase import Phase
@@ -183,3 +187,81 @@ def test_query_builder_hard_budget_boundary_is_deterministic():
     assert first.metadata.query_char_count == 90
     assert len(first.query_text) == 90
     assert first.metadata.uncapped_query_char_count > first.metadata.query_char_count
+
+
+def test_query_builder_debug_metadata_contract_is_stable():
+    task = Task(
+        id="task008",
+        project_id="proj001",
+        title="Build query metadata contract",
+        description="Ensure metadata output is deterministic for debug snapshots.",
+        acceptance="Expose text, included fields, omitted fields, and budgets.",
+        tags=["retrieval", "phase-4"],
+        evidence="Task evidence is intentionally excluded from query text.",
+    )
+    phase = Phase(
+        id="phase008",
+        project_id="proj001",
+        title="Phase 4 Query Builder",
+        description="Prepare handoff metadata for retrieval debug commands.",
+        acceptance="Metadata contract is explicit and stable.",
+        evidence="Phase evidence must also be excluded.",
+    )
+    context = {
+        "actor": "engram start",
+        "surface": "debug retrieval",
+    }
+    options = RetrievalQueryBuilderOptions(max_query_chars=1200, field_char_limit=48)
+
+    query = build_task_retrieval_query(task, active_phase=phase, context=context, options=options)
+    metadata_dict = asdict(query.metadata)
+
+    assert list(metadata_dict.keys()) == list(RetrievalQueryMetadata.__dataclass_fields__.keys())
+    assert query.metadata.included_fields == (
+        "task.title",
+        "task.description",
+        "task.acceptance",
+        "task.tags",
+        "phase.title",
+        "phase.description",
+        "phase.acceptance",
+        "context.actor",
+        "context.surface",
+    )
+    assert query.metadata.omitted_fields == ("task.evidence", "phase.evidence")
+    assert query.metadata.truncated_fields == (
+        "task.description",
+        "task.acceptance",
+        "phase.description",
+    )
+    assert query.metadata.max_query_chars == 1200
+    assert query.metadata.field_char_limit == 48
+    assert query.metadata.uncapped_query_char_count >= query.metadata.query_char_count
+    assert query.metadata.query_char_count == len(query.query_text)
+    assert "task.title: Build query metadata contract" in query.query_text
+    assert "context.actor: engram start" in query.query_text
+    assert "context.surface: debug retrieval" in query.query_text
+
+
+def test_query_builder_does_not_require_current_project_resolution(monkeypatch):
+    task = Task(
+        id="task009",
+        project_id="proj999",
+        title="Callable from non-CLI code",
+        description="Builder should only need the provided task/phase inputs.",
+    )
+    phase = Phase(
+        id="phase009",
+        project_id="proj999",
+        title="Independent query builder",
+    )
+
+    def _forbidden_current_project(*args, **kwargs):
+        raise AssertionError("CLI current-project resolution should not be used by query builder.")
+
+    monkeypatch.setattr(cli_root, "get_current_project", _forbidden_current_project)
+
+    query = build_task_retrieval_query(task, active_phase=phase)
+
+    assert query.metadata.project_id == "proj999"
+    assert query.metadata.phase_id == "phase009"
