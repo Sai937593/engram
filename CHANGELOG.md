@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(retrieval): add local semantic index storage abstraction with metadata persistence, freshness validation status (`ready/missing/stale/incompatible/error`), and deterministic tests for storage initialization plus metadata round-trip/state handling.
 - feat(retrieval): expand retrieval debug evidence with scope-channel counts, threshold filtering breakdown, hidden memory IDs, and explicit empty-state outcomes; update Phase 9/10 evaluation notes with before/after deterministic behavior.
 - feat(retrieval): tune task-memory packing to enforce a minimum selection boost score so weak candidates can be filtered, allowing concise empty-state packs with deterministic relevance-filter metadata.
 - feat(retrieval): add deterministic lexical relevance thresholding that filters weak single-term content-only FTS matches while preserving direct task-linked and stronger multi-term candidates, with threshold debug metadata in retrieval diagnostics.
