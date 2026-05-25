@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): add task relevant file path workflows with `task add --files`, `task get` relevant file rendering, and `task files list/add/remove` commands plus validation for blanks, duplicates, and missing tasks.
 - feat(model): add first-class `tasks.relevant_files` metadata with idempotent schema migration, normalized path storage (trim/ignore-empty), and task model round-trip/update coverage including legacy DB compatibility.
 - feat(retrieval): expand semantic retrieval debug evidence with fused candidate totals and coverage for missing/ready/stale/error semantic states across startup orchestration plus `start --debug-retrieval` and `memory related-to-task --debug`.
 - feat(retrieval): add deterministic semantic+FTS startup fusion with duplicate-channel merging, exact-FTS preservation, semantic index status debug metadata, and orchestration coverage for fts-only/semantic-only/mixed/fallback paths.
