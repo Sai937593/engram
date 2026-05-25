@@ -175,6 +175,31 @@ def test_task_update_legacy_phase_unaffected(tmp_db, project, monkeypatch) -> No
     assert refreshed.phase == "Legacy Sweep"
 
 
+def test_task_update_phase_field_resolves_existing_phase_assignment(
+    tmp_db, project, monkeypatch
+) -> None:
+    """task update --field phase should update first-class phase linkage when value resolves."""
+    phase_alpha = Phase.create(project_id=project.id, title="Phase Alpha")
+    phase_beta = Phase.create(project_id=project.id, title="Phase Beta")
+    task = Task.create(
+        project_id=project.id,
+        title="Test Task",
+        phase_id=phase_alpha.id,
+        phase=phase_alpha.title,
+    )
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        ["task", "update", task.id, "--field", "phase", "--value", "Phase Beta"],
+    )
+
+    assert result.exit_code == 0, result.output
+    refreshed = Task.get(task.id)
+    assert refreshed.phase_id == phase_beta.id
+    assert refreshed.phase == phase_beta.title
+
+
 def test_task_next_shows_effective_phase_title_for_phase_id_task(
     tmp_db, project, monkeypatch
 ) -> None:

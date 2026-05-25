@@ -96,7 +96,7 @@ engram task update <task_id> --field <field> --value <value>
 Update a single task field.
 - **Valid Fields:** `title`, `status`, `priority`, `description`, `acceptance`, `tags`, `phase`, `phase_id`, `evidence`, `depends_on`.
 - **Phase association (`phase_id`):** Update the `phase_id` field with a first-class phase ID or unique title. This resolves the phase, links the task to it, and mirrors the title into the legacy `phase` text field for compatibility.
-- **Legacy phase title (`phase`):** Update the `phase` field directly with a text string to use legacy free-form phase labels without establishing a first-class phase link.
+- **Legacy phase title (`phase`):** Compatibility-aware update. If the value matches a first-class phase ID/title, Engram updates both `phase_id` and `phase`; otherwise it stores free-form legacy text in `phase` and clears `phase_id`.
 - **Clearing a task's phase:** Set `--field phase_id --value none` (or `null`/`clear`) to clear both `phase_id` and `phase` fields, dissociating the task from any phase.
 
 ```bash

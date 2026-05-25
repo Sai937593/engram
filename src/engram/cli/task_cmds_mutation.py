@@ -5,7 +5,7 @@ from datetime import datetime
 import click
 
 import engram.cli as cli_root
-from engram.cli.phase_helpers import resolve_phase_in_project
+from engram.cli.phase_helpers import resolve_phase_for_task_add, resolve_phase_in_project
 from engram.cli.task_cmds import task
 from engram.cli.task_helpers import (
     VALID_TASK_FIELDS,
@@ -72,6 +72,18 @@ def task_update(task_id: str, field: str, value: str) -> None:
 
         resolved_phase = resolve_phase_in_project(value, task_item.project_id)
         task_item.update(phase_id=resolved_phase.id, phase=resolved_phase.title)
+        cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
+        return
+    elif field == "phase":
+        if value.lower() in ("none", "null", "clear"):
+            task_item.update(phase_id=None, phase=None)
+            cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
+            return
+
+        resolved_phase_title, resolved_phase_id = resolve_phase_for_task_add(
+            value, task_item.project_id
+        )
+        task_item.update(phase_id=resolved_phase_id, phase=resolved_phase_title)
         cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
         return
 

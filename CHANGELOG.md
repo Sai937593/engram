@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(cli): make `engram task update --field phase` phase-aware so matching values relink `phase_id`/`phase` and non-matching values become free-form legacy phase text with stale `phase_id` cleared.
 - fix(model): deduplicate normalized `tasks.relevant_files` paths at the model layer while preserving first-seen order and keeping blank entries dropped.
 - feat(cli): add `engram guardrail demote <memory-id> --reason ...` with one-level L0/L1/L2 demotion, project-scope/ambiguity validation, and audited level+reason evidence logging.
 - feat(cli): render selected-task relevant file paths in startup and task context output with deterministic path-only caps, truncation, and no-placeholder behavior when metadata is absent.

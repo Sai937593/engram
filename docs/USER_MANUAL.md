@@ -105,7 +105,7 @@ Update a single task field. Common fields are `status`, `priority`, `title`, `de
 
 - Use `--field phase_id --value <phase_id_or_unique_title>` to link a task to a first-class phase.
 - Use `--field phase_id --value none` to clear both `phase_id` and legacy `phase`.
-- Direct updates to `--field phase` are legacy compatibility behavior and should not be preferred for new tasks.
+- `--field phase` is compatibility-aware: if the value matches a first-class phase ID/title, Engram updates `phase_id` and `phase`; otherwise it stores free-form legacy text in `phase` and clears `phase_id`.
 
 ```bash
 engram task note <task_id> "<note>"
