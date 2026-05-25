@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(cli): restore `engram guardrail demote` and persist constraint/decision level demotions by avoiding migration overwrite of explicit non-default levels.
 - feat(cli): refine `engram finish` output with step progress, LF/CRLF git warning filtering, and a guardrail demotion review prompt.
 - fix(retrieval): enforce preferred-K task-memory packing before the hard max-K limit.
 - fix(test): stabilize task-scope memory ordering regression by normalizing created_at timestamps before asserting deterministic id tie-break ordering.

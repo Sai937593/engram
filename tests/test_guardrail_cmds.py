@@ -1,0 +1,124 @@
+"""CLI tests for guardrail demotion command behavior."""
+
+from click.testing import CliRunner
+
+from engram.cli import cli
+from engram.db import get_db_connection
+from engram.models.memory import Memory
+from engram.models.project import Project
+
+
+def make_runner_with_project(monkeypatch, project) -> CliRunner:
+    """Return a CliRunner with current-project resolution patched."""
+    monkeypatch.setattr("engram.cli.get_current_project", lambda: project)
+    return CliRunner()
+
+
+def test_guardrail_demote_constraint_persists_across_cli_invocations(
+    tmp_db, project, monkeypatch
+) -> None:
+    """guardrail demote persists L1->L2 for constraints across init-driven invocations."""
+    runner = make_runner_with_project(monkeypatch, project)
+    memory = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Guardrail",
+        content="Protect startup quality.",
+        scope="project",
+        level="L1",
+    )
+
+    demote = runner.invoke(
+        cli,
+        ["guardrail", "demote", memory.id, "--reason", "Too strict for current phase."],
+    )
+    assert demote.exit_code == 0, demote.output
+    assert f"Guardrail '{memory.id}' demoted: L1 -> L2" in demote.output
+
+    get_result = runner.invoke(cli, ["memory", "get", memory.id])
+    assert get_result.exit_code == 0, get_result.output
+    assert "Level: L2" in get_result.output
+
+
+def test_guardrail_demote_rejects_l3(tmp_db, project, monkeypatch) -> None:
+    """guardrail demote fails clearly when memory is already at L3."""
+    runner = make_runner_with_project(monkeypatch, project)
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Low memory",
+        content="Already at lowest level.",
+        scope="project",
+        level="L3",
+    )
+
+    result = runner.invoke(
+        cli,
+        ["guardrail", "demote", memory.id, "--reason", "Need to relax it further."],
+    )
+
+    assert result.exit_code != 0
+    assert "already at the lowest level (L3)" in result.output
+
+
+def test_guardrail_demote_rejects_missing_and_foreign_ids(tmp_db, project, monkeypatch) -> None:
+    """guardrail demote reports missing and foreign memory IDs clearly."""
+    runner = make_runner_with_project(monkeypatch, project)
+    other_project = Project.create("other-project", "Other", repo_paths=["/tmp/other"])
+    foreign_memory = Memory.create(
+        project_id=other_project.id,
+        type="constraint",
+        title="Foreign guardrail",
+        content="Belongs elsewhere.",
+        scope="project",
+        level="L1",
+    )
+
+    missing = runner.invoke(
+        cli, ["guardrail", "demote", "missing1", "--reason", "Need lower level."]
+    )
+    assert missing.exit_code != 0
+    assert "Memory 'missing1' not found in the current project." in missing.output
+
+    foreign = runner.invoke(
+        cli,
+        ["guardrail", "demote", foreign_memory.id, "--reason", "Need lower level."],
+    )
+    assert foreign.exit_code != 0
+    assert "is a foreign memory belonging to another project." in foreign.output
+
+
+def test_guardrail_demote_rejects_invalid_level_rows(tmp_db, project, monkeypatch) -> None:
+    """guardrail demote fails clearly for invalid legacy levels."""
+    runner = make_runner_with_project(monkeypatch, project)
+    conn = get_db_connection(tmp_db)
+    conn.execute(
+        """
+        INSERT INTO memories (
+            id, project_id, type, title, content, scope, level, task_id, tags, always_include
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "legacybad",
+            project.id,
+            "note",
+            "Legacy bad",
+            "Bad level row.",
+            "project",
+            "L9",
+            None,
+            "",
+            0,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    result = runner.invoke(
+        cli,
+        ["guardrail", "demote", "legacybad", "--reason", "Need lower level."],
+    )
+
+    assert result.exit_code != 0
+    assert "has invalid level 'L9'" in result.output

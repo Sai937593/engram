@@ -7,6 +7,7 @@ from engram.models.audit import AuditLog
 
 VALID_MEMORY_SCOPES = {"project", "task"}
 VALID_PROJECT_LEVELS = {"L0", "L1", "L2", "L3"}
+GUARDRAIL_DEMOTION_LEVEL_MAP = {"L0": "L1", "L1": "L2", "L2": "L3"}
 
 
 class Memory:
@@ -223,6 +224,55 @@ class Memory:
         conn.execute(query, params)
         conn.commit()
         conn.close()
+
+    def demote_project_guardrail_level(self, reason: str) -> tuple[str, str]:
+        """Demote a project-scope guardrail level by exactly one level and audit the reason."""
+        normalized_reason = reason.strip()
+        if not normalized_reason:
+            raise ValueError("Demotion reason cannot be empty.")
+
+        if self.scope != "project":
+            raise ValueError(
+                f"Memory '{self.id}' is scope '{self.scope}'. Only project-scope memories can be demoted."
+            )
+
+        current_level = self._normalize_level(self.level)
+        if current_level is None or current_level not in VALID_PROJECT_LEVELS:
+            raise ValueError(
+                f"Memory '{self.id}' has invalid level '{self.level}'. Expected one of: L0, L1, L2, L3."
+            )
+        if current_level == "L3":
+            raise ValueError(f"Memory '{self.id}' is already at the lowest level (L3).")
+
+        next_level = GUARDRAIL_DEMOTION_LEVEL_MAP[current_level]
+
+        conn = get_db_connection()
+        conn.execute(
+            "UPDATE memories SET level = ?, updated_at = datetime('now') WHERE id = ?",
+            (next_level, self.id),
+        )
+        conn.commit()
+        conn.close()
+
+        self.level = next_level
+        AuditLog.log(
+            "memories",
+            self.id,
+            "guardrail_demote",
+            field="level",
+            old_value=current_level,
+            new_value=next_level,
+        )
+        AuditLog.log(
+            "memories",
+            self.id,
+            "guardrail_demote",
+            field="reason",
+            old_value=None,
+            new_value=normalized_reason,
+        )
+
+        return current_level, next_level
 
     @staticmethod
     def _normalize_level(level: str | None) -> str | None:

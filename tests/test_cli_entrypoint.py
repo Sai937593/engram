@@ -25,6 +25,7 @@ def test_console_entrypoint_command_surface_loads():
         "context",
         "decision",
         "export",
+        "guardrail",
         "memory",
         "phase",
         "project",
