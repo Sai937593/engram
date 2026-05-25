@@ -44,8 +44,10 @@ graph TD
 ## Features
 
 - Project-aware task tracking with `todo`, `in-progress`, `done`, `blocked`, and `cancelled` states.
+- Task-scoped relevant file path hints for faster startup navigation.
 - Persistent memories for notes, decisions, lessons, constraints, and snippets.
 - Full-text search over memories using SQLite FTS5.
+- Guardrail level controls with explicit `engram guardrail demote ... --reason ...`.
 - Typed helper commands: `engram decision`, `engram lesson`, `engram constraint`, and `engram snippet`.
 - Agent startup context via `engram context startup`.
 - Task-specific context via `engram context task <id>`.
@@ -80,7 +82,7 @@ engram init --name "catalyst" --summary "Realtime lakehouse e-commerce platform"
 Add and claim a task:
 
 ```bash
-engram task add "Implement WAL mode" --priority high --acceptance "Concurrent reads and writes are covered by tests"
+engram task add "Implement WAL mode" --priority high --acceptance "Concurrent reads and writes are covered by tests" --files "src/engram/db.py,tests/test_db.py"
 engram task next
 engram task start <task_id>
 ```
@@ -99,6 +101,7 @@ Resume context in a later session:
 ```bash
 engram context startup
 engram context task <task_id>
+engram guardrail demote <memory_id> --reason "Reduce startup noise after rollout"
 ```
 
 Finish the active task through Engram's workflow:
