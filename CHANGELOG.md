@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(services): add read-only `phase_service` APIs (`list_phases`, `get_active_phase`) with project-scoped JSON-safe DTO output, stable `INVALID_PHASE_STATUS` validation, and coverage for filtering, scoping, adapter-safe imports, and no-row-mutation behavior.
 - feat(services): add read-only `list_memories` service API with optional type filtering, shared positive-limit validation (`VALIDATION_ERROR`), project-scoped JSON-safe DTO output, and coverage for filters, limits, foreign-project exclusion, and no-row-mutation behavior.
 - feat(services): add read-only `search_memories` boundary with project-scoped DTO filtering, positive-limit validation (`VALIDATION_ERROR`), and coverage for filter pass-through, adapter-safe imports, empty results, and no memory-row mutation.
 - feat(services): add read-only `get_next_task` service API returning JSON-safe DTO/None with boundary tests for actionable selection, no-actionable fallback, adapter-safe imports, and no task-row mutation.
