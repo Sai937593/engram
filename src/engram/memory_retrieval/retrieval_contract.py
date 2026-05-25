@@ -18,6 +18,7 @@ class TaskMemoryRetrievalOptions:
     task_id_match_boost: int = 3
     title_term_boost: int = 2
     tag_term_boost: int = 1
+    min_content_term_hits_without_title_or_tag: int = 2
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class TaskMemoryCandidate:
     task_id_match: bool
     title_term_hits: tuple[str, ...]
     tag_term_hits: tuple[str, ...]
+    content_term_hits: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,14 @@ class TaskMemoryRetrievalMetadata:
     max_candidates: int
     scanned_row_count: int
     returned_candidate_count: int
+    threshold_min_content_term_hits_without_title_or_tag: int = 0
+    threshold_filtered_row_count: int = 0
+    scanned_task_scope_row_count: int = 0
+    scanned_project_scope_row_count: int = 0
+    returned_task_scope_candidate_count: int = 0
+    returned_project_scope_candidate_count: int = 0
+    threshold_filtered_task_scope_count: int = 0
+    threshold_filtered_project_scope_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -73,6 +83,7 @@ class RawMemoryRow:
     memory_id: str
     project_id: str
     scope: str
+    level: str | None
     type: str
     task_id: str | None
     title: str

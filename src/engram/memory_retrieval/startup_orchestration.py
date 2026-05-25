@@ -20,6 +20,7 @@ from engram.memory_retrieval.query_builder import (
     build_task_retrieval_query,
 )
 from engram.memory_retrieval.retrieval_contract import (
+    TaskMemoryCandidate,
     TaskMemoryRetrievalMetadata,
     TaskMemoryRetrievalOptions,
 )
@@ -35,6 +36,7 @@ class StartupTaskMemoryRetrievalResult:
     query: TaskRetrievalQuery | None
     retrieval_metadata: TaskMemoryRetrievalMetadata
     pack_result: TaskMemoryPackResult
+    retrieval_candidates: tuple[TaskMemoryCandidate, ...] = ()
 
 
 def _build_empty_pack_result(
@@ -122,6 +124,7 @@ def _build_fallback_result(
         query=retrieval_query,
         retrieval_metadata=metadata,
         pack_result=_build_empty_pack_result(metadata, pack_options),
+        retrieval_candidates=(),
     )
 
 
@@ -174,6 +177,7 @@ def orchestrate_startup_task_memory_retrieval(
             query=None,
             retrieval_metadata=empty_metadata,
             pack_result=empty_pack,
+            retrieval_candidates=(),
         )
 
     try:
@@ -238,6 +242,7 @@ def orchestrate_startup_task_memory_retrieval(
             query=retrieval_query,
             retrieval_metadata=retrieval_result.metadata,
             pack_result=packed,
+            retrieval_candidates=retrieval_result.candidates,
         )
     except Exception as exc:  # pragma: no cover - safety net for startup resilience
         return _build_fallback_result(

@@ -343,6 +343,8 @@ def test_start_debug_retrieval_prints_diagnostics_when_enabled(
     assert "query text: task.title: Task 1 | task.description: Retrieve memory" in result.output
     assert "retrieval mode: fts" in result.output
     assert "fts candidate metadata:" in result.output
+    assert "lexical threshold metadata:" in result.output
+    assert "scope channel metadata:" in result.output
     assert "max_candidates=20" in result.output
     assert "scanned_row_count=4" in result.output
     assert "returned_candidate_count=2" in result.output
@@ -351,6 +353,8 @@ def test_start_debug_retrieval_prints_diagnostics_when_enabled(
     assert "hidden_item_count=1" in result.output
     assert "truncated_item_count=0" in result.output
     assert "selected memory ids: mem-1" in result.output
+    assert "hidden memory ids: (none)" in result.output
+    assert "empty-state outcome: used_empty_state=False" in result.output
     assert "budget usage:" in result.output
     assert "used_char_count=14/3600" in result.output
     assert "section_budget_exhausted=False" in result.output

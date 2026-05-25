@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- feat(retrieval): expand retrieval debug evidence with scope-channel counts, threshold filtering breakdown, hidden memory IDs, and explicit empty-state outcomes; update Phase 9/10 evaluation notes with before/after deterministic behavior.
+- feat(retrieval): tune task-memory packing to enforce a minimum selection boost score so weak candidates can be filtered, allowing concise empty-state packs with deterministic relevance-filter metadata.
+- feat(retrieval): add deterministic lexical relevance thresholding that filters weak single-term content-only FTS matches while preserving direct task-linked and stronger multi-term candidates, with threshold debug metadata in retrieval diagnostics.
+- feat(retrieval): expand startup FTS candidate scope to include only project-level L2/L3 lessons/decisions while explicitly excluding L0/L1 guardrails and non-policy project memory types.
 - feat(retrieval): tune FTS query normalization to drop non-signal structural/filler terms, reducing generic-term false positives for non-retrieval tasks while preserving deterministic bounded defaults.
 - docs(retrieval): add Phase 9 evaluation artifact with real-task retrieval examples, expected-vs-actual selections, misses, false positives, and observed failure modes.
 - feat(cli): add `--debug` flag to `engram memory related-to-task <task-id>` showing FTS queries, candidates, selected memories, ranks/boosts, hidden counts, and budget diagnostics.

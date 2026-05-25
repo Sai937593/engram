@@ -17,6 +17,16 @@ def format_retrieval_debug_output(result: StartupTaskMemoryRetrievalResult) -> s
     retrieval = result.retrieval_metadata
     pack = result.pack_result.metadata
     selected_ids = ", ".join(item.memory_id for item in result.pack_result.items) or "(none)"
+    selected_id_set = {item.memory_id for item in result.pack_result.items}
+    hidden_ids = (
+        ", ".join(
+            candidate.memory_id
+            for candidate in result.retrieval_candidates
+            if candidate.memory_id not in selected_id_set
+        )
+        or "(none)"
+    )
+    empty_state_used = pack.selected_item_count == 0
 
     lines = [
         "## RETRIEVAL DEBUG",
@@ -26,14 +36,31 @@ def format_retrieval_debug_output(result: StartupTaskMemoryRetrievalResult) -> s
         f"max_candidates={retrieval.max_candidates}, "
         f"scanned_row_count={retrieval.scanned_row_count}, "
         f"returned_candidate_count={retrieval.returned_candidate_count}",
+        "lexical threshold metadata: "
+        "min_content_term_hits_without_title_or_tag="
+        f"{retrieval.threshold_min_content_term_hits_without_title_or_tag}, "
+        f"threshold_filtered_row_count={retrieval.threshold_filtered_row_count}, "
+        f"threshold_filtered_task_scope_count={retrieval.threshold_filtered_task_scope_count}, "
+        "threshold_filtered_project_scope_count="
+        f"{retrieval.threshold_filtered_project_scope_count}",
+        "scope channel metadata: "
+        f"scanned_task_scope_row_count={retrieval.scanned_task_scope_row_count}, "
+        f"scanned_project_scope_row_count={retrieval.scanned_project_scope_row_count}, "
+        f"returned_task_scope_candidate_count={retrieval.returned_task_scope_candidate_count}, "
+        "returned_project_scope_candidate_count="
+        f"{retrieval.returned_project_scope_candidate_count}",
         "pack candidate metadata: "
         f"input_candidate_count={pack.input_candidate_count}, "
-        f"unique_candidate_count={pack.unique_candidate_count}",
+        f"unique_candidate_count={pack.unique_candidate_count}, "
+        f"min_selection_boost_score={pack.min_selection_boost_score}, "
+        f"relevance_filtered_count={pack.relevance_filtered_count}",
         "selected counts: "
         f"selected_item_count={pack.selected_item_count}, "
         f"hidden_item_count={pack.hidden_item_count}, "
         f"truncated_item_count={pack.truncated_item_count}",
         f"selected memory ids: {selected_ids}",
+        f"hidden memory ids: {hidden_ids}",
+        f"empty-state outcome: used_empty_state={empty_state_used}",
         "budget usage: "
         f"used_char_count={pack.used_char_count}/{pack.section_char_budget}, "
         f"section_budget_exhausted={pack.section_budget_exhausted}",

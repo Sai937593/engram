@@ -1,7 +1,8 @@
-"""Task-scope FTS retrieval over memories with deterministic ranking metadata."""
+"""FTS retrieval over task memories and eligible project guidance candidates."""
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from engram.db import get_db_connection
@@ -17,6 +18,10 @@ from engram.memory_retrieval.retrieval_contract import (
     TaskMemoryRetrievalOptions,
     TaskMemoryRetrievalResult,
 )
+
+PROJECT_SCOPE_ELIGIBLE_LEVELS = ("L2", "L3")
+PROJECT_SCOPE_ELIGIBLE_TYPES = ("lesson", "decision")
+_TOKEN_PATTERN = re.compile(r"\w+", flags=re.UNICODE)
 
 
 def _split_csv_tags(raw_tags: str | None) -> tuple[str, ...]:
@@ -37,13 +42,36 @@ def _extract_terms_from_safe_query(safe_query: str) -> tuple[str, ...]:
     )
 
 
-def _fetch_task_scope_fts_rows(
+def _extract_token_set(text: str | None) -> set[str]:
+    """Extract casefolded lexical tokens from text for deterministic hit checks."""
+    if not text:
+        return set()
+    return {token.casefold() for token in _TOKEN_PATTERN.findall(text)}
+
+
+def _passes_lexical_threshold(
+    *,
+    has_task_id_match: bool,
+    title_hits: tuple[str, ...],
+    tag_hits: tuple[str, ...],
+    content_hits: tuple[str, ...],
+    min_content_term_hits_without_title_or_tag: int,
+) -> bool:
+    """Return whether candidate signal is strong enough for deterministic inclusion."""
+    if has_task_id_match or title_hits or tag_hits:
+        return True
+    if min_content_term_hits_without_title_or_tag <= 0:
+        return True
+    return len(content_hits) >= min_content_term_hits_without_title_or_tag
+
+
+def _fetch_task_memory_fts_rows(
     *,
     project_id: str,
     safe_fts_query: str,
     max_candidates: int,
 ) -> list[RawMemoryRow]:
-    """Fetch task-scope FTS rows for one project in deterministic FTS order."""
+    """Fetch task and eligible project-scope FTS rows in deterministic FTS order."""
     conn = get_db_connection()
     try:
         rows = conn.execute(
@@ -52,6 +80,7 @@ def _fetch_task_scope_fts_rows(
                 m.id,
                 m.project_id,
                 m.scope,
+                m.level,
                 m.type,
                 m.task_id,
                 m.title,
@@ -62,11 +91,26 @@ def _fetch_task_scope_fts_rows(
             JOIN memories_fts ON m.rowid = memories_fts.rowid
             WHERE memories_fts MATCH ?
               AND m.project_id = ?
-              AND m.scope = 'task'
+              AND (
+                m.scope = 'task'
+                OR (
+                    m.scope = 'project'
+                    AND m.level IN (?, ?)
+                    AND m.type IN (?, ?)
+                )
+              )
             ORDER BY fts_rank ASC, m.id ASC
             LIMIT ?
             """,
-            (safe_fts_query, project_id, max_candidates),
+            (
+                safe_fts_query,
+                project_id,
+                PROJECT_SCOPE_ELIGIBLE_LEVELS[0],
+                PROJECT_SCOPE_ELIGIBLE_LEVELS[1],
+                PROJECT_SCOPE_ELIGIBLE_TYPES[0],
+                PROJECT_SCOPE_ELIGIBLE_TYPES[1],
+                max_candidates,
+            ),
         ).fetchall()
     finally:
         conn.close()
@@ -76,6 +120,7 @@ def _fetch_task_scope_fts_rows(
             memory_id=row["id"],
             project_id=row["project_id"],
             scope=row["scope"],
+            level=row["level"],
             type=row["type"],
             task_id=row["task_id"],
             title=row["title"] or "",
@@ -91,7 +136,7 @@ def retrieve_task_memory_candidates(
     retrieval_query: TaskRetrievalQuery,
     options: TaskMemoryRetrievalOptions | None = None,
 ) -> TaskMemoryRetrievalResult:
-    """Retrieve task-scope memory candidates using normalized SQLite FTS."""
+    """Retrieve task memories and scoped project guidance using normalized SQLite FTS."""
     resolved_options = options or TaskMemoryRetrievalOptions()
     project_id = retrieval_query.metadata.project_id
     query_task_id = retrieval_query.metadata.task_id
@@ -116,11 +161,21 @@ def retrieve_task_memory_candidates(
             max_candidates=resolved_options.max_candidates,
             scanned_row_count=0,
             returned_candidate_count=0,
+            threshold_min_content_term_hits_without_title_or_tag=(
+                resolved_options.min_content_term_hits_without_title_or_tag
+            ),
+            threshold_filtered_row_count=0,
+            scanned_task_scope_row_count=0,
+            scanned_project_scope_row_count=0,
+            returned_task_scope_candidate_count=0,
+            returned_project_scope_candidate_count=0,
+            threshold_filtered_task_scope_count=0,
+            threshold_filtered_project_scope_count=0,
         )
         return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
     try:
-        fts_rows = _fetch_task_scope_fts_rows(
+        fts_rows = _fetch_task_memory_fts_rows(
             project_id=project_id,
             safe_fts_query=safe_fts_query,
             max_candidates=resolved_options.max_candidates,
@@ -139,17 +194,50 @@ def retrieve_task_memory_candidates(
             max_candidates=resolved_options.max_candidates,
             scanned_row_count=0,
             returned_candidate_count=0,
+            threshold_min_content_term_hits_without_title_or_tag=(
+                resolved_options.min_content_term_hits_without_title_or_tag
+            ),
+            threshold_filtered_row_count=0,
+            scanned_task_scope_row_count=0,
+            scanned_project_scope_row_count=0,
+            returned_task_scope_candidate_count=0,
+            returned_project_scope_candidate_count=0,
+            threshold_filtered_task_scope_count=0,
+            threshold_filtered_project_scope_count=0,
         )
         return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
 
     candidates: list[TaskMemoryCandidate] = []
+    threshold_filtered_row_count = 0
+    threshold_filtered_task_scope_count = 0
+    threshold_filtered_project_scope_count = 0
+    scanned_task_scope_row_count = sum(1 for row in fts_rows if row.scope == "task")
+    scanned_project_scope_row_count = sum(1 for row in fts_rows if row.scope == "project")
     for row in fts_rows:
         title_folded = row.title.casefold()
+        content_tokens = _extract_token_set(row.content)
         tag_folded = tuple(tag.casefold() for tag in row.tags)
 
         title_hits = tuple(term for term in query_terms if term in title_folded)
         tag_hits = tuple(term for term in query_terms if term in tag_folded)
+        content_hits = tuple(term for term in query_terms if term in content_tokens)
         has_task_id_match = bool(query_task_id) and row.task_id == query_task_id
+
+        if not _passes_lexical_threshold(
+            has_task_id_match=has_task_id_match,
+            title_hits=title_hits,
+            tag_hits=tag_hits,
+            content_hits=content_hits,
+            min_content_term_hits_without_title_or_tag=(
+                resolved_options.min_content_term_hits_without_title_or_tag
+            ),
+        ):
+            threshold_filtered_row_count += 1
+            if row.scope == "task":
+                threshold_filtered_task_scope_count += 1
+            elif row.scope == "project":
+                threshold_filtered_project_scope_count += 1
+            continue
 
         boost_score = (
             (resolved_options.task_id_match_boost if has_task_id_match else 0)
@@ -173,6 +261,7 @@ def retrieve_task_memory_candidates(
                 task_id_match=has_task_id_match,
                 title_term_hits=title_hits,
                 tag_term_hits=tag_hits,
+                content_term_hits=content_hits,
             )
         )
 
@@ -200,5 +289,19 @@ def retrieve_task_memory_candidates(
         max_candidates=resolved_options.max_candidates,
         scanned_row_count=len(fts_rows),
         returned_candidate_count=len(ordered_candidates),
+        threshold_min_content_term_hits_without_title_or_tag=(
+            resolved_options.min_content_term_hits_without_title_or_tag
+        ),
+        threshold_filtered_row_count=threshold_filtered_row_count,
+        scanned_task_scope_row_count=scanned_task_scope_row_count,
+        scanned_project_scope_row_count=scanned_project_scope_row_count,
+        returned_task_scope_candidate_count=sum(
+            1 for candidate in ordered_candidates if candidate.scope == "task"
+        ),
+        returned_project_scope_candidate_count=sum(
+            1 for candidate in ordered_candidates if candidate.scope == "project"
+        ),
+        threshold_filtered_task_scope_count=threshold_filtered_task_scope_count,
+        threshold_filtered_project_scope_count=threshold_filtered_project_scope_count,
     )
     return TaskMemoryRetrievalResult(candidates=ordered_candidates, metadata=metadata)
