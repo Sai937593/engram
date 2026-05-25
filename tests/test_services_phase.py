@@ -150,6 +150,17 @@ def test_get_active_phase_returns_none_when_no_active_phase_exists(tmp_db):
     assert payload is None
 
 
+def test_get_active_phase_ignores_foreign_project_active_phase(tmp_db):
+    target = _create_project("proj-phase-j", "/tmp/proj-phase-j")
+    foreign = _create_project("proj-phase-k", "/tmp/proj-phase-k")
+    Phase.create(project_id=target.id, id="phj00001", title="Target Planned", status="planned")
+    Phase.create(project_id=foreign.id, id="phk00001", title="Foreign Active", status="active")
+
+    payload = get_active_phase(target.id)
+
+    assert payload is None
+
+
 def test_phase_service_module_is_adapter_safe(tmp_db):
     module = importlib.import_module("engram.services.phase_service")
     source = Path(module.__file__).read_text(encoding="utf-8")
