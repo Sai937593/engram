@@ -4,6 +4,7 @@ import click
 from rich.table import Table
 
 import engram.cli as cli_root
+from engram.db import get_db_connection
 from engram.models.memory import (
     VALID_MEMORY_SCOPES,
     Memory,
@@ -226,6 +227,43 @@ def get_memory_or_print_error(memory_id: str) -> Memory | None:
         cli_root.console.print(f"[red]Error:[/red] Memory '{memory_id}' not found.")
         return None
     return memory
+
+
+def resolve_memory_id_in_project(value: str, project_id: str) -> str:
+    """Resolve a memory ID or prefix to a unique memory in the current project."""
+    normalized_value = value.strip()
+    if not normalized_value:
+        raise click.ClickException("Memory reference cannot be empty.")
+
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT id FROM memories WHERE project_id = ? AND (id = ? OR id LIKE ?)",
+        (project_id, normalized_value, normalized_value + "%"),
+    ).fetchall()
+    conn.close()
+
+    matching_ids = sorted({row["id"] for row in rows})
+    if not matching_ids:
+        conn = get_db_connection()
+        global_rows = conn.execute(
+            "SELECT id FROM memories WHERE id = ? OR id LIKE ?",
+            (normalized_value, normalized_value + "%"),
+        ).fetchall()
+        conn.close()
+        if global_rows:
+            raise click.ClickException(
+                f"Memory '{normalized_value}' is a foreign memory belonging to another project."
+            )
+        raise click.ClickException(f"Memory '{normalized_value}' not found in the current project.")
+
+    if len(matching_ids) > 1 and normalized_value not in matching_ids:
+        raise click.ClickException(
+            f"Ambiguous memory '{normalized_value}'. Multiple matches found: {', '.join(matching_ids)}"
+        )
+
+    if normalized_value in matching_ids:
+        return normalized_value
+    return matching_ids[0]
 
 
 def add_typed_memory(
