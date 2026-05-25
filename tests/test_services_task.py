@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import ast
+import importlib
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from engram.db import get_db_connection
 from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task
 from engram.services.errors import EngramServiceError
-from engram.services.task_service import get_task, list_tasks, resolve_task_ref
+from engram.services.task_service import get_next_task, get_task, list_tasks, resolve_task_ref
 
 
 def _create_project(project_id: str, repo_path: str) -> Project:
@@ -35,6 +39,16 @@ def _assert_json_safe(value: Any) -> None:
             _assert_json_safe(item)
         return
     raise AssertionError(f"Non JSON-safe value encountered: {type(value)!r}")
+
+
+def _task_rows(project_id: str) -> list[dict[str, object]]:
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE project_id = ? ORDER BY id ASC",
+        (project_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
 def test_resolve_task_ref_returns_exact_id_when_exact_and_prefix_matches_exist(tmp_db):
@@ -237,3 +251,78 @@ def test_get_task_returns_json_safe_payload_from_scoped_reference(tmp_db):
     assert payload["title"] == "Fetch me"
     assert payload["effective_status"] == "todo"
     _assert_json_safe(payload)
+
+
+def test_get_next_task_returns_next_actionable_task_payload(tmp_db):
+    project = _create_project("proj-n", "/tmp/proj-n")
+    blocked_dependency = Task.create(project_id=project.id, id="depn0001", title="Open dependency")
+    Task.create(
+        project_id=project.id,
+        id="next0001",
+        title="Dependency blocked",
+        priority="critical",
+        depends_on=blocked_dependency.id,
+    )
+    expected = Task.create(
+        project_id=project.id,
+        id="next0002",
+        title="Next actionable",
+        priority="high",
+    )
+
+    payload = get_next_task(project.id)
+
+    assert payload is not None
+    assert payload["id"] == expected.id
+    assert payload["effective_status"] == "todo"
+    _assert_json_safe(payload)
+
+
+def test_get_next_task_returns_none_when_no_actionable_tasks_exist(tmp_db):
+    project = _create_project("proj-o", "/tmp/proj-o")
+    Task.create(
+        project_id=project.id,
+        id="next1001",
+        title="Blocked by missing dependency",
+        depends_on="missing1",
+    )
+    Task.create(project_id=project.id, id="next1002", title="Done task", status="done")
+
+    payload = get_next_task(project.id)
+
+    assert payload is None
+
+
+def test_task_service_module_is_adapter_safe(tmp_db):
+    module = importlib.import_module("engram.services.task_service")
+    source = Path(module.__file__).read_text(encoding="utf-8")
+    parsed = ast.parse(source)
+    banned_prefixes = ("click", "rich", "engram.commands", "engram.mcp", "subprocess")
+
+    for node in ast.walk(parsed):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert not alias.name.startswith(banned_prefixes)
+        elif isinstance(node, ast.ImportFrom):
+            imported_module = node.module or ""
+            assert not imported_module.startswith(banned_prefixes)
+
+
+def test_task_service_calls_are_read_only_on_task_rows(tmp_db):
+    project = _create_project("proj-p", "/tmp/proj-p")
+    dependency = Task.create(project_id=project.id, id="depp0001", title="Dependency task")
+    target = Task.create(
+        project_id=project.id,
+        id="depp0002",
+        title="Target task",
+        depends_on=dependency.id,
+    )
+    before_rows = _task_rows(project.id)
+
+    list_tasks(project.id, status="all")
+    get_task(project.id, target.id)
+    get_next_task(project.id)
+
+    after_rows = _task_rows(project.id)
+
+    assert after_rows == before_rows

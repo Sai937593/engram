@@ -150,3 +150,11 @@ def get_task(project_id: str, task_ref: str) -> dict[str, object]:
             details={"project_id": project_id, "task_ref": task_ref.strip()},
         )
     return task_to_dict(task_item)
+
+
+def get_next_task(project_id: str) -> dict[str, object] | None:
+    """Return the next actionable task as a JSON-safe DTO, if one exists."""
+    next_task = Task.get_next(project_id)
+    if next_task is None:
+        return None
+    return task_to_dict(next_task)
