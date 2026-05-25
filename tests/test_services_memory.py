@@ -285,7 +285,7 @@ def test_memory_service_module_is_adapter_safe(tmp_db):
     module = importlib.import_module("engram.services.memory_service")
     source = Path(module.__file__).read_text(encoding="utf-8")
     parsed = ast.parse(source)
-    banned_prefixes = ("click", "rich", "engram.commands", "engram.mcp", "subprocess")
+    banned_prefixes = ("click", "rich", "engram.cli", "engram.mcp", "subprocess")
 
     for node in ast.walk(parsed):
         if isinstance(node, ast.Import):
