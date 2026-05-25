@@ -21,6 +21,10 @@ dev = [
     "pre-commit>=3.5,<4",
     "httpx>=0.28,<1",
 ]
+semantic = [
+    "fastembed>=0.8,<1",
+    "numpy>=2.0,<3",
+]
 
 [project.scripts]
 engram = "engram.cli:main"

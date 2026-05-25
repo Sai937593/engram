@@ -17,7 +17,7 @@ Tasks are units of work within a project.
 
 - Lifecycle: `todo -> in-progress -> done | blocked | cancelled`
 - Priority levels: `low | medium | high | critical`
-- Important fields: `title`, `description`, `acceptance`, `evidence`, `phase`, `phase_id`, `tags`, `depends_on`
+- Important fields: `title`, `description`, `acceptance`, `evidence`, `phase`, `phase_id`, `tags`, `depends_on`, `relevant_files`
 - Use `engram task next` or `engram start` to claim work instead of scanning all tasks manually.
 
 ### Memories
@@ -49,7 +49,7 @@ Register the current directory as an Engram project. If the project already exis
 engram context startup
 ```
 
-Generate compact startup context for an agent: project summary, active tasks, and pinned memories.
+Generate compact startup context for an agent: project summary, active task/phase, task-relevant file path hints (when present), L0/L1 project guardrails, and task memory candidates.
 
 ```bash
 engram context task <task_id>
@@ -76,11 +76,12 @@ List tasks for the current project. By default, Engram shows `todo` tasks; use `
 engram task add "<Title>" [--description TEXT] [--priority PRIORITY]
                           [--status STATUS] [--phase TEXT]
                           [--acceptance TEXT] [--tags tag1,tag2]
-                          [--depends-on TASK_IDS]
+                          [--depends-on TASK_IDS] [--files path1,path2]
 ```
 
 Create a task in the current project. Defaults are `priority=medium` and `status=todo`.
 - `--phase TEXT`: Associate the task with a phase. If `TEXT` matches a first-class phase ID or unique title, the task's first-class `phase_id` and legacy `phase` fields are resolved and set. If no first-class phase matches, it falls back to storing the free-form legacy text in `phase`.
+- `--files path1,path2`: Optional task-scoped relevant file path hints. Startup and task context display paths only (no file contents).
 
 ```bash
 engram task start <task_id>
@@ -116,6 +117,14 @@ engram task get <task_id>
 
 Show full task details.
 
+```bash
+engram task files list <task_id>
+engram task files add <task_id> --files path1,path2
+engram task files remove <task_id> --files path1,path2
+```
+
+List, append, or remove task relevant file path hints without changing other task fields.
+
 ### Memory Management
 
 ```bash
@@ -134,6 +143,14 @@ engram memory delete <memory_id> [-y]
 ```
 
 Search, list, inspect, update, or delete project memories.
+
+### Guardrail Controls
+
+```bash
+engram guardrail demote <memory_id> --reason "<reason>"
+```
+
+Demote a project-scope guardrail by exactly one level (`L0 -> L1`, `L1 -> L2`, `L2 -> L3`). `L3` guardrails cannot be demoted further, and a non-empty reason is required.
 
 ### Typed Memory Helpers
 

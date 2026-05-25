@@ -355,6 +355,7 @@ retrieval.
 - Adjust query construction, boosts, budgets, K, or thresholds.
 - Document known retrieval failure modes.
 - Decide whether semantic retrieval is justified yet.
+- Evaluation artifact: `docs/design-plans/engram_memory_retrieval_phase9_evaluation_examples.md`.
 ```
 
 ### Acceptance Criteria
@@ -374,22 +375,69 @@ retrieval.
 - budget regressions covered by startup tests
 ```
 
-## Later Phase - Local Semantic Retrieval
+## Phase 11 - Local Semantic Retrieval
 
 ### Objective
 
 Add semantic recall only after FTS-first retrieval is working and there is
 evidence that exact matching misses important memories.
 
-### Required Design Decisions Before Implementation
+### Design Decisions (Recorded Before Implementation)
 
 ```text
-- local embedding model/library
-- vector storage format
-- index freshness model
-- reindex command UX
-- dependency pinning and optional dependency placement
-- fallback behavior when semantic index is missing/stale
+Embedding library/model:
+- Use `fastembed` with the default local model `BAAI/bge-small-en-v1.5`.
+- Rationale: local-only inference, active release cadence, and lower runtime overhead
+  than a full transformer stack for this CLI use case.
+
+Vector storage format:
+- Store semantic artifacts locally under `~/.engram/indexes/<project-id>/semantic/`.
+- Keep two files:
+  1) `embeddings.npy` (float32 matrix; row order is deterministic by memory id ASC)
+  2) `metadata.json` (memory_id list, model name, dimension, schema version,
+     indexed_at watermark, source_hash/version metadata)
+- Keep source-of-truth memory text in SQLite; semantic files are a derived index.
+
+Index freshness model:
+- Metadata stores:
+  - `model_name`, `model_dim`, `schema_version`
+  - `indexed_memory_count`
+  - `indexed_max_updated_at` (max of memory updated_at/created_at at build time)
+  - `build_started_at`, `build_completed_at`, `build_status`
+- Semantic index status enum:
+  - `ready`: metadata present, model/schema match, watermark current
+  - `missing`: no semantic artifacts found
+  - `stale`: memory count/watermark mismatch vs current SQLite state
+  - `incompatible`: model or schema mismatch
+  - `error`: last build failed
+- `engram start` must never rebuild automatically.
+
+Reindex command UX:
+- Add explicit CLI command:
+  `engram memory reindex --semantic [--full] [--task-scope-only] [--model <name>] [--force]`
+- Default behavior is incremental when metadata is compatible; `--full` rebuilds all.
+- Command prints rows scanned, rows embedded, elapsed time, and resulting index status.
+
+Dependency placement/pinning:
+- Keep semantic dependencies optional in `pyproject.toml`:
+  - `fastembed>=0.8,<1`
+  - `numpy>=2.0,<3`
+- Do not add to base `project.dependencies`; semantic retrieval is optional and local-first.
+
+Fallback behavior:
+- If status is `missing`, `stale`, `incompatible`, or `error`, startup retrieval uses FTS only.
+- This fallback is silent in normal mode (no startup failure) and explicit in
+  `--debug-retrieval` metadata (`semantic_status`, `semantic_reason`, `fallback_used=true`).
+
+Deterministic fusion policy:
+- Run FTS and semantic retrieval independently, then union by memory id.
+- Preserve exact-match precision by always retaining top exact/boosted FTS hits before
+  semantic-only additions.
+- Apply deterministic ordering with tie-breakers:
+  1) exact_fts_match desc
+  2) combined_score desc
+  3) channel_priority (fts before semantic when equal)
+  4) memory_id asc
 ```
 
 ### Work Items

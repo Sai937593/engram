@@ -4,7 +4,7 @@ import sqlite3
 
 from engram.db import get_db_connection, init_db
 from engram.models.phase import Phase
-from engram.models.task import Task, get_effective_phase_title
+from engram.models.task import Task, _normalize_relevant_files, get_effective_phase_title
 
 
 def test_create_task(project):
@@ -19,6 +19,37 @@ def test_create_task_with_tags(project):
     t = Task.create(project_id=project.id, title="Tagged task", tags=["ci", "testing"])
     assert "ci" in t.tags
     assert "testing" in t.tags
+
+
+def test_create_task_with_relevant_files_normalizes_and_persists(project, tmp_db):
+    t = Task.create(
+        project_id=project.id,
+        title="Task with relevant files",
+        relevant_files=[
+            " src/engram/models/task.py ",
+            "",
+            "tests/test_task.py",
+            "src/engram/models/task.py",
+            "   ",
+            "tests/test_task.py",
+        ],
+    )
+    assert t.relevant_files == ["src/engram/models/task.py", "tests/test_task.py"]
+
+    conn = get_db_connection(tmp_db)
+    row = conn.execute("SELECT relevant_files FROM tasks WHERE id = ?", (t.id,)).fetchone()
+    conn.close()
+
+    assert row["relevant_files"] == '["src/engram/models/task.py", "tests/test_task.py"]'
+
+
+def test_normalize_relevant_files_deduplicates_preserve_first_seen_order():
+    assert _normalize_relevant_files(
+        [" src/a.py ", "src/a.py", "", "tests/b.py", "tests/b.py"]
+    ) == [
+        "src/a.py",
+        "tests/b.py",
+    ]
 
 
 def test_create_task_persists_phase_id_without_legacy_phase(project, tmp_db):
@@ -53,6 +84,12 @@ def test_get_task(task):
     assert fetched.title == task.title
 
 
+def test_get_task_defaults_relevant_files_to_empty_list(task):
+    fetched = Task.get(task.id)
+    assert fetched is not None
+    assert fetched.relevant_files == []
+
+
 def test_get_nonexistent_task(tmp_db):
     assert Task.get("no-such-id") is None
 
@@ -64,6 +101,19 @@ def test_list_by_project(project):
     titles = [t.title for t in tasks]
     assert "Task A" in titles
     assert "Task B" in titles
+
+
+def test_list_by_project_round_trips_relevant_files(project):
+    task_a = Task.create(
+        project_id=project.id,
+        title="Task A",
+        relevant_files=["src/engram/db_helpers/schema.py"],
+    )
+    task_b = Task.create(project_id=project.id, title="Task B")
+    tasks = {t.id: t for t in Task.list_by_project(project.id)}
+
+    assert tasks[task_a.id].relevant_files == ["src/engram/db_helpers/schema.py"]
+    assert tasks[task_b.id].relevant_files == []
 
 
 def test_count_by_status_empty(tmp_db, project):
@@ -101,6 +151,19 @@ def test_update_task_phase_id(task):
     task.update(phase_id="phase-updated")
     refreshed = Task.get(task.id)
     assert refreshed.phase_id == "phase-updated"
+
+
+def test_update_task_relevant_files_normalizes(task):
+    task.update(
+        relevant_files=[
+            " src/engram/models/task.py ",
+            "",
+            "tests/conftest.py",
+            "src/engram/models/task.py",
+        ]
+    )
+    refreshed = Task.get(task.id)
+    assert refreshed.relevant_files == ["src/engram/models/task.py", "tests/conftest.py"]
 
 
 def test_get_effective_phase_title_for_future_branch_labels_prefers_first_class_phase(project):
@@ -206,6 +269,7 @@ def test_init_db_creates_phases_schema(tmp_db) -> None:
         "updated_at",
     }.issubset(phase_columns)
     assert "phase_id" in task_columns
+    assert "relevant_files" in task_columns
 
 
 def test_init_db_backfills_legacy_task_phase_strings(tmp_path) -> None:
@@ -308,6 +372,7 @@ def test_init_db_backfills_legacy_task_phase_strings(tmp_path) -> None:
     conn.close()
 
     assert "phase_id" in task_columns
+    assert "relevant_files" in task_columns
     assert {"project_id", "title", "status", "order_index"}.issubset(phase_columns)
     assert len(phase_rows) == 3
     assert [tuple(row) for row in phase_rows] == [
@@ -324,6 +389,58 @@ def test_init_db_backfills_legacy_task_phase_strings(tmp_path) -> None:
     assert task_legacy_phase_rows["legacy-task-1"] == " Phase Alpha "
     assert task_legacy_phase_rows["legacy-task-2"] == "phase   alpha"
     assert all(phase_id for phase_id in phase_ids.keys())
+
+
+def test_init_db_legacy_tasks_default_relevant_files_to_empty_list(tmp_path) -> None:
+    db_path = tmp_path / "legacy_relevant_files.db"
+    legacy_conn = sqlite3.connect(db_path)
+    legacy_conn.execute("""
+    CREATE TABLE projects (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        summary     TEXT,
+        status      TEXT DEFAULT 'active',
+        repo_paths  TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    legacy_conn.execute("""
+    CREATE TABLE tasks (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL REFERENCES projects(id),
+        title       TEXT NOT NULL,
+        description TEXT,
+        status      TEXT DEFAULT 'todo',
+        priority    TEXT DEFAULT 'medium',
+        phase       TEXT,
+        acceptance  TEXT,
+        evidence    TEXT,
+        tags        TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    legacy_conn.execute(
+        "INSERT INTO projects (id, name, repo_paths) VALUES ('legacy-proj', 'Legacy', '[]')"
+    )
+    legacy_conn.execute(
+        "INSERT INTO tasks (id, project_id, title, status) VALUES ('legacy-task', 'legacy-proj', 'Legacy task', 'todo')"
+    )
+    legacy_conn.commit()
+    legacy_conn.close()
+
+    init_db(db_path)
+
+    conn = get_db_connection(db_path)
+    task_columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    task_row = conn.execute("SELECT * FROM tasks WHERE id = 'legacy-task'").fetchone()
+    conn.close()
+    assert "relevant_files" in task_columns
+
+    task = Task.from_row(task_row) if task_row else None
+    assert task is not None
+    assert task.relevant_files == []
 
 
 def test_get_next_prefer_active_phase(project):

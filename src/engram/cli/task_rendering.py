@@ -114,6 +114,10 @@ def print_task_details(task: Task) -> None:
     cli_root.console.print(f"[cyan]Acceptance Criteria:[/cyan]\n{task.acceptance or 'N/A'}")
     cli_root.console.print(f"[cyan]Evidence / Notes:[/cyan]\n{task.evidence or 'N/A'}")
     cli_root.console.print(f"[cyan]Tags:[/cyan] {', '.join(task.tags)}")
+    if task.relevant_files:
+        cli_root.console.print("[cyan]Relevant Files:[/cyan]")
+        for path in task.relevant_files:
+            cli_root.console.print(f"- {path}")
 
 
 def print_next_task_details(task: Task) -> None:

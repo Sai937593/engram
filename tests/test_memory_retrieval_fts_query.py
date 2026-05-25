@@ -17,10 +17,7 @@ def test_normalize_fts_query_text_quotes_and_deduplicates_terms() -> None:
 
     normalized = normalize_fts_query_text(raw_query)
 
-    assert (
-        normalized
-        == '"task" OR "title" OR "WAL" OR "phase" OR "tags" OR "sqlite" OR "FTS5" OR "NOT"'
-    )
+    assert normalized == '"WAL" OR "sqlite" OR "FTS5"'
 
 
 def test_memory_search_handles_malformed_fts_input_without_raising(project) -> None:

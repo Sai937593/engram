@@ -28,6 +28,7 @@ class TaskMemoryPackOptions:
     max_tags_count: int = 5
     ordering_fields: tuple[str, ...] = DEFAULT_TASK_MEMORY_PACK_ORDERING
     dedupe_key: str = "memory_id"
+    min_selection_boost_score: int = 1
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,8 @@ class TaskMemoryPackMetadata:
     section_budget_exhausted: bool
     ordering_fields: tuple[str, ...]
     dedupe_key: str
+    min_selection_boost_score: int = 1
+    relevance_filtered_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -139,9 +142,14 @@ def pack_task_memories(
     used_char_count = 0
     section_budget_exhausted = False
     truncated_item_count = 0
+    relevance_filtered_count = 0
     effective_k_limit = max(0, min(opts.preferred_k, opts.max_k))
 
     for cand, original_idx in unique_sorted_candidates:
+        if cand.boost_score < opts.min_selection_boost_score:
+            relevance_filtered_count += 1
+            continue
+
         if len(selected_items) >= effective_k_limit:
             # Excluded by K limit, do not add
             continue
@@ -235,6 +243,8 @@ def pack_task_memories(
         section_budget_exhausted=section_budget_exhausted,
         ordering_fields=opts.ordering_fields,
         dedupe_key=opts.dedupe_key,
+        min_selection_boost_score=opts.min_selection_boost_score,
+        relevance_filtered_count=relevance_filtered_count,
     )
 
     return TaskMemoryPackResult(

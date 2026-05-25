@@ -1,9 +1,13 @@
-"""Tests for task-scope FTS retrieval candidates."""
+"""Tests for startup task-memory FTS retrieval candidates."""
 
 import sqlite3
 
 from engram.memory_retrieval.fts_retriever import retrieve_task_memory_candidates
-from engram.memory_retrieval.query_builder import RetrievalQueryMetadata, TaskRetrievalQuery
+from engram.memory_retrieval.query_builder import (
+    RetrievalQueryMetadata,
+    TaskRetrievalQuery,
+    build_task_retrieval_query,
+)
 from engram.models.memory import Memory
 from engram.models.project import Project
 from engram.models.task import Task
@@ -116,7 +120,7 @@ def test_retriever_applies_task_id_boost_deterministically(project) -> None:
     non_boosted_memory = Memory.create(
         project_id=project.id,
         type="lesson",
-        title="Non boosted memory",
+        title="Non boosted helper memory",
         content="helper helper helper",
         scope="task",
         task_id=None,
@@ -177,7 +181,7 @@ def test_retriever_falls_back_when_fts_query_execution_fails(project, monkeypatc
         raise sqlite3.OperationalError("malformed MATCH expression")
 
     monkeypatch.setattr(
-        "engram.memory_retrieval.fts_retriever._fetch_task_scope_fts_rows",
+        "engram.memory_retrieval.fts_retriever._fetch_task_memory_fts_rows",
         _raise_fts_error,
     )
 
@@ -223,3 +227,170 @@ def test_retriever_falls_back_when_fts_table_is_unavailable(project) -> None:
     assert "no such table" in result.metadata.fallback_reason
     assert result.metadata.scanned_row_count == 0
     assert result.metadata.returned_candidate_count == 0
+
+
+def test_retriever_includes_eligible_project_scope_guidance_without_l0_l1_guardrails(
+    project,
+) -> None:
+    """Phase 10 scope policy: include project L2/L3 lessons/decisions, exclude L0/L1 guardrails."""
+    task = Task.create(
+        project_id=project.id,
+        title="Create User Manual",
+        description="Prepare public release documentation and command help output.",
+        acceptance="Manual includes command output examples and release checks.",
+    )
+    docs_guidance = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Public docs must match CLI help",
+        content="Before release, verify README and USER_MANUAL align with --help output.",
+        scope="project",
+        level="L3",
+    )
+    export_decision = Memory.create(
+        project_id=project.id,
+        type="decision",
+        title="Export outputs stay CLI-aligned",
+        content="Use command help as the source of truth for release export docs.",
+        scope="project",
+        level="L2",
+    )
+    guardrail = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Guardrail with release/help terms",
+        content="Release docs must match command help output exactly.",
+        scope="project",
+        level="L1",
+    )
+    identity_guardrail = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Identity guardrail with release/help terms",
+        content="Release help policy belongs in guardrails, not task candidates.",
+        scope="project",
+        level="L0",
+    )
+    non_eligible_project_type = Memory.create(
+        project_id=project.id,
+        type="snippet",
+        title="Project snippet with release terms",
+        content="release docs help snippet should not be included",
+        scope="project",
+        level="L3",
+    )
+    retrieval_internal = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Task retrieval debug output notes",
+        content="Debug retrieval query output for startup tests.",
+        scope="task",
+        task_id=None,
+        tags=["retrieval", "debug"],
+    )
+
+    retrieval_query = build_task_retrieval_query(task)
+    result = retrieve_task_memory_candidates(retrieval_query)
+    returned_ids = [candidate.memory_id for candidate in result.candidates]
+
+    assert docs_guidance.id in returned_ids
+    assert export_decision.id in returned_ids
+    assert guardrail.id not in returned_ids
+    assert identity_guardrail.id not in returned_ids
+    assert non_eligible_project_type.id not in returned_ids
+    assert retrieval_internal.id not in returned_ids
+    assert any(candidate.scope == "project" for candidate in result.candidates)
+    assert result.metadata.scanned_row_count >= 2
+    assert result.metadata.returned_project_scope_candidate_count >= 2
+    assert result.metadata.returned_task_scope_candidate_count == 0
+
+
+def test_phase9_generic_terms_do_not_pull_irrelevant_retrieval_internals(project) -> None:
+    """Phase 9 regression: generic terms should not pull retrieval internals into release tasks."""
+    task = Task.create(
+        project_id=project.id,
+        title="Prepare repository for public release",
+        description="Prepare docs and final output checks for release readiness.",
+    )
+    retrieval_internal = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Task output retrieval diagnostics",
+        content="Task query output and retrieval debugging for startup internals.",
+        scope="task",
+        task_id=None,
+    )
+    retrieval_query = build_task_retrieval_query(task)
+
+    result = retrieve_task_memory_candidates(retrieval_query)
+
+    assert retrieval_internal.id not in [candidate.memory_id for candidate in result.candidates]
+    assert result.candidates == ()
+    assert result.metadata.scanned_row_count == 0
+
+
+def test_retriever_threshold_filters_weak_single_term_content_only_match(project) -> None:
+    """Weak content-only overlap should be filtered instead of filling startup pack slots."""
+    task = Task.create(
+        project_id=project.id,
+        title="Create release manual",
+        description="Prepare release guide content.",
+    )
+    weak_overlap = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Internal implementation note",
+        content="Release checklist for unrelated internals.",
+        scope="task",
+        task_id=None,
+    )
+    retrieval_query = _build_test_query(
+        project_id=project.id,
+        task_id=task.id,
+        query_text="release manual",
+    )
+
+    result = retrieve_task_memory_candidates(retrieval_query)
+
+    assert weak_overlap.id not in [candidate.memory_id for candidate in result.candidates]
+    assert result.metadata.scanned_row_count == 1
+    assert result.metadata.returned_candidate_count == 0
+    assert result.metadata.threshold_filtered_row_count == 1
+    assert result.metadata.threshold_min_content_term_hits_without_title_or_tag == 2
+    assert result.metadata.threshold_filtered_task_scope_count == 1
+    assert result.metadata.threshold_filtered_project_scope_count == 0
+
+
+def test_retriever_threshold_keeps_multi_term_content_and_task_linked_matches(project) -> None:
+    """Threshold should keep stronger lexical signal and preserve direct task-linked matches."""
+    task = Task.create(project_id=project.id, title="Prepare release manual")
+    strong_content_overlap = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Internal implementation note",
+        content="Release manual checklist for docs handoff.",
+        scope="task",
+        task_id=None,
+    )
+    direct_task_match = Memory.create(
+        project_id=project.id,
+        type="snippet",
+        title="Origin task note",
+        content="Release details for this exact task.",
+        scope="task",
+        task_id=task.id,
+    )
+    retrieval_query = _build_test_query(
+        project_id=project.id,
+        task_id=task.id,
+        query_text="release manual",
+    )
+
+    result = retrieve_task_memory_candidates(retrieval_query)
+    by_id = {candidate.memory_id: candidate for candidate in result.candidates}
+
+    assert strong_content_overlap.id in by_id
+    assert direct_task_match.id in by_id
+    assert by_id[strong_content_overlap.id].content_term_hits == ("release", "manual")
+    assert by_id[direct_task_match.id].task_id_match is True
+    assert result.metadata.threshold_filtered_row_count == 0

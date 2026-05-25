@@ -15,6 +15,13 @@ from engram.context_helpers.startup import (
     _enforce_hard_budget,
     build_startup_context,
 )
+from engram.memory_retrieval import (
+    StartupTaskMemoryRetrievalResult,
+    TaskMemoryPackedItem,
+    TaskMemoryPackMetadata,
+    TaskMemoryPackResult,
+    TaskMemoryRetrievalMetadata,
+)
 from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.task import Task
@@ -91,6 +98,68 @@ def test_startup_builder_handles_no_task_input(project):
 
     assert "No current or next task selected." in ctx
     assert "## NEXT ACTION" in ctx
+
+
+def test_startup_builder_renders_selected_task_relevant_files(project):
+    phase = Phase.create(project_id=project.id, title="Phase Files", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Task With Relevant Files",
+        phase_id=phase.id,
+        status="in-progress",
+        relevant_files=["src/engram/context_helpers/startup.py", "tests/test_context.py"],
+    )
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
+
+    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
+        "\n## PROJECT GUARDRAILS", maxsplit=1
+    )[0]
+    assert "Relevant files:" in task_section
+    assert "- src/engram/context_helpers/startup.py" in task_section
+    assert "- tests/test_context.py" in task_section
+
+
+def test_startup_builder_hides_relevant_files_label_when_selected_task_has_none(project):
+    phase = Phase.create(project_id=project.id, title="Phase No Files", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Task Without Relevant Files",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
+
+    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
+        "\n## PROJECT GUARDRAILS", maxsplit=1
+    )[0]
+    assert "Relevant files:" not in task_section
+
+
+def test_startup_builder_caps_and_truncates_relevant_file_paths(project):
+    phase = Phase.create(project_id=project.id, title="Phase File Cap", status="active")
+    long_path = "src/" + ("a" * 48) + "/task_context.py"
+    task = Task.create(
+        project_id=project.id,
+        title="Task With Many Relevant Files",
+        phase_id=phase.id,
+        status="in-progress",
+        relevant_files=[long_path, "tests/test_context.py", "src/engram/models/task.py"],
+    )
+    options = StartupContextOptions(relevant_file_limit=2, relevant_file_path_char_limit=24)
+
+    ctx = build_startup_context(
+        project=project, active_phase=phase, selected_task=task, options=options
+    )
+
+    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
+        "\n## PROJECT GUARDRAILS", maxsplit=1
+    )[0]
+    assert f"- {_compact_with_limit(long_path, 24)}" in task_section
+    assert "- tests/test_context.py" in task_section
+    assert "- src/engram/models/task.py" not in task_section
+    assert "... 1 additional relevant file path(s) hidden by cap." in task_section
 
 
 def test_startup_builder_caps_l1_guardrails(project):
@@ -211,7 +280,7 @@ def test_startup_builder_guardrails_use_project_l0_l1_only_in_order(project):
     assert guardrails_section.find("L1 A") < guardrails_section.find("L1 B")
 
 
-def test_startup_builder_guardrails_empty_and_separate_from_task_memory_placeholder(project):
+def test_startup_builder_guardrails_empty_and_separate_from_task_memory_section(project):
     ctx = build_startup_context(project=project)
 
     assert "No L0/L1 project guardrails found." in ctx
@@ -225,14 +294,118 @@ def test_startup_builder_guardrails_empty_and_separate_from_task_memory_placehol
     task_memory_section = ctx.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
         "\n## NEXT ACTION", maxsplit=1
     )[0]
-    assert (
-        "Retrieval is not enabled in this phase. Placeholder section only." in task_memory_section
-    )
+    assert "No relevant task memories selected." in task_memory_section
     assert "No L0/L1 project guardrails found." not in task_memory_section
-    assert (
-        "Retrieval is not enabled in this phase. Placeholder section only."
-        not in guardrails_section
+    assert "No relevant task memories selected." not in guardrails_section
+
+
+def test_startup_builder_renders_selected_task_memories_separate_from_guardrails(
+    project, monkeypatch
+):
+    phase = Phase.create(project_id=project.id, title="Phase Task Memories", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Render selected task memories",
+        phase_id=phase.id,
+        status="in-progress",
     )
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="L1 Guardrail",
+        content="Guardrails stay separate.",
+        scope="project",
+        level="L1",
+    )
+
+    retrieval_metadata = TaskMemoryRetrievalMetadata(
+        project_id=project.id,
+        query_task_id=task.id,
+        source="fts",
+        requested_query_text="query",
+        normalized_fts_query="query",
+        query_term_count=1,
+        query_was_empty=False,
+        fallback_used=False,
+        fallback_reason=None,
+        max_candidates=20,
+        scanned_row_count=2,
+        returned_candidate_count=2,
+    )
+    pack_result = TaskMemoryPackResult(
+        items=(
+            TaskMemoryPackedItem(
+                memory_id="m1",
+                type="lesson",
+                title="Remember fallback behavior",
+                content="Startup should continue even when retrieval fails.",
+                tags=("retrieval",),
+                task_id=task.id,
+                retrieval_source="fts",
+                fts_rank=-0.4,
+                boost_score=3,
+                source_candidate_index=0,
+                char_count=50,
+                was_truncated=False,
+            ),
+            TaskMemoryPackedItem(
+                memory_id="m2",
+                type="snippet",
+                title="Rendering format",
+                content="Keep task memories concise and deterministic.",
+                tags=("format",),
+                task_id=task.id,
+                retrieval_source="fts",
+                fts_rank=-0.3,
+                boost_score=2,
+                source_candidate_index=1,
+                char_count=45,
+                was_truncated=False,
+            ),
+        ),
+        metadata=TaskMemoryPackMetadata(
+            project_id=project.id,
+            query_task_id=task.id,
+            source="fts",
+            section_char_budget=3600,
+            preferred_k=6,
+            max_k=10,
+            max_item_chars=420,
+            input_candidate_count=3,
+            unique_candidate_count=3,
+            selected_item_count=2,
+            hidden_item_count=1,
+            truncated_item_count=0,
+            used_char_count=95,
+            section_budget_exhausted=False,
+            ordering_fields=("-boost_score", "fts_rank", "memory_id"),
+            dedupe_key="memory_id",
+        ),
+    )
+    startup_result = StartupTaskMemoryRetrievalResult(
+        query=None,
+        retrieval_metadata=retrieval_metadata,
+        pack_result=pack_result,
+    )
+    monkeypatch.setattr(
+        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        lambda **kwargs: startup_result,
+    )
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
+
+    guardrails_section = ctx.split("## PROJECT GUARDRAILS\n", maxsplit=1)[1].split(
+        "\n## TASK MEMORY CANDIDATES", maxsplit=1
+    )[0]
+    task_memory_section = ctx.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
+        "\n## NEXT ACTION", maxsplit=1
+    )[0]
+    assert "L1 Guardrail" in guardrails_section
+    assert "Remember fallback behavior" not in guardrails_section
+    assert "Rendering format" not in guardrails_section
+    assert "Remember fallback behavior" in task_memory_section
+    assert "Rendering format" in task_memory_section
+    assert "... 1 additional task memory candidate(s) hidden by cap." in task_memory_section
 
 
 def test_startup_builder_compacts_text_and_enforces_hard_budget(project):
@@ -301,28 +474,50 @@ def test_enforce_hard_budget_boundaries_and_marker():
     assert larger_budget_result.endswith("[Context truncated to fit budget.]")
 
 
-def test_startup_builder_placeholder_compaction_is_deterministic(project):
+def test_startup_builder_task_memory_empty_state_compaction_is_deterministic(project):
     options = StartupContextOptions(
-        task_memory_placeholder_text="placeholder " + ("p" * 200),
-        task_memory_placeholder_char_limit=40,
+        task_memory_empty_state_text="empty-state " + ("p" * 200),
+        task_memory_empty_state_char_limit=40,
     )
 
     first = build_startup_context(project=project, options=options)
     second = build_startup_context(project=project, options=options)
 
     assert first == second
-    assert "placeholder " in first
-    assert "placeholder " + ("p" * 200) not in first
-    placeholder_line = first.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
+    assert "empty-state " in first
+    assert "empty-state " + ("p" * 200) not in first
+    empty_state_line = first.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
         "\n", maxsplit=1
     )[0]
-    assert placeholder_line.endswith("...")
-    assert len(placeholder_line) == 40
+    assert empty_state_line.endswith("...")
+    assert len(empty_state_line) == 40
 
 
 def test_task_context_shows_title(task):
     ctx = get_task_context(task.id)
     assert task.title in ctx
+
+
+def test_task_context_renders_relevant_file_paths_when_present(project):
+    task_item = Task.create(
+        project_id=project.id,
+        title="Task Context Relevant Files",
+        relevant_files=["src/engram/context_helpers/task.py", "tests/test_context.py"],
+    )
+
+    ctx = get_task_context(task_item.id)
+
+    assert "## RELEVANT FILES" in ctx
+    assert "- src/engram/context_helpers/task.py" in ctx
+    assert "- tests/test_context.py" in ctx
+
+
+def test_task_context_hides_relevant_files_when_absent(project):
+    task_item = Task.create(project_id=project.id, title="Task Context No Relevant Files")
+
+    ctx = get_task_context(task_item.id)
+
+    assert "## RELEVANT FILES" not in ctx
 
 
 def test_task_context_shows_acceptance(project):

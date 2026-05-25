@@ -26,6 +26,7 @@ def test_pack_options_defaults_cover_phase_six_budget_controls() -> None:
     assert options.max_item_chars == 420
     assert options.ordering_fields == DEFAULT_TASK_MEMORY_PACK_ORDERING
     assert options.dedupe_key == "memory_id"
+    assert options.min_selection_boost_score == 1
 
 
 def test_resolve_pack_options_returns_explicit_or_default_options() -> None:
@@ -82,7 +83,7 @@ def test_pack_metadata_and_result_shape_are_stable() -> None:
 def _mock_candidate(
     memory_id: str,
     content: str = "some content",
-    boost_score: int = 0,
+    boost_score: int = 1,
     fts_rank: float = 1.0,
     task_id: str | None = None,
 ) -> TaskMemoryCandidate:
@@ -203,6 +204,38 @@ def test_pack_task_memories_enforces_preferred_k_before_max_k() -> None:
     assert [item.memory_id for item in result.items] == ["mem-0", "mem-1", "mem-2"]
 
 
+def test_pack_task_memories_can_return_fewer_than_preferred_k_for_weak_candidates() -> None:
+    candidates = (
+        _mock_candidate("mem-weak-1", boost_score=0, content="weak-one"),
+        _mock_candidate("mem-weak-2", boost_score=0, content="weak-two"),
+        _mock_candidate("mem-strong-1", boost_score=3, content="strong"),
+    )
+    options = TaskMemoryPackOptions(preferred_k=6, max_k=10, min_selection_boost_score=1)
+
+    result = pack_task_memories(candidates, _mock_retrieval_metadata(), options)
+
+    assert [item.memory_id for item in result.items] == ["mem-strong-1"]
+    assert result.metadata.selected_item_count == 1
+    assert result.metadata.hidden_item_count == 2
+    assert result.metadata.relevance_filtered_count == 2
+
+
+def test_pack_task_memories_weak_only_candidates_yield_concise_empty_pack() -> None:
+    candidates = (
+        _mock_candidate("mem-weak-1", boost_score=0, content="weak-one"),
+        _mock_candidate("mem-weak-2", boost_score=0, content="weak-two"),
+    )
+    options = TaskMemoryPackOptions(min_selection_boost_score=1)
+
+    result = pack_task_memories(candidates, _mock_retrieval_metadata(), options)
+
+    assert result.items == ()
+    assert result.metadata.selected_item_count == 0
+    assert result.metadata.hidden_item_count == 2
+    assert result.metadata.relevance_filtered_count == 2
+    assert result.metadata.section_budget_exhausted is False
+
+
 def test_pack_task_memories_enforces_section_char_budget() -> None:
     cand1 = _mock_candidate("mem-1", content="hello", boost_score=10)  # 5 chars
     cand2 = _mock_candidate("mem-2", content="world!", boost_score=9)  # 6 chars
@@ -248,7 +281,7 @@ def test_pack_task_memories_truncates_long_titles() -> None:
         tags=("tag1",),
         retrieval_source="fts",
         fts_rank=1.0,
-        boost_score=0,
+        boost_score=1,
         task_id_match=False,
         title_term_hits=(),
         tag_term_hits=(),
@@ -277,7 +310,7 @@ def test_pack_task_memories_truncates_long_tags() -> None:
         tags=("extremelylongtagname", "tag2", "tag3"),
         retrieval_source="fts",
         fts_rank=1.0,
-        boost_score=0,
+        boost_score=1,
         task_id_match=False,
         title_term_hits=(),
         tag_term_hits=(),
@@ -307,7 +340,7 @@ def test_pack_task_memories_short_limits_edge_cases() -> None:
         tags=("longtag",),
         retrieval_source="fts",
         fts_rank=1.0,
-        boost_score=0,
+        boost_score=1,
         task_id_match=False,
         title_term_hits=(),
         tag_term_hits=(),

@@ -11,6 +11,7 @@ from engram.cli.task_helpers import (
     blocked_dependency_messages,
     check_dependency_cycle,
     get_effective_status,
+    parse_relevant_files_csv,
     resolve_task_dependency,
 )
 from engram.cli.task_rendering import (
@@ -37,6 +38,7 @@ from engram.models.task import Task
 @click.option("--acceptance", help="Acceptance criteria")
 @click.option("--phase", help="Project phase")
 @click.option("--depends-on", "-d", help="Task ID or 8-char prefix that this task depends on")
+@click.option("--files", help="Comma-separated relevant file paths")
 def task_add(
     title: str,
     description: str | None,
@@ -46,12 +48,14 @@ def task_add(
     acceptance: str | None,
     phase: str | None,
     depends_on: str | None = None,
+    files: str | None = None,
 ) -> None:
     """Add a new task to the current project."""
     project = cli_root.get_current_project()
     resolved_dep = None
     resolved_phase = phase
     resolved_phase_id = None
+    relevant_files = parse_relevant_files_csv(files)
     task_id = uuid.uuid4().hex[:8]
     if depends_on:
         resolved_dep = resolve_task_dependency(depends_on, project.id)
@@ -70,6 +74,7 @@ def task_add(
         phase=resolved_phase,
         phase_id=resolved_phase_id,
         depends_on=resolved_dep,
+        relevant_files=relevant_files,
         id=task_id,
     )
     cli_root.console.print(f"[green]Task created with ID:[/green] {created_task.id}")

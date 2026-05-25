@@ -23,6 +23,8 @@ def apply_tasks_column_migrations(cursor: sqlite3.Cursor) -> None:
         cursor.execute("ALTER TABLE tasks ADD COLUMN depends_on TEXT REFERENCES tasks(id)")
     if not column_exists(cursor, "tasks", "phase_id"):
         cursor.execute("ALTER TABLE tasks ADD COLUMN phase_id TEXT REFERENCES phases(id)")
+    if not column_exists(cursor, "tasks", "relevant_files"):
+        cursor.execute("ALTER TABLE tasks ADD COLUMN relevant_files TEXT")
 
 
 def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:

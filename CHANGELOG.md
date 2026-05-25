@@ -4,6 +4,29 @@
 - fix(cli): reject direct legacy task phase updates on first-class linked tasks so phase_id-controlled tasks cannot report a successful no-op.
 - fix(cli): restore `engram guardrail demote` and persist constraint/decision level demotions by avoiding migration overwrite of explicit non-default levels.
 - feat(cli): refine `engram finish` output with step progress, LF/CRLF git warning filtering, and a guardrail demotion review prompt.
+- fix(model): deduplicate normalized `tasks.relevant_files` paths at the model layer while preserving first-seen order and keeping blank entries dropped.
+- feat(cli): add `engram guardrail demote <memory-id> --reason ...` with one-level L0/L1/L2 demotion, project-scope/ambiguity validation, and audited level+reason evidence logging.
+- feat(cli): render selected-task relevant file paths in startup and task context output with deterministic path-only caps, truncation, and no-placeholder behavior when metadata is absent.
+- feat(cli): add task relevant file path workflows with `task add --files`, `task get` relevant file rendering, and `task files list/add/remove` commands plus validation for blanks, duplicates, and missing tasks.
+- feat(model): add first-class `tasks.relevant_files` metadata with idempotent schema migration, normalized path storage (trim/ignore-empty), and task model round-trip/update coverage including legacy DB compatibility.
+- feat(retrieval): expand semantic retrieval debug evidence with fused candidate totals and coverage for missing/ready/stale/error semantic states across startup orchestration plus `start --debug-retrieval` and `memory related-to-task --debug`.
+- feat(retrieval): add deterministic semantic+FTS startup fusion with duplicate-channel merging, exact-FTS preservation, semantic index status debug metadata, and orchestration coverage for fts-only/semantic-only/mixed/fallback paths.
+- feat(retrieval): add independent local semantic retrieval channel with similarity-ranked candidates, task/project scope eligibility filtering, and safe fallback metadata for missing/stale/unreadable semantic indexes.
+- feat(cli): add `engram memory reindex --semantic` with local semantic embedding rebuild pipeline, optional dependency failure messaging, artifact persistence, and coverage for success/empty/dependency/index-write paths.
+- feat(retrieval): add local semantic index storage abstraction with metadata persistence, freshness validation status (`ready/missing/stale/incompatible/error`), and deterministic tests for storage initialization plus metadata round-trip/state handling.
+- feat(retrieval): expand retrieval debug evidence with scope-channel counts, threshold filtering breakdown, hidden memory IDs, and explicit empty-state outcomes; update Phase 9/10 evaluation notes with before/after deterministic behavior.
+- feat(retrieval): tune task-memory packing to enforce a minimum selection boost score so weak candidates can be filtered, allowing concise empty-state packs with deterministic relevance-filter metadata.
+- feat(retrieval): add deterministic lexical relevance thresholding that filters weak single-term content-only FTS matches while preserving direct task-linked and stronger multi-term candidates, with threshold debug metadata in retrieval diagnostics.
+- feat(retrieval): expand startup FTS candidate scope to include only project-level L2/L3 lessons/decisions while explicitly excluding L0/L1 guardrails and non-policy project memory types.
+- feat(retrieval): tune FTS query normalization to drop non-signal structural/filler terms, reducing generic-term false positives for non-retrieval tasks while preserving deterministic bounded defaults.
+- docs(retrieval): add Phase 9 evaluation artifact with real-task retrieval examples, expected-vs-actual selections, misses, false positives, and observed failure modes.
+- feat(cli): add `--debug` flag to `engram memory related-to-task <task-id>` showing FTS queries, candidates, selected memories, ranks/boosts, hidden counts, and budget diagnostics.
+- feat(cli): add `engram memory related-to-task <task-id>` command to inspect packed task memories with clear missing/foreign task ID errors and beautiful Rich table rendering.
+
+- feat(cli): add optional `engram start --debug-retrieval` diagnostics with deterministic query/candidate/selection/budget metadata output while keeping default startup output unchanged.
+- fix(retrieval): harden startup task-memory orchestration with query/retrieval/packing fallback resilience, deterministic empty-pack fallbacks, and orchestration timeout safeguards that degrade to metadata-backed empty results.
+- feat(cli): render `TASK MEMORY CANDIDATES` in startup context from packed retrieval results with deterministic empty-state output, section separation from project guardrails, and hidden-candidate cap messaging.
+- feat(retrieval): add a startup task-memory orchestration helper that composes query building, FTS retrieval, and budgeted packing with deterministic no-task/no-match and exception-fallback metadata contracts.
 - fix(retrieval): enforce preferred-K task-memory packing before the hard max-K limit.
 - fix(test): stabilize task-scope memory ordering regression by normalizing created_at timestamps before asserting deterministic id tie-break ordering.
 - feat(retrieval): enforce memory pack character budgets and compaction limits (title, content, tags) with deterministic truncation and budget-used metadata.

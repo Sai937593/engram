@@ -5,7 +5,9 @@ import subprocess
 import click
 
 import engram.cli as cli_root
+import engram.context_helpers.startup as startup_context
 from engram.cli.work_cmds_helpers import (
+    format_retrieval_debug_output,
     get_active_phase,
     get_current_branch,
     get_target_branch,
@@ -16,7 +18,6 @@ from engram.cli.work_cmds_helpers import (
     select_task_to_start,
     slugify,
 )
-from engram.context_helpers.startup import build_startup_context
 from engram.models.task import Task, get_effective_phase_title
 
 
@@ -48,20 +49,34 @@ def _print_filtered_git_output(stdout: str | None, stderr: str | None) -> None:
 
 
 @cli_root.cli.command(name="start")
-def start():
+@click.option(
+    "--debug-retrieval",
+    is_flag=True,
+    default=False,
+    help="Print retrieval query, candidate, and packing diagnostics.",
+)
+def start(debug_retrieval: bool):
     """Start the next task in the workflow."""
     project = cli_root.get_current_project()
     active_phase = get_active_phase(project.id)
     task, is_resuming = select_task_to_start(project.id)
 
     if not task:
-        context_str = build_startup_context(
+        startup_task_memory_result = startup_context.orchestrate_startup_task_memory_retrieval(
             project=project,
             active_phase=active_phase,
             selected_task=None,
         )
+        context_str = startup_context.build_startup_context(
+            project=project,
+            active_phase=active_phase,
+            selected_task=None,
+            startup_task_memory_result=startup_task_memory_result,
+        )
         cli_root.console.print("\n" + "=" * 40)
         cli_root.console.print(context_str)
+        if debug_retrieval:
+            cli_root.console.print("\n" + format_retrieval_debug_output(startup_task_memory_result))
         cli_root.console.print("=" * 40 + "\n")
         return
 
@@ -83,13 +98,21 @@ def start():
 
     git_checkout_phase_branch(task)
 
-    context_str = build_startup_context(
+    startup_task_memory_result = startup_context.orchestrate_startup_task_memory_retrieval(
         project=project,
         active_phase=active_phase,
         selected_task=task,
     )
+    context_str = startup_context.build_startup_context(
+        project=project,
+        active_phase=active_phase,
+        selected_task=task,
+        startup_task_memory_result=startup_task_memory_result,
+    )
     cli_root.console.print("\n" + "=" * 40)
     cli_root.console.print(context_str)
+    if debug_retrieval:
+        cli_root.console.print("\n" + format_retrieval_debug_output(startup_task_memory_result))
     cli_root.console.print("=" * 40 + "\n")
 
 

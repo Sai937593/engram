@@ -34,6 +34,7 @@ def create_tasks_table(cursor: sqlite3.Cursor) -> None:
         acceptance  TEXT,
         evidence    TEXT,
         tags        TEXT,
+        relevant_files TEXT,
         created_at  TEXT DEFAULT (datetime('now')),
         updated_at  TEXT DEFAULT (datetime('now'))
     )
