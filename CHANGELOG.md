@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- fix(cli): reject direct legacy task phase updates on first-class linked tasks so phase_id-controlled tasks cannot report a successful no-op.
+- fix(cli): restore `engram guardrail demote` and persist constraint/decision level demotions by avoiding migration overwrite of explicit non-default levels.
+- feat(cli): refine `engram finish` output with step progress, LF/CRLF git warning filtering, and a guardrail demotion review prompt.
 - fix(model): deduplicate normalized `tasks.relevant_files` paths at the model layer while preserving first-seen order and keeping blank entries dropped.
 - feat(cli): add `engram guardrail demote <memory-id> --reason ...` with one-level L0/L1/L2 demotion, project-scope/ambiguity validation, and audited level+reason evidence logging.
 - feat(cli): render selected-task relevant file paths in startup and task context output with deterministic path-only caps, truncation, and no-placeholder behavior when metadata is absent.

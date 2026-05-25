@@ -80,6 +80,15 @@ def mock_git(monkeypatch):
     calls = []
     status_stdout = ""
     branch_stdout = "main"
+    add_returncode = 0
+    add_stdout = ""
+    add_stderr = ""
+    commit_returncode = 0
+    commit_stdout = "[somebranch 12345] commit ok"
+    commit_stderr = ""
+    push_returncode = 0
+    push_stdout = ""
+    push_stderr = ""
 
     def mock_run(args, **kwargs):
         mock_run.calls.append(args)
@@ -90,17 +99,40 @@ def mock_git(monkeypatch):
             return MockCompletedProcess(0, stdout=mock_run.branch_stdout)
         elif len(args) > 1 and args[1] == "show-ref":
             return MockCompletedProcess(0)  # Branch exists
+        elif len(args) > 1 and args[1] == "add":
+            return MockCompletedProcess(
+                mock_run.add_returncode,
+                stdout=mock_run.add_stdout,
+                stderr=mock_run.add_stderr,
+            )
         elif len(args) > 1 and args[1] == "commit":
             mock_run.commits.append(args)
-            return MockCompletedProcess(0, stdout="[somebranch 12345] commit ok")
+            return MockCompletedProcess(
+                mock_run.commit_returncode,
+                stdout=mock_run.commit_stdout,
+                stderr=mock_run.commit_stderr,
+            )
         elif len(args) > 1 and args[1] == "push":
-            return MockCompletedProcess(0)
+            return MockCompletedProcess(
+                mock_run.push_returncode,
+                stdout=mock_run.push_stdout,
+                stderr=mock_run.push_stderr,
+            )
         return MockCompletedProcess(0)
 
     mock_run.commits = commits
     mock_run.calls = calls
     mock_run.status_stdout = status_stdout
     mock_run.branch_stdout = branch_stdout
+    mock_run.add_returncode = add_returncode
+    mock_run.add_stdout = add_stdout
+    mock_run.add_stderr = add_stderr
+    mock_run.commit_returncode = commit_returncode
+    mock_run.commit_stdout = commit_stdout
+    mock_run.commit_stderr = commit_stderr
+    mock_run.push_returncode = push_returncode
+    mock_run.push_stdout = push_stdout
+    mock_run.push_stderr = push_stderr
 
     monkeypatch.setattr("subprocess.run", mock_run)
     return mock_run
@@ -681,6 +713,52 @@ def test_finish_with_explicit_type(tmp_db, project, mock_git, monkeypatch):
     commit_cmd = mock_git.commits[0]
     commit_msg = commit_cmd[commit_cmd.index("-m") + 1]
     assert commit_msg.startswith("fix(phase-2): Fix database WAL mode")
+
+
+def test_finish_prints_progress_and_guardrail_demotion_suggestion(
+    tmp_db, project, mock_git, monkeypatch
+):
+    """engram finish prints progress and suggests guardrail demotion review."""
+    Task.create(
+        project_id=project.id,
+        title="Refine finish output",
+        phase="Phase 2",
+        status="in-progress",
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish", "-t", "feat"])
+
+    assert result.exit_code == 0
+    assert "Step 1/4: Staging changes..." in result.output
+    assert "Step 2/4: Creating commit..." in result.output
+    assert "Step 3/4: Pushing branch..." in result.output
+    assert "Step 4/4: Marking task done..." in result.output
+    assert "Review whether any project guardrails should be demoted." in result.output
+
+
+def test_finish_filters_git_line_ending_warnings(tmp_db, project, mock_git, monkeypatch):
+    """engram finish suppresses noisy LF/CRLF git warnings in command output."""
+    Task.create(
+        project_id=project.id,
+        title="Filter finish warnings",
+        phase="Phase 2",
+        status="in-progress",
+    )
+    mock_git.push_returncode = 1
+    mock_git.push_stderr = (
+        "warning: in the working copy of 'src/engram/cli/work_cmds.py', "
+        "LF will be replaced by CRLF the next time Git touches it\n"
+        "pre-push hook failed\n"
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["finish", "-t", "feat"])
+
+    assert result.exit_code == 0
+    assert "working copy" not in result.output
+    assert "will be replaced" not in result.output
+    assert "pre-push hook failed" in result.output
 
 
 def test_finish_resolves_type_from_tags(tmp_db, project, mock_git, monkeypatch):

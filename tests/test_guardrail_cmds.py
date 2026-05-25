@@ -38,6 +38,32 @@ def test_guardrail_demote_success(tmp_db, project, monkeypatch) -> None:
     assert refreshed.level == "L1"
 
 
+def test_guardrail_demote_constraint_persists_across_cli_invocations(
+    tmp_db, project, monkeypatch
+) -> None:
+    """guardrail demote persists L1->L2 for constraints across init-driven invocations."""
+    runner = make_runner_with_project(monkeypatch, project)
+    memory = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Guardrail",
+        content="Protect startup quality.",
+        scope="project",
+        level="L1",
+    )
+
+    demote = runner.invoke(
+        cli,
+        ["guardrail", "demote", memory.id, "--reason", "Too strict for current phase."],
+    )
+    assert demote.exit_code == 0, demote.output
+    assert f"Guardrail '{memory.id}' demoted: L1 -> L2" in demote.output
+
+    get_result = runner.invoke(cli, ["memory", "get", memory.id])
+    assert get_result.exit_code == 0, get_result.output
+    assert "Level: L2" in get_result.output
+
+
 def test_guardrail_demote_requires_non_empty_reason(tmp_db, project, monkeypatch) -> None:
     """guardrail demote rejects whitespace-only reasons."""
     runner = make_runner_with_project(monkeypatch, project)

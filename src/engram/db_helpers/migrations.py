@@ -61,7 +61,7 @@ def backfill_legacy_memory_scope_and_level(cursor: sqlite3.Cursor) -> None:
         SET scope = 'project',
             level = 'L1'
         WHERE type = 'constraint'
-          AND (scope IS NULL OR scope != 'project' OR level IS NULL OR level != 'L1')
+          AND (scope IS NULL OR scope != 'project' OR level IS NULL OR TRIM(level) = '')
         """
     )
     cursor.execute(
@@ -70,7 +70,7 @@ def backfill_legacy_memory_scope_and_level(cursor: sqlite3.Cursor) -> None:
         SET scope = 'project',
             level = 'L2'
         WHERE type = 'decision'
-          AND (scope IS NULL OR scope != 'project' OR level IS NULL OR level != 'L2')
+          AND (scope IS NULL OR scope != 'project' OR level IS NULL OR TRIM(level) = '')
         """
     )
     cursor.execute(

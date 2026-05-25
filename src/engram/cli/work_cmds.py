@@ -21,6 +21,33 @@ from engram.cli.work_cmds_helpers import (
 from engram.models.task import Task, get_effective_phase_title
 
 
+def _filter_git_output(output: str | None) -> str:
+    """Remove noisy git line-ending warnings while preserving actionable output."""
+    if not output:
+        return ""
+
+    filtered_lines = []
+    for line in output.splitlines():
+        normalized = line.lower()
+        is_line_ending_warning = (
+            "warning:" in normalized
+            and "working copy" in normalized
+            and "will be replaced by" in normalized
+            and "lf" in normalized
+            and "crlf" in normalized
+        )
+        if not is_line_ending_warning:
+            filtered_lines.append(line)
+    return "\n".join(filtered_lines)
+
+
+def _print_filtered_git_output(stdout: str | None, stderr: str | None) -> None:
+    """Print filtered git output if any actionable lines remain."""
+    for output in (_filter_git_output(stdout), _filter_git_output(stderr)):
+        if output:
+            cli_root.console.print(output)
+
+
 @cli_root.cli.command(name="start")
 @click.option(
     "--debug-retrieval",
@@ -97,7 +124,7 @@ def start(debug_retrieval: bool):
     default=None,
     help="Conventional commit type (e.g. feat, fix, docs)",
 )
-def finish(commit_type):
+def finish(commit_type: str | None) -> None:
     """Finish the active task (commit, push, and mark done)."""
     project = cli_root.get_current_project()
     tasks = Task.list_by_project(project.id)
@@ -120,9 +147,15 @@ def finish(commit_type):
 
     cli_root.console.print(f"Finishing task: {task.title} ({task.id})")
 
-    subprocess.run(["git", "add", "-A"], check=False)
+    cli_root.console.print("Step 1/4: Staging changes...")
+    add_res = subprocess.run(["git", "add", "-A"], capture_output=True, text=True, check=False)
+    if add_res.returncode != 0:
+        cli_root.console.print("[red]Git staging failed. Fix errors and retry.[/red]")
+        _print_filtered_git_output(add_res.stdout, add_res.stderr)
+        return
 
     commit_msg = f"{resolved_type}({slugify(get_effective_phase_title(task)) or 'misc'}): {task.title} [{task.id}]"
+    cli_root.console.print("Step 2/4: Creating commit...")
     commit_res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True)
 
     if commit_res.returncode != 0:
@@ -130,20 +163,20 @@ def finish(commit_type):
             cli_root.console.print("[yellow]Nothing to commit. Proceeding...[/yellow]")
         else:
             cli_root.console.print("[red]Commit failed. Fix errors and retry.[/red]")
-            cli_root.console.print(commit_res.stdout)
-            cli_root.console.print(commit_res.stderr)
+            _print_filtered_git_output(commit_res.stdout, commit_res.stderr)
             return
 
+    cli_root.console.print("Step 3/4: Pushing branch...")
     push_res = subprocess.run(
         ["git", "push", "-u", "origin", "HEAD"], capture_output=True, text=True
     )
     if push_res.returncode != 0:
         cli_root.console.print("[red]Push failed. Pre-push hooks (tests) likely failed.[/red]")
         cli_root.console.print("Please fix the issues below and run `engram finish` again:")
-        cli_root.console.print(push_res.stdout)
-        cli_root.console.print(push_res.stderr)
+        _print_filtered_git_output(push_res.stdout, push_res.stderr)
         return
 
+    cli_root.console.print("Step 4/4: Marking task done...")
     task.update(status="done")
     cli_root.console.print(f"[green]Task '{task.id}' marked as done.[/green]")
 
@@ -156,3 +189,4 @@ def finish(commit_type):
             cli_root.console.print(
                 "Please ask the user for permission to create a PR and merge this phase."
             )
+    cli_root.console.print("Review whether any project guardrails should be demoted.")

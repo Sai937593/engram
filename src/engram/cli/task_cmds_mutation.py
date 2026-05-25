@@ -74,6 +74,11 @@ def task_update(task_id: str, field: str, value: str) -> None:
         task_item.update(phase_id=resolved_phase.id, phase=resolved_phase.title)
         cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
         return
+    elif field == "phase" and task_item.phase_id:
+        raise click.ClickException(
+            "Task is linked to a first-class phase. Use --field phase_id to change the "
+            "effective phase, or --field phase_id --value none to clear the link first."
+        )
 
     task_item.update(**{field: value})
     cli_root.console.print(f"[green]Task '{task_id}' updated.[/green]")
