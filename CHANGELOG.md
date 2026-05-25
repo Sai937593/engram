@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(services): add read-only `search_memories` boundary with project-scoped DTO filtering, positive-limit validation (`VALIDATION_ERROR`), and coverage for filter pass-through, adapter-safe imports, empty results, and no memory-row mutation.
 - feat(services): add read-only `get_next_task` service API returning JSON-safe DTO/None with boundary tests for actionable selection, no-actionable fallback, adapter-safe imports, and no task-row mutation.
 - feat(services): add read-only `list_tasks`/`get_task` service APIs with status validation, project-scoped phase filtering (phase_id-first with legacy fallback), JSON-safe DTO output, and task-service coverage for default/all/status/phase/get flows.
 - feat(services): add project-scoped `resolve_task_ref` in `task_service` with exact/unique-prefix resolution and structured `TASK_NOT_FOUND`/`TASK_AMBIGUOUS` errors plus service-layer tests for exact, prefix, missing, ambiguous, and foreign-project refs.
