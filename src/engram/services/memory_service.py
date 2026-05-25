@@ -33,3 +33,21 @@ def search_memories(
         memory_item for memory_item in matches if memory_item.project_id == project_id
     ]
     return [memory_to_dict(memory_item) for memory_item in project_matches[:validated_limit]]
+
+
+def list_memories(
+    project_id: str,
+    type_filter: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, JsonValue]]:
+    """Return project-scoped JSON-safe memory DTOs using list model behavior."""
+    if type_filter:
+        memories = Memory.list_by_type(project_id, type_filter)
+    else:
+        memories = Memory.list_by_project(project_id)
+
+    if limit is None:
+        return [memory_to_dict(memory_item) for memory_item in memories]
+
+    validated_limit = _validate_limit(limit)
+    return [memory_to_dict(memory_item) for memory_item in memories[:validated_limit]]
