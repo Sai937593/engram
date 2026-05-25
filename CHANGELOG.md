@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(services): add read-only `list_tasks`/`get_task` service APIs with status validation, project-scoped phase filtering (phase_id-first with legacy fallback), JSON-safe DTO output, and task-service coverage for default/all/status/phase/get flows.
 - feat(services): add project-scoped `resolve_task_ref` in `task_service` with exact/unique-prefix resolution and structured `TASK_NOT_FOUND`/`TASK_AMBIGUOUS` errors plus service-layer tests for exact, prefix, missing, ambiguous, and foreign-project refs.
 - feat(services): add `resolve_current_project` service boundary that resolves cwd-bound projects, returns serialized `ProjectDTO` payloads, and raises structured `PROJECT_NOT_BOUND` errors for unbound repositories.
 - feat(services): add JSON-safe Project/Task/Memory/Phase serializer helpers with dependency-aware task effective status and DTO shape coverage for optional-field normalization.
