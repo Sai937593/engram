@@ -7,6 +7,7 @@ from engram.memory_retrieval.fts_retriever import (
     TaskMemoryRetrievalOptions,
     TaskMemoryRetrievalResult,
     retrieve_task_memory_candidates,
+    retrieve_task_memory_semantic_candidates,
 )
 from engram.memory_retrieval.pack_contract import (
     TaskMemoryPackedItem,
@@ -69,5 +70,6 @@ __all__ = [
     "normalize_fts_query_text",
     "build_task_retrieval_query",
     "retrieve_task_memory_candidates",
+    "retrieve_task_memory_semantic_candidates",
     "orchestrate_startup_task_memory_retrieval",
 ]

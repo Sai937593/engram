@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from collections.abc import Iterable
+from math import sqrt
+from typing import Any
 
 from engram.db import get_db_connection
 from engram.memory_retrieval.fts_query import (
@@ -18,6 +21,12 @@ from engram.memory_retrieval.retrieval_contract import (
     TaskMemoryRetrievalOptions,
     TaskMemoryRetrievalResult,
 )
+from engram.memory_retrieval.semantic_index_contract import (
+    DEFAULT_SEMANTIC_MODEL_NAME,
+    SemanticIndexStatus,
+    load_semantic_embedding_dependencies,
+)
+from engram.memory_retrieval.semantic_index_storage import SemanticIndexStorage
 
 PROJECT_SCOPE_ELIGIBLE_LEVELS = ("L2", "L3")
 PROJECT_SCOPE_ELIGIBLE_TYPES = ("lesson", "decision")
@@ -63,6 +72,96 @@ def _passes_lexical_threshold(
     if min_content_term_hits_without_title_or_tag <= 0:
         return True
     return len(content_hits) >= min_content_term_hits_without_title_or_tag
+
+
+def _is_semantic_eligible(memory: Any) -> bool:
+    """Return whether memory is eligible for semantic retrieval candidates."""
+    if memory.scope == "task":
+        return True
+    if memory.scope != "project":
+        return False
+    return bool(
+        memory.level in PROJECT_SCOPE_ELIGIBLE_LEVELS
+        and memory.type in PROJECT_SCOPE_ELIGIBLE_TYPES
+    )
+
+
+def _to_float_tuple(vector: Iterable[object]) -> tuple[float, ...]:
+    """Convert numeric iterables to deterministic float tuples."""
+    return tuple(float(value) for value in vector)
+
+
+def _cosine_similarity(left: tuple[float, ...], right: tuple[float, ...]) -> float:
+    """Compute cosine similarity for vectors with equal dimensionality."""
+    if not left or not right or len(left) != len(right):
+        return 0.0
+    left_norm = sqrt(sum(value * value for value in left))
+    right_norm = sqrt(sum(value * value for value in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    dot = sum(left[index] * right[index] for index in range(len(left)))
+    return dot / (left_norm * right_norm)
+
+
+def _list_project_memories(project_id: str) -> list[Any]:
+    """List project memories via local import to avoid package import cycles."""
+    from engram.models.memory import Memory
+
+    return Memory.list_by_project(project_id)
+
+
+def _empty_semantic_result(
+    *,
+    project_id: str,
+    task_id: str,
+    query_text: str,
+    max_candidates: int,
+    query_was_empty: bool,
+    fallback_used: bool,
+    fallback_reason: str | None,
+) -> TaskMemoryRetrievalResult:
+    """Return deterministic empty semantic retrieval metadata."""
+    metadata = TaskMemoryRetrievalMetadata(
+        project_id=project_id,
+        query_task_id=task_id,
+        source="semantic",
+        requested_query_text=query_text,
+        normalized_fts_query="",
+        query_term_count=0,
+        query_was_empty=query_was_empty,
+        fallback_used=fallback_used,
+        fallback_reason=fallback_reason,
+        max_candidates=max_candidates,
+        scanned_row_count=0,
+        returned_candidate_count=0,
+    )
+    return TaskMemoryRetrievalResult(candidates=(), metadata=metadata)
+
+
+def _semantic_candidate_from_memory(
+    *,
+    memory: Any,
+    similarity: float,
+    query_task_id: str,
+) -> TaskMemoryCandidate:
+    """Build semantic retrieval candidate using similarity score as sortable rank."""
+    return TaskMemoryCandidate(
+        memory_id=memory.id,
+        project_id=memory.project_id,
+        scope=memory.scope,
+        type=memory.type,
+        task_id=memory.task_id,
+        title=memory.title,
+        content=memory.content,
+        tags=tuple(memory.tags),
+        retrieval_source="semantic",
+        fts_rank=-similarity,
+        boost_score=0,
+        task_id_match=bool(query_task_id) and memory.task_id == query_task_id,
+        title_term_hits=(),
+        tag_term_hits=(),
+        content_term_hits=(),
+    )
 
 
 def _fetch_task_memory_fts_rows(
@@ -305,3 +404,137 @@ def retrieve_task_memory_candidates(
         threshold_filtered_project_scope_count=threshold_filtered_project_scope_count,
     )
     return TaskMemoryRetrievalResult(candidates=ordered_candidates, metadata=metadata)
+
+
+def retrieve_task_memory_semantic_candidates(
+    retrieval_query: TaskRetrievalQuery,
+    options: TaskMemoryRetrievalOptions | None = None,
+    *,
+    semantic_storage: SemanticIndexStorage | None = None,
+    model_name: str = DEFAULT_SEMANTIC_MODEL_NAME,
+) -> TaskMemoryRetrievalResult:
+    """Retrieve semantic candidates from local embedding artifacts."""
+    resolved_options = options or TaskMemoryRetrievalOptions()
+    project_id = retrieval_query.metadata.project_id
+    task_id = retrieval_query.metadata.task_id
+    query_text = retrieval_query.query_text.strip()
+    if not query_text:
+        return _empty_semantic_result(
+            project_id=project_id,
+            task_id=task_id,
+            query_text=retrieval_query.query_text,
+            max_candidates=resolved_options.max_candidates,
+            query_was_empty=True,
+            fallback_used=False,
+            fallback_reason=None,
+        )
+
+    storage = semantic_storage or SemanticIndexStorage(project_id)
+    status = storage.get_index_status(
+        expected_model_name=model_name,
+        expected_model_dim=None,
+    )
+    if status.status != SemanticIndexStatus.READY:
+        return _empty_semantic_result(
+            project_id=project_id,
+            task_id=task_id,
+            query_text=retrieval_query.query_text,
+            max_candidates=resolved_options.max_candidates,
+            query_was_empty=False,
+            fallback_used=True,
+            fallback_reason=f"semantic index {status.status.value}: {status.reason}",
+        )
+
+    metadata = status.metadata
+    if metadata is None:
+        return _empty_semantic_result(
+            project_id=project_id,
+            task_id=task_id,
+            query_text=retrieval_query.query_text,
+            max_candidates=resolved_options.max_candidates,
+            query_was_empty=False,
+            fallback_used=True,
+            fallback_reason="semantic index ready status missing metadata",
+        )
+
+    try:
+        np_module, text_embedding_cls = load_semantic_embedding_dependencies()
+        raw_matrix: Any = np_module.load(storage.embeddings_path, allow_pickle=False)
+        matrix_shape = getattr(raw_matrix, "shape", None)
+        if not isinstance(matrix_shape, tuple) or len(matrix_shape) != 2:
+            raise ValueError("semantic embeddings matrix must be 2D")
+        if matrix_shape[0] != len(metadata.memory_ids):
+            raise ValueError("semantic index row count does not match metadata memory_ids")
+
+        embedder = text_embedding_cls(model_name=model_name)
+        query_vectors = list(embedder.embed([query_text]))
+        if not query_vectors:
+            raise ValueError("semantic embedder returned no query vectors")
+        query_vector = _to_float_tuple(np_module.asarray(query_vectors[0], dtype=np_module.float32))
+
+        eligible_memories = {
+            memory.id: memory
+            for memory in _list_project_memories(project_id)
+            if _is_semantic_eligible(memory)
+        }
+        scored_candidates: list[tuple[float, TaskMemoryCandidate]] = []
+        for row_index, memory_id in enumerate(metadata.memory_ids):
+            memory = eligible_memories.get(memory_id)
+            if memory is None:
+                continue
+            similarity = _cosine_similarity(query_vector, _to_float_tuple(raw_matrix[row_index]))
+            scored_candidates.append(
+                (
+                    similarity,
+                    _semantic_candidate_from_memory(
+                        memory=memory,
+                        similarity=similarity,
+                        query_task_id=task_id,
+                    ),
+                )
+            )
+
+        ordered_candidates = tuple(
+            candidate
+            for _, candidate in sorted(
+                scored_candidates,
+                key=lambda item: (-item[0], item[1].memory_id),
+            )[: resolved_options.max_candidates]
+        )
+        result_metadata = TaskMemoryRetrievalMetadata(
+            project_id=project_id,
+            query_task_id=task_id,
+            source="semantic",
+            requested_query_text=retrieval_query.query_text,
+            normalized_fts_query="",
+            query_term_count=0,
+            query_was_empty=False,
+            fallback_used=False,
+            fallback_reason=None,
+            max_candidates=resolved_options.max_candidates,
+            scanned_row_count=matrix_shape[0],
+            returned_candidate_count=len(ordered_candidates),
+            scanned_task_scope_row_count=sum(
+                1 for memory in eligible_memories.values() if memory.scope == "task"
+            ),
+            scanned_project_scope_row_count=sum(
+                1 for memory in eligible_memories.values() if memory.scope == "project"
+            ),
+            returned_task_scope_candidate_count=sum(
+                1 for candidate in ordered_candidates if candidate.scope == "task"
+            ),
+            returned_project_scope_candidate_count=sum(
+                1 for candidate in ordered_candidates if candidate.scope == "project"
+            ),
+        )
+        return TaskMemoryRetrievalResult(candidates=ordered_candidates, metadata=result_metadata)
+    except Exception as exc:
+        return _empty_semantic_result(
+            project_id=project_id,
+            task_id=task_id,
+            query_text=retrieval_query.query_text,
+            max_candidates=resolved_options.max_candidates,
+            query_was_empty=False,
+            fallback_used=True,
+            fallback_reason=f"semantic retrieval failed: {exc}",
+        )
