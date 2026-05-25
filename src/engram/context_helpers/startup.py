@@ -39,6 +39,8 @@ class StartupContextOptions:
     task_memory_item_title_char_limit: int = 100
     task_memory_item_content_char_limit: int = 260
     l1_guardrail_limit: int = 6
+    relevant_file_limit: int = 5
+    relevant_file_path_char_limit: int = 120
 
 
 def _compact_with_limit(text: str | None, char_limit: int) -> str:
@@ -122,6 +124,17 @@ def _build_task_frame(selected_task: Task | None, options: StartupContextOptions
         lines.append(f"Acceptance: {acceptance}")
     if selected_task.tags:
         lines.append(f"Tags: {', '.join(selected_task.tags)}")
+    if selected_task.relevant_files:
+        lines.append("")
+        lines.append("Relevant files:")
+        capped_paths = selected_task.relevant_files[: options.relevant_file_limit]
+        for path in capped_paths:
+            compact_path = _compact_with_limit(path, options.relevant_file_path_char_limit)
+            if compact_path:
+                lines.append(f"- {compact_path}")
+        hidden_path_count = max(0, len(selected_task.relevant_files) - len(capped_paths))
+        if hidden_path_count:
+            lines.append(f"... {hidden_path_count} additional relevant file path(s) hidden by cap.")
 
     return _render_section("CURRENT/NEXT TASK FRAME", lines)
 

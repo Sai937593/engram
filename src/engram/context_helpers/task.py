@@ -4,6 +4,21 @@ from engram.context_helpers.common import compact_text
 from engram.models.memory import Memory
 from engram.models.task import Task
 
+TASK_CONTEXT_RELEVANT_FILE_LIMIT = 8
+TASK_CONTEXT_RELEVANT_FILE_CHAR_LIMIT = 160
+
+
+def _compact_path(path: str, char_limit: int) -> str:
+    """Convert a path to compact ASCII with deterministic truncation."""
+    compacted = compact_text(path)
+    if not compacted or char_limit <= 0:
+        return ""
+    if len(compacted) <= char_limit:
+        return compacted
+    if char_limit <= 3:
+        return compacted[:char_limit]
+    return compacted[: char_limit - 3].rstrip() + "..."
+
 
 def build_task_context(task_id: str, hard_constraints_only: bool = False) -> str:
     """Generate focused context for a specific task."""
@@ -37,6 +52,17 @@ def build_task_context(task_id: str, hard_constraints_only: bool = False) -> str
 
     if task.acceptance:
         context.append(f"\nAcceptance Criteria:\n{task.acceptance}")
+
+    if task.relevant_files:
+        context.append("\n## RELEVANT FILES")
+        capped_paths = task.relevant_files[:TASK_CONTEXT_RELEVANT_FILE_LIMIT]
+        for path in capped_paths:
+            compacted_path = _compact_path(path, TASK_CONTEXT_RELEVANT_FILE_CHAR_LIMIT)
+            if compacted_path:
+                context.append(f"- {compacted_path}")
+        hidden_count = max(0, len(task.relevant_files) - len(capped_paths))
+        if hidden_count:
+            context.append(f"... {hidden_count} additional relevant file path(s) hidden by cap.")
 
     if not hard_constraints_only:
         memories = Memory.list_by_project(task.project_id)

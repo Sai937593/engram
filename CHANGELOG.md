@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(cli): render selected-task relevant file paths in startup and task context output with deterministic path-only caps, truncation, and no-placeholder behavior when metadata is absent.
 - feat(cli): add task relevant file path workflows with `task add --files`, `task get` relevant file rendering, and `task files list/add/remove` commands plus validation for blanks, duplicates, and missing tasks.
 - feat(model): add first-class `tasks.relevant_files` metadata with idempotent schema migration, normalized path storage (trim/ignore-empty), and task model round-trip/update coverage including legacy DB compatibility.
 - feat(retrieval): expand semantic retrieval debug evidence with fused candidate totals and coverage for missing/ready/stale/error semantic states across startup orchestration plus `start --debug-retrieval` and `memory related-to-task --debug`.
