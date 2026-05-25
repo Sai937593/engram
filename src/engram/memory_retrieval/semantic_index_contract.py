@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 SEMANTIC_INDEX_SCHEMA_VERSION = 1
 SEMANTIC_INDEX_ROOT_DIRNAME = "indexes"
@@ -11,6 +12,8 @@ SEMANTIC_INDEX_SUBDIR = "semantic"
 SEMANTIC_METADATA_FILENAME = "metadata.json"
 SEMANTIC_EMBEDDINGS_FILENAME = "embeddings.npy"
 SEMANTIC_BUILD_STATUS_SUCCESS = "success"
+DEFAULT_SEMANTIC_MODEL_NAME = "BAAI/bge-small-en-v1.5"
+KNOWN_MODEL_DIMENSIONS = {"BAAI/bge-small-en-v1.5": 384}
 
 
 class SemanticIndexStatus(str, Enum):
@@ -115,6 +118,63 @@ class SemanticIndexStatusResult:
     reason: str
     metadata: SemanticIndexMetadata | None = None
     current_snapshot: SemanticIndexFreshnessSnapshot | None = None
+
+
+class SemanticReindexError(RuntimeError):
+    """Raised when semantic reindex cannot complete safely."""
+
+
+@dataclass(frozen=True)
+class SemanticReindexResult:
+    """Summary for semantic index rebuild command output."""
+
+    scanned_count: int
+    indexed_count: int
+    skipped_count: int
+    failed_count: int
+    stale_count: int
+    model_name: str
+    model_dim: int
+    metadata_path: str
+    embeddings_path: str
+    status_before: str
+
+
+def load_semantic_embedding_dependencies() -> tuple[Any, Any]:
+    """Load optional semantic dependencies only when reindex is invoked."""
+    missing: list[str] = []
+    np_module: Any | None = None
+    text_embedding_cls: Any | None = None
+    try:
+        import numpy as np_module  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        missing.append("numpy")
+    try:
+        from fastembed import TextEmbedding as text_embedding_cls  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        missing.append("fastembed")
+    if missing:
+        joined = ", ".join(sorted(missing))
+        raise SemanticReindexError(
+            f"missing optional semantic dependencies: {joined}. "
+            "Install with: uv pip install 'fastembed>=0.8,<1' 'numpy>=2,<3'"
+        )
+    return np_module, text_embedding_cls
+
+
+def resolve_semantic_model_dim(
+    *, model_name: str, text_embedding_cls: Any, fallback_dim: int | None
+) -> int:
+    """Resolve embedding dimension for semantic metadata."""
+    resolver = getattr(text_embedding_cls, "get_embedding_size", None)
+    if callable(resolver):
+        try:
+            return int(resolver(model_name))
+        except Exception:
+            pass
+    return (
+        int(fallback_dim) if fallback_dim is not None else KNOWN_MODEL_DIMENSIONS.get(model_name, 0)
+    )
 
 
 def optional_str(value: object) -> str | None:

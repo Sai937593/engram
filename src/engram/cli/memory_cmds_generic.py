@@ -15,6 +15,11 @@ from engram.cli.memory_cmds_common import (
     resolve_memory_update_field_value,
 )
 from engram.db import get_db_connection
+from engram.memory_retrieval.semantic_reindex import (
+    DEFAULT_SEMANTIC_MODEL_NAME,
+    SemanticReindexError,
+    reindex_semantic_memory_index,
+)
 from engram.memory_retrieval.startup_orchestration import (
     orchestrate_startup_task_memory_retrieval,
 )
@@ -189,6 +194,67 @@ def memory_delete(memory_id: str, yes: bool) -> None:
     if yes or click.confirm(f"Are you sure you want to delete memory '{memory_id}'?"):
         memory_item.delete()
         cli_root.console.print(f"[green]Memory '{memory_id}' deleted.[/green]")
+
+
+@memory.command(name="reindex")
+@click.option(
+    "--semantic",
+    is_flag=True,
+    help="Rebuild local semantic embedding artifacts for memory retrieval.",
+)
+@click.option("--full", is_flag=True, help="Force a full semantic rebuild.")
+@click.option(
+    "--task-scope-only",
+    is_flag=True,
+    help="Index only task-scope memories (skip project-scope records).",
+)
+@click.option(
+    "--model",
+    "model_name",
+    default=DEFAULT_SEMANTIC_MODEL_NAME,
+    show_default=True,
+    help="Semantic embedding model name.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Rebuild even when the semantic index currently reports ready.",
+)
+def memory_reindex(
+    semantic: bool,
+    full: bool,
+    task_scope_only: bool,
+    model_name: str,
+    force: bool,
+) -> None:
+    """Rebuild semantic memory index artifacts without mutating startup behavior."""
+    if not semantic:
+        raise click.ClickException(
+            "No reindex backend selected. Use '--semantic' for local semantic index rebuild."
+        )
+
+    project = cli_root.get_current_project()
+    try:
+        result = reindex_semantic_memory_index(
+            project_id=project.id,
+            model_name=model_name,
+            full=full,
+            task_scope_only=task_scope_only,
+            force=force,
+        )
+    except SemanticReindexError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    cli_root.console.print(f"[green]Semantic reindex complete for project '{project.id}'.[/green]")
+    cli_root.console.print(f"status_before: {result.status_before}")
+    cli_root.console.print(f"scanned: {result.scanned_count}")
+    cli_root.console.print(f"indexed: {result.indexed_count}")
+    cli_root.console.print(f"skipped: {result.skipped_count}")
+    cli_root.console.print(f"failed: {result.failed_count}")
+    cli_root.console.print(f"stale: {result.stale_count}")
+    cli_root.console.print(f"model: {result.model_name} ({result.model_dim} dims)")
+    cli_root.console.print(f"metadata: {result.metadata_path}")
+    cli_root.console.print(f"embeddings: {result.embeddings_path}")
 
 
 def resolve_task_by_id_or_prefix(project_id: str, value: str) -> Task:

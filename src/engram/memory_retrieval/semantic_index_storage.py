@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from engram.db import get_db_connection
 from engram.memory_retrieval.semantic_index_contract import (
@@ -43,6 +44,12 @@ class SemanticIndexStorage:
             json.dump(metadata.to_dict(), handle, indent=2, sort_keys=True)
             handle.write("\n")
         return self.metadata_path
+
+    def save_embeddings(self, embeddings: Any, *, np_module: Any) -> Path:
+        """Persist semantic embedding matrix to local storage."""
+        self.ensure_storage()
+        np_module.save(self.embeddings_path, embeddings)
+        return self.embeddings_path
 
     def load_metadata(self) -> SemanticIndexMetadata | None:
         """Load semantic metadata if present, otherwise return None."""

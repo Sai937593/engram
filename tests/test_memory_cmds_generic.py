@@ -460,3 +460,64 @@ def test_memory_related_to_task_no_mutation(tmp_db, project, monkeypatch) -> Non
     for call in subprocess_calls:
         if isinstance(call, list) and len(call) > 1 and call[0] == "git":
             assert call[1] not in ("checkout", "switch"), f"Git checkout/switch was called: {call}"
+
+
+def test_memory_reindex_semantic_success_prints_counts(tmp_db, project, monkeypatch) -> None:
+    """memory reindex --semantic prints deterministic summary counters."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    class DummyResult:
+        scanned_count = 4
+        indexed_count = 3
+        skipped_count = 1
+        failed_count = 0
+        stale_count = 2
+        status_before = "stale"
+        model_name = "BAAI/bge-small-en-v1.5"
+        model_dim = 384
+        metadata_path = "/tmp/metadata.json"
+        embeddings_path = "/tmp/embeddings.npy"
+
+    monkeypatch.setattr(
+        "engram.cli.memory_cmds_generic.reindex_semantic_memory_index",
+        lambda **kwargs: DummyResult(),
+    )
+
+    result = runner.invoke(cli, ["memory", "reindex", "--semantic"])
+
+    assert result.exit_code == 0, result.output
+    assert "Semantic reindex complete" in result.output
+    assert "indexed: 3" in result.output
+    assert "skipped: 1" in result.output
+    assert "failed: 0" in result.output
+    assert "stale: 2" in result.output
+
+
+def test_memory_reindex_requires_backend_flag(tmp_db, project, monkeypatch) -> None:
+    """memory reindex fails clearly when no backend is selected."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(cli, ["memory", "reindex"])
+
+    assert result.exit_code != 0
+    assert "Use '--semantic'" in result.output
+
+
+def test_memory_reindex_dependency_error_is_clear(tmp_db, project, monkeypatch) -> None:
+    """memory reindex surfaces semantic dependency failures as Click errors."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    def _raise_error(**kwargs):
+        del kwargs
+        from engram.memory_retrieval.semantic_reindex import SemanticReindexError
+
+        raise SemanticReindexError("missing optional semantic dependencies: fastembed")
+
+    monkeypatch.setattr(
+        "engram.cli.memory_cmds_generic.reindex_semantic_memory_index", _raise_error
+    )
+
+    result = runner.invoke(cli, ["memory", "reindex", "--semantic"])
+
+    assert result.exit_code != 0
+    assert "missing optional semantic dependencies" in result.output
