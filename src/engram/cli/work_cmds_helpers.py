@@ -54,6 +54,7 @@ def format_retrieval_debug_output(result: StartupTaskMemoryRetrievalResult) -> s
         f"semantic_fallback_used={retrieval.semantic_fallback_used}, "
         f"semantic_reason={retrieval.semantic_reason or '(none)'}",
         "fusion metadata: "
+        f"fused_returned_candidate_count={retrieval.returned_candidate_count}, "
         f"fts_returned_candidate_count={retrieval.fts_returned_candidate_count}, "
         f"semantic_returned_candidate_count={retrieval.semantic_returned_candidate_count}, "
         f"fused_duplicate_count={retrieval.fused_duplicate_count}, "

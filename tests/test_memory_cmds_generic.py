@@ -420,6 +420,38 @@ def test_memory_related_to_task_debug_empty(tmp_db, project, monkeypatch) -> Non
     assert "No relevant task memories selected." not in result.output
 
 
+def test_memory_related_to_task_debug_shows_semantic_missing_status(
+    tmp_db, project, monkeypatch
+) -> None:
+    """memory related-to-task --debug shows semantic missing/fallback metadata when index is absent."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task = Task.create(
+        project_id=project.id,
+        title="Semantic missing status",
+        description="Use retrieval diagnostics",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="FTS fallback memory",
+        content="Fallback to lexical retrieval when semantic index is missing.",
+        scope="task",
+        task_id=task.id,
+        tags=["retrieval"],
+    )
+
+    result = runner.invoke(cli, ["memory", "related-to-task", task.id, "--debug"])
+
+    assert result.exit_code == 0, result.output
+    assert "semantic index metadata:" in result.output
+    assert "semantic_status=missing" in result.output
+    assert "semantic_fallback_used=True" in result.output
+    assert "semantic_reason=semantic index missing:" in result.output
+    assert "fusion metadata:" in result.output
+    assert "fused_returned_candidate_count=" in result.output
+    assert "budget usage:" in result.output
+
+
 def test_memory_related_to_task_no_mutation(tmp_db, project, monkeypatch) -> None:
     """memory related-to-task guarantees that task status and git branch remain completely unchanged."""
     runner = make_runner_with_project(monkeypatch, project)

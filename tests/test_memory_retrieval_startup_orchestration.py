@@ -608,3 +608,99 @@ def test_startup_orchestration_uses_semantic_when_fts_channel_falls_back(
     assert result.retrieval_metadata.fallback_used is True
     assert result.retrieval_metadata.fallback_reason == "fts table unavailable"
     assert result.retrieval_metadata.semantic_status == "ready"
+
+
+def test_startup_orchestration_surfaces_semantic_stale_status(project, monkeypatch) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase Semantic Stale", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Semantic stale status",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="fts",
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_semantic_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="semantic",
+                fallback_used=True,
+                fallback_reason="semantic index stale: semantic index timestamp watermark is stale",
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    assert result.retrieval_metadata.semantic_status == "stale"
+    assert result.retrieval_metadata.semantic_fallback_used is True
+    assert result.retrieval_metadata.semantic_reason is not None
+    assert "timestamp watermark is stale" in result.retrieval_metadata.semantic_reason
+
+
+def test_startup_orchestration_surfaces_semantic_error_status(project, monkeypatch) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase Semantic Error", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Semantic error status",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="fts",
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_semantic_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="semantic",
+                fallback_used=True,
+                fallback_reason=(
+                    "semantic retrieval failed: missing optional semantic dependencies: fastembed"
+                ),
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    assert result.retrieval_metadata.semantic_status == "error"
+    assert result.retrieval_metadata.semantic_fallback_used is True
+    assert result.retrieval_metadata.semantic_reason is not None
+    assert "missing optional semantic dependencies" in result.retrieval_metadata.semantic_reason

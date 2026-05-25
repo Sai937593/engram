@@ -362,6 +362,93 @@ def test_start_debug_retrieval_prints_diagnostics_when_enabled(
     assert "memory_id=mem-1, retrieval_source=fts, fts_rank=-0.150000" in result.output
 
 
+def test_start_debug_retrieval_prints_semantic_status_metadata(
+    tmp_db, project, mock_git, monkeypatch
+):
+    """engram start --debug-retrieval prints semantic index/fusion metadata and fallback reasons."""
+    task = Task.create(project_id=project.id, title="Task Semantic", phase="Phase 1", status="todo")
+    startup_result = StartupTaskMemoryRetrievalResult(
+        query=TaskRetrievalQuery(
+            query_text="task.title: Task Semantic",
+            fragments=("task.title: Task Semantic",),
+            metadata=RetrievalQueryMetadata(
+                task_id=task.id,
+                project_id=project.id,
+                phase_id=None,
+                phase_title=None,
+                included_fields=("task.title",),
+                omitted_fields=(),
+                truncated_fields=(),
+                max_query_chars=1200,
+                field_char_limit=220,
+                uncapped_query_char_count=24,
+                query_char_count=24,
+                query_was_capped=False,
+            ),
+        ),
+        retrieval_metadata=TaskMemoryRetrievalMetadata(
+            project_id=project.id,
+            query_task_id=task.id,
+            source="semantic+fts",
+            requested_query_text="task.title: Task Semantic",
+            normalized_fts_query='"task" OR "semantic"',
+            query_term_count=2,
+            query_was_empty=False,
+            fallback_used=False,
+            fallback_reason=None,
+            max_candidates=20,
+            scanned_row_count=0,
+            returned_candidate_count=1,
+            semantic_status="stale",
+            semantic_reason="semantic index stale: semantic index timestamp watermark is stale",
+            semantic_fallback_used=True,
+            fts_returned_candidate_count=1,
+            semantic_returned_candidate_count=0,
+            fused_duplicate_count=0,
+            exact_fts_preserved_count=1,
+        ),
+        pack_result=TaskMemoryPackResult(
+            items=(),
+            metadata=TaskMemoryPackMetadata(
+                project_id=project.id,
+                query_task_id=task.id,
+                source="semantic+fts",
+                section_char_budget=3600,
+                preferred_k=6,
+                max_k=10,
+                max_item_chars=420,
+                input_candidate_count=1,
+                unique_candidate_count=1,
+                selected_item_count=0,
+                hidden_item_count=1,
+                truncated_item_count=0,
+                used_char_count=0,
+                section_budget_exhausted=False,
+                ordering_fields=("-boost_score", "fts_rank", "memory_id"),
+                dedupe_key="memory_id",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        lambda **kwargs: startup_result,
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start", "--debug-retrieval"])
+    assert result.exit_code == 0
+    assert "semantic index metadata:" in result.output
+    assert "semantic_status=stale" in result.output
+    assert "semantic_fallback_used=True" in result.output
+    assert "semantic_reason=semantic index stale:" in result.output
+    assert "timestamp watermark is" in result.output
+    assert "stale" in result.output
+    assert "fusion metadata:" in result.output
+    assert "fused_returned_candidate_count=1" in result.output
+    assert "fts_returned_candidate_count=1" in result.output
+    assert "semantic_returned_candidate_count=0" in result.output
+
+
 def test_start_blocks_when_dirty_and_switching_branch(tmp_db, project, mock_git, monkeypatch):
     """engram start blocks when working tree is dirty and we need to switch branches."""
     # Create a task in Phase 1
