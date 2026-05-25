@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(services): add a service-safe `EngramServiceError` model with JSON-safe `to_dict` serialization and focused unit coverage for default and explicit details payloads.
 - fix(cli): reject direct legacy task phase updates on first-class linked tasks so phase_id-controlled tasks cannot report a successful no-op.
 - fix(cli): restore `engram guardrail demote` and persist constraint/decision level demotions by avoiding migration overwrite of explicit non-default levels.
 - feat(cli): refine `engram finish` output with step progress, LF/CRLF git warning filtering, and a guardrail demotion review prompt.
