@@ -16,7 +16,7 @@ def _normalize_phase_title(phase: str | None) -> str:
 
 
 def _normalize_relevant_files(relevant_files: Any) -> list[str]:
-    """Normalize relevant file paths by trimming entries and dropping empties."""
+    """Normalize relevant file paths by trimming entries, dropping empties, and deduplicating."""
     if relevant_files is None:
         return []
     if isinstance(relevant_files, str):
@@ -25,12 +25,14 @@ def _normalize_relevant_files(relevant_files: Any) -> list[str]:
         candidates = list(relevant_files)
 
     normalized: list[str] = []
+    seen: set[str] = set()
     for path in candidates:
         if path is None:
             continue
         cleaned = str(path).strip()
-        if cleaned:
+        if cleaned and cleaned not in seen:
             normalized.append(cleaned)
+            seen.add(cleaned)
     return normalized
 
 

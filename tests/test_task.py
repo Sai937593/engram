@@ -4,7 +4,7 @@ import sqlite3
 
 from engram.db import get_db_connection, init_db
 from engram.models.phase import Phase
-from engram.models.task import Task, get_effective_phase_title
+from engram.models.task import Task, _normalize_relevant_files, get_effective_phase_title
 
 
 def test_create_task(project):
@@ -25,7 +25,14 @@ def test_create_task_with_relevant_files_normalizes_and_persists(project, tmp_db
     t = Task.create(
         project_id=project.id,
         title="Task with relevant files",
-        relevant_files=[" src/engram/models/task.py ", "", "tests/test_task.py", "   "],
+        relevant_files=[
+            " src/engram/models/task.py ",
+            "",
+            "tests/test_task.py",
+            "src/engram/models/task.py",
+            "   ",
+            "tests/test_task.py",
+        ],
     )
     assert t.relevant_files == ["src/engram/models/task.py", "tests/test_task.py"]
 
@@ -34,6 +41,15 @@ def test_create_task_with_relevant_files_normalizes_and_persists(project, tmp_db
     conn.close()
 
     assert row["relevant_files"] == '["src/engram/models/task.py", "tests/test_task.py"]'
+
+
+def test_normalize_relevant_files_deduplicates_preserve_first_seen_order():
+    assert _normalize_relevant_files(
+        [" src/a.py ", "src/a.py", "", "tests/b.py", "tests/b.py"]
+    ) == [
+        "src/a.py",
+        "tests/b.py",
+    ]
 
 
 def test_create_task_persists_phase_id_without_legacy_phase(project, tmp_db):
@@ -138,7 +154,14 @@ def test_update_task_phase_id(task):
 
 
 def test_update_task_relevant_files_normalizes(task):
-    task.update(relevant_files=[" src/engram/models/task.py ", "", "tests/conftest.py"])
+    task.update(
+        relevant_files=[
+            " src/engram/models/task.py ",
+            "",
+            "tests/conftest.py",
+            "src/engram/models/task.py",
+        ]
+    )
     refreshed = Task.get(task.id)
     assert refreshed.relevant_files == ["src/engram/models/task.py", "tests/conftest.py"]
 
