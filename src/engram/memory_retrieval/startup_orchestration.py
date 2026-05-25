@@ -6,7 +6,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from time import monotonic
 
-from engram.memory_retrieval.fts_retriever import retrieve_task_memory_candidates
+from engram.memory_retrieval.fts_retriever import (
+    retrieve_task_memory_candidates,
+    retrieve_task_memory_semantic_candidates,
+)
+from engram.memory_retrieval.fusion import fuse_task_memory_retrieval_results
 from engram.memory_retrieval.pack_contract import (
     TaskMemoryPackMetadata,
     TaskMemoryPackOptions,
@@ -202,9 +206,7 @@ def orchestrate_startup_task_memory_retrieval(
                 pack_options=pack_options,
             )
 
-        retrieval_result = retrieve_task_memory_candidates(
-            retrieval_query, resolved_retrieval_options
-        )
+        fts_result = retrieve_task_memory_candidates(retrieval_query, resolved_retrieval_options)
 
         if timeout_seconds is not None and _did_timeout(
             started_at=started_at,
@@ -218,6 +220,30 @@ def orchestrate_startup_task_memory_retrieval(
                 fallback_reason=_timeout_reason(timeout_seconds, "retrieval"),
                 pack_options=pack_options,
             )
+
+        semantic_result = retrieve_task_memory_semantic_candidates(
+            retrieval_query,
+            resolved_retrieval_options,
+        )
+
+        if timeout_seconds is not None and _did_timeout(
+            started_at=started_at,
+            timeout_seconds=timeout_seconds,
+        ):
+            return _build_fallback_result(
+                project=project,
+                selected_task=selected_task,
+                retrieval_query=retrieval_query,
+                max_candidates=resolved_retrieval_options.max_candidates,
+                fallback_reason=_timeout_reason(timeout_seconds, "semantic-retrieval"),
+                pack_options=pack_options,
+            )
+
+        retrieval_result = fuse_task_memory_retrieval_results(
+            fts_result=fts_result,
+            semantic_result=semantic_result,
+            max_candidates=resolved_retrieval_options.max_candidates,
+        )
 
         packed = pack_task_memories(
             retrieval_result.candidates,

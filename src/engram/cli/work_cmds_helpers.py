@@ -49,6 +49,15 @@ def format_retrieval_debug_output(result: StartupTaskMemoryRetrievalResult) -> s
         f"returned_task_scope_candidate_count={retrieval.returned_task_scope_candidate_count}, "
         "returned_project_scope_candidate_count="
         f"{retrieval.returned_project_scope_candidate_count}",
+        "semantic index metadata: "
+        f"semantic_status={retrieval.semantic_status}, "
+        f"semantic_fallback_used={retrieval.semantic_fallback_used}, "
+        f"semantic_reason={retrieval.semantic_reason or '(none)'}",
+        "fusion metadata: "
+        f"fts_returned_candidate_count={retrieval.fts_returned_candidate_count}, "
+        f"semantic_returned_candidate_count={retrieval.semantic_returned_candidate_count}, "
+        f"fused_duplicate_count={retrieval.fused_duplicate_count}, "
+        f"exact_fts_preserved_count={retrieval.exact_fts_preserved_count}",
         "pack candidate metadata: "
         f"input_candidate_count={pack.input_candidate_count}, "
         f"unique_candidate_count={pack.unique_candidate_count}, "

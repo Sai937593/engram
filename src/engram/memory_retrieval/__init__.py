@@ -9,6 +9,7 @@ from engram.memory_retrieval.fts_retriever import (
     retrieve_task_memory_candidates,
     retrieve_task_memory_semantic_candidates,
 )
+from engram.memory_retrieval.fusion import fuse_task_memory_retrieval_results
 from engram.memory_retrieval.pack_contract import (
     TaskMemoryPackedItem,
     TaskMemoryPackMetadata,
@@ -71,5 +72,6 @@ __all__ = [
     "build_task_retrieval_query",
     "retrieve_task_memory_candidates",
     "retrieve_task_memory_semantic_candidates",
+    "fuse_task_memory_retrieval_results",
     "orchestrate_startup_task_memory_retrieval",
 ]

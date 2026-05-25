@@ -66,6 +66,13 @@ class TaskMemoryRetrievalMetadata:
     returned_project_scope_candidate_count: int = 0
     threshold_filtered_task_scope_count: int = 0
     threshold_filtered_project_scope_count: int = 0
+    semantic_status: str = "not-requested"
+    semantic_reason: str | None = None
+    semantic_fallback_used: bool = False
+    fts_returned_candidate_count: int = 0
+    semantic_returned_candidate_count: int = 0
+    fused_duplicate_count: int = 0
+    exact_fts_preserved_count: int = 0
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(retrieval): add deterministic semantic+FTS startup fusion with duplicate-channel merging, exact-FTS preservation, semantic index status debug metadata, and orchestration coverage for fts-only/semantic-only/mixed/fallback paths.
 - feat(retrieval): add independent local semantic retrieval channel with similarity-ranked candidates, task/project scope eligibility filtering, and safe fallback metadata for missing/stale/unreadable semantic indexes.
 - feat(cli): add `engram memory reindex --semantic` with local semantic embedding rebuild pipeline, optional dependency failure messaging, artifact persistence, and coverage for success/empty/dependency/index-write paths.
 - feat(retrieval): add local semantic index storage abstraction with metadata persistence, freshness validation status (`ready/missing/stale/incompatible/error`), and deterministic tests for storage initialization plus metadata round-trip/state handling.
