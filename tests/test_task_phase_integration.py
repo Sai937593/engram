@@ -212,8 +212,8 @@ def test_task_phase_integration_e2e(tmp_db, project, monkeypatch) -> None:
     assert result.exit_code == 0, result.output
     assert "Legacy Task" in result.output
 
-    # Let's test modifying a legacy phase field directly via task update
-    # and ensuring it updates correctly.
+    # Once migration has created a first-class phase link, direct legacy phase updates
+    # must not report success because phase_id controls the effective phase.
     result = runner.invoke(
         cli,
         [
@@ -226,7 +226,9 @@ def test_task_phase_integration_e2e(tmp_db, project, monkeypatch) -> None:
             "Updated Legacy Phase",
         ],
     )
-    assert result.exit_code == 0, result.output
+    assert result.exit_code != 0
+    assert "Use --field phase_id" in result.output
     legacy_task_obj_updated = Task.get(legacy_task_id)
     assert legacy_task_obj_updated is not None
-    assert legacy_task_obj_updated.phase == "Updated Legacy Phase"
+    assert legacy_task_obj_updated.phase_id == legacy_task_obj_after.phase_id
+    assert legacy_task_obj_updated.phase == "Legacy Freeform Phase"

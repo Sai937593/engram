@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(cli): reject direct legacy task phase updates on first-class linked tasks so phase_id-controlled tasks cannot report a successful no-op.
 - fix(cli): restore `engram guardrail demote` and persist constraint/decision level demotions by avoiding migration overwrite of explicit non-default levels.
 - feat(cli): refine `engram finish` output with step progress, LF/CRLF git warning filtering, and a guardrail demotion review prompt.
 - fix(retrieval): enforce preferred-K task-memory packing before the hard max-K limit.
