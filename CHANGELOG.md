@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(services): add `resolve_current_project` service boundary that resolves cwd-bound projects, returns serialized `ProjectDTO` payloads, and raises structured `PROJECT_NOT_BOUND` errors for unbound repositories.
 - feat(services): add JSON-safe Project/Task/Memory/Phase serializer helpers with dependency-aware task effective status and DTO shape coverage for optional-field normalization.
 - feat(services): add a service-safe `EngramServiceError` model with JSON-safe `to_dict` serialization and focused unit coverage for default and explicit details payloads.
 - fix(cli): reject direct legacy task phase updates on first-class linked tasks so phase_id-controlled tasks cannot report a successful no-op.
