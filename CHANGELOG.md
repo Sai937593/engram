@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+- feat(retrieval): expand semantic retrieval debug evidence with fused candidate totals and coverage for missing/ready/stale/error semantic states across startup orchestration plus `start --debug-retrieval` and `memory related-to-task --debug`.
+- feat(retrieval): add deterministic semantic+FTS startup fusion with duplicate-channel merging, exact-FTS preservation, semantic index status debug metadata, and orchestration coverage for fts-only/semantic-only/mixed/fallback paths.
+- feat(retrieval): add independent local semantic retrieval channel with similarity-ranked candidates, task/project scope eligibility filtering, and safe fallback metadata for missing/stale/unreadable semantic indexes.
+- feat(cli): add `engram memory reindex --semantic` with local semantic embedding rebuild pipeline, optional dependency failure messaging, artifact persistence, and coverage for success/empty/dependency/index-write paths.
+- feat(retrieval): add local semantic index storage abstraction with metadata persistence, freshness validation status (`ready/missing/stale/incompatible/error`), and deterministic tests for storage initialization plus metadata round-trip/state handling.
 - feat(retrieval): expand retrieval debug evidence with scope-channel counts, threshold filtering breakdown, hidden memory IDs, and explicit empty-state outcomes; update Phase 9/10 evaluation notes with before/after deterministic behavior.
 - feat(retrieval): tune task-memory packing to enforce a minimum selection boost score so weak candidates can be filtered, allowing concise empty-state packs with deterministic relevance-filter metadata.
 - feat(retrieval): add deterministic lexical relevance thresholding that filters weak single-term content-only FTS matches while preserving direct task-linked and stronger multi-term candidates, with threshold debug metadata in retrieval diagnostics.

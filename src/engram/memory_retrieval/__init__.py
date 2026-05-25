@@ -7,7 +7,9 @@ from engram.memory_retrieval.fts_retriever import (
     TaskMemoryRetrievalOptions,
     TaskMemoryRetrievalResult,
     retrieve_task_memory_candidates,
+    retrieve_task_memory_semantic_candidates,
 )
+from engram.memory_retrieval.fusion import fuse_task_memory_retrieval_results
 from engram.memory_retrieval.pack_contract import (
     TaskMemoryPackedItem,
     TaskMemoryPackMetadata,
@@ -21,6 +23,20 @@ from engram.memory_retrieval.query_builder import (
     RetrievalQueryMetadata,
     TaskRetrievalQuery,
     build_task_retrieval_query,
+)
+from engram.memory_retrieval.semantic_index_contract import (
+    SEMANTIC_BUILD_STATUS_SUCCESS,
+    SEMANTIC_EMBEDDINGS_FILENAME,
+    SEMANTIC_INDEX_SCHEMA_VERSION,
+    SEMANTIC_INDEX_SUBDIR,
+    SEMANTIC_METADATA_FILENAME,
+    SemanticIndexFreshnessSnapshot,
+    SemanticIndexMetadata,
+    SemanticIndexStatus,
+    SemanticIndexStatusResult,
+)
+from engram.memory_retrieval.semantic_index_storage import (
+    SemanticIndexStorage,
 )
 from engram.memory_retrieval.startup_orchestration import (
     StartupTaskMemoryRetrievalResult,
@@ -40,10 +56,22 @@ __all__ = [
     "TaskMemoryPackMetadata",
     "TaskMemoryPackResult",
     "StartupTaskMemoryRetrievalResult",
+    "SEMANTIC_BUILD_STATUS_SUCCESS",
+    "SEMANTIC_EMBEDDINGS_FILENAME",
+    "SEMANTIC_INDEX_SCHEMA_VERSION",
+    "SEMANTIC_INDEX_SUBDIR",
+    "SEMANTIC_METADATA_FILENAME",
+    "SemanticIndexFreshnessSnapshot",
+    "SemanticIndexMetadata",
+    "SemanticIndexStatus",
+    "SemanticIndexStatusResult",
+    "SemanticIndexStorage",
     "resolve_task_memory_pack_options",
     "pack_task_memories",
     "normalize_fts_query_text",
     "build_task_retrieval_query",
     "retrieve_task_memory_candidates",
+    "retrieve_task_memory_semantic_candidates",
+    "fuse_task_memory_retrieval_results",
     "orchestrate_startup_task_memory_retrieval",
 ]

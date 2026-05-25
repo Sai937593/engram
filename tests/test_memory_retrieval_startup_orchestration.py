@@ -1,6 +1,7 @@
 """Tests for startup task-memory retrieval orchestration."""
 
 from engram.memory_retrieval import (
+    TaskMemoryCandidate,
     TaskMemoryRetrievalMetadata,
     TaskMemoryRetrievalOptions,
     TaskMemoryRetrievalResult,
@@ -9,6 +10,68 @@ from engram.memory_retrieval import (
 from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.task import Task
+
+
+def _candidate(
+    *,
+    memory_id: str,
+    project_id: str,
+    task_id: str | None,
+    title: str,
+    content: str,
+    retrieval_source: str,
+    fts_rank: float,
+    boost_score: int,
+    task_id_match: bool,
+    title_term_hits: tuple[str, ...] | None = None,
+) -> TaskMemoryCandidate:
+    return TaskMemoryCandidate(
+        memory_id=memory_id,
+        project_id=project_id,
+        scope="task",
+        type="lesson",
+        task_id=task_id,
+        title=title,
+        content=content,
+        tags=("retrieval",),
+        retrieval_source=retrieval_source,
+        fts_rank=fts_rank,
+        boost_score=boost_score,
+        task_id_match=task_id_match,
+        title_term_hits=(
+            title_term_hits
+            if title_term_hits is not None
+            else (("retrieval",) if retrieval_source == "fts" else ())
+        ),
+        tag_term_hits=(),
+        content_term_hits=(),
+    )
+
+
+def _metadata(
+    *,
+    project_id: str,
+    task_id: str,
+    source: str,
+    fallback_used: bool = False,
+    fallback_reason: str | None = None,
+    returned_candidate_count: int = 0,
+    max_candidates: int = 20,
+) -> TaskMemoryRetrievalMetadata:
+    return TaskMemoryRetrievalMetadata(
+        project_id=project_id,
+        query_task_id=task_id,
+        source=source,
+        requested_query_text="task.title: retrieval",
+        normalized_fts_query='"retrieval"',
+        query_term_count=1,
+        query_was_empty=False,
+        fallback_used=fallback_used,
+        fallback_reason=fallback_reason,
+        max_candidates=max_candidates,
+        scanned_row_count=2,
+        returned_candidate_count=returned_candidate_count,
+    )
 
 
 def test_startup_orchestration_returns_empty_pack_when_no_task_selected(project) -> None:
@@ -294,3 +357,350 @@ def test_startup_orchestration_timeout_after_retrieval_returns_fallback_metadata
     assert "during retrieval" in result.retrieval_metadata.fallback_reason
     assert result.retrieval_metadata.returned_candidate_count == 0
     assert result.pack_result.items == ()
+
+
+def test_startup_orchestration_fts_only_path_surfaces_semantic_missing_status(project) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase FTS Only", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="FTS-only retrieval",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    fts_memory = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="FTS fallback memory",
+        content="Keep FTS retrieval available when semantic index is missing.",
+        scope="task",
+        task_id=task.id,
+        tags=["retrieval"],
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    selected_ids = [item.memory_id for item in result.pack_result.items]
+    assert fts_memory.id in selected_ids
+    assert result.retrieval_metadata.semantic_status == "missing"
+    assert result.retrieval_metadata.semantic_fallback_used is True
+    assert result.retrieval_metadata.fts_returned_candidate_count >= 1
+    assert result.retrieval_metadata.semantic_returned_candidate_count == 0
+
+
+def test_startup_orchestration_semantic_only_candidates_are_packable(
+    project,
+    monkeypatch,
+) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase Semantic Only", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Semantic-only retrieval",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    semantic_candidate = _candidate(
+        memory_id="sem-1",
+        project_id=project.id,
+        task_id=task.id,
+        title="Semantic candidate",
+        content="Semantic-only candidate still packs.",
+        retrieval_source="semantic",
+        fts_rank=-0.95,
+        boost_score=0,
+        task_id_match=True,
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="fts",
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_semantic_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(semantic_candidate,),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="semantic",
+                returned_candidate_count=1,
+            ),
+        ),
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    assert [item.memory_id for item in result.pack_result.items] == ["sem-1"]
+    assert result.retrieval_metadata.semantic_status == "ready"
+    assert result.retrieval_metadata.semantic_returned_candidate_count == 1
+    assert result.retrieval_metadata.returned_candidate_count == 1
+
+
+def test_startup_orchestration_mixed_fusion_merges_duplicates_and_preserves_fts_order(
+    project,
+    monkeypatch,
+) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase Mixed Fusion", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Mixed retrieval fusion",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    fts_exact = _candidate(
+        memory_id="mem-fts-exact",
+        project_id=project.id,
+        task_id=task.id,
+        title="Exact FTS hit",
+        content="Direct lexical hit.",
+        retrieval_source="fts",
+        fts_rank=-0.2,
+        boost_score=1,
+        task_id_match=True,
+    )
+    fts_duplicate = _candidate(
+        memory_id="mem-shared",
+        project_id=project.id,
+        task_id=task.id,
+        title="Shared hit",
+        content="Appears in both channels.",
+        retrieval_source="fts",
+        fts_rank=-0.1,
+        boost_score=0,
+        task_id_match=False,
+        title_term_hits=(),
+    )
+    semantic_duplicate = _candidate(
+        memory_id="mem-shared",
+        project_id=project.id,
+        task_id=task.id,
+        title="Shared hit semantic",
+        content="Semantic duplicate of shared id.",
+        retrieval_source="semantic",
+        fts_rank=-0.99,
+        boost_score=0,
+        task_id_match=False,
+    )
+    semantic_only = _candidate(
+        memory_id="mem-sem-only",
+        project_id=project.id,
+        task_id=task.id,
+        title="Semantic only",
+        content="Only semantic channel has this item.",
+        retrieval_source="semantic",
+        fts_rank=-0.8,
+        boost_score=0,
+        task_id_match=False,
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(fts_exact, fts_duplicate),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="fts",
+                returned_candidate_count=2,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_semantic_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(semantic_duplicate, semantic_only),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="semantic",
+                returned_candidate_count=2,
+            ),
+        ),
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    fused = result.retrieval_candidates
+    assert [candidate.memory_id for candidate in fused] == [
+        "mem-fts-exact",
+        "mem-sem-only",
+        "mem-shared",
+    ]
+    assert fused[0].retrieval_source == "fts"
+    assert fused[2].retrieval_source == "fts+semantic"
+    assert result.retrieval_metadata.fused_duplicate_count == 1
+    assert result.retrieval_metadata.exact_fts_preserved_count >= 1
+
+
+def test_startup_orchestration_uses_semantic_when_fts_channel_falls_back(
+    project,
+    monkeypatch,
+) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase FTS Fallback", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="FTS fallback with semantic",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    semantic_candidate = _candidate(
+        memory_id="sem-fallback",
+        project_id=project.id,
+        task_id=task.id,
+        title="Semantic fallback candidate",
+        content="Semantic candidate is available during FTS fallback.",
+        retrieval_source="semantic",
+        fts_rank=-0.6,
+        boost_score=0,
+        task_id_match=False,
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="fts",
+                fallback_used=True,
+                fallback_reason="fts table unavailable",
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_semantic_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(semantic_candidate,),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="semantic",
+                returned_candidate_count=1,
+            ),
+        ),
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    assert [item.memory_id for item in result.pack_result.items] == ["sem-fallback"]
+    assert result.retrieval_metadata.fallback_used is True
+    assert result.retrieval_metadata.fallback_reason == "fts table unavailable"
+    assert result.retrieval_metadata.semantic_status == "ready"
+
+
+def test_startup_orchestration_surfaces_semantic_stale_status(project, monkeypatch) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase Semantic Stale", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Semantic stale status",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="fts",
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_semantic_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="semantic",
+                fallback_used=True,
+                fallback_reason="semantic index stale: semantic index timestamp watermark is stale",
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    assert result.retrieval_metadata.semantic_status == "stale"
+    assert result.retrieval_metadata.semantic_fallback_used is True
+    assert result.retrieval_metadata.semantic_reason is not None
+    assert "timestamp watermark is stale" in result.retrieval_metadata.semantic_reason
+
+
+def test_startup_orchestration_surfaces_semantic_error_status(project, monkeypatch) -> None:
+    phase = Phase.create(project_id=project.id, title="Phase Semantic Error", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Semantic error status",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="fts",
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "engram.memory_retrieval.startup_orchestration.retrieve_task_memory_semantic_candidates",
+        lambda *args, **kwargs: TaskMemoryRetrievalResult(
+            candidates=(),
+            metadata=_metadata(
+                project_id=project.id,
+                task_id=task.id,
+                source="semantic",
+                fallback_used=True,
+                fallback_reason=(
+                    "semantic retrieval failed: missing optional semantic dependencies: fastembed"
+                ),
+                returned_candidate_count=0,
+            ),
+        ),
+    )
+
+    result = orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+    )
+
+    assert result.retrieval_metadata.semantic_status == "error"
+    assert result.retrieval_metadata.semantic_fallback_used is True
+    assert result.retrieval_metadata.semantic_reason is not None
+    assert "missing optional semantic dependencies" in result.retrieval_metadata.semantic_reason
