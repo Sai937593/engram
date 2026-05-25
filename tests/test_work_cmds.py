@@ -4,6 +4,7 @@ import pytest
 from click.testing import CliRunner
 
 from engram.cli import cli
+from engram.context_helpers.startup import build_startup_context
 from engram.memory_retrieval import (
     StartupTaskMemoryRetrievalResult,
     TaskMemoryPackedItem,
@@ -28,6 +29,48 @@ def make_runner_with_project(monkeypatch, tmp_db, project) -> CliRunner:
     """Return a CliRunner with CWD patched to the project's repo path."""
     monkeypatch.setattr("engram.cli.get_current_project", lambda: project)
     return CliRunner()
+
+
+def _empty_startup_memory_result(project_id: str, task_id: str) -> StartupTaskMemoryRetrievalResult:
+    """Return a deterministic empty startup memory retrieval result."""
+    return StartupTaskMemoryRetrievalResult(
+        query=None,
+        retrieval_metadata=TaskMemoryRetrievalMetadata(
+            project_id=project_id,
+            query_task_id=task_id,
+            source="fts",
+            requested_query_text="query",
+            normalized_fts_query="query",
+            query_term_count=1,
+            query_was_empty=False,
+            fallback_used=False,
+            fallback_reason=None,
+            max_candidates=20,
+            scanned_row_count=0,
+            returned_candidate_count=0,
+        ),
+        pack_result=TaskMemoryPackResult(
+            items=(),
+            metadata=TaskMemoryPackMetadata(
+                project_id=project_id,
+                query_task_id=task_id,
+                source="fts",
+                section_char_budget=3600,
+                preferred_k=6,
+                max_k=10,
+                max_item_chars=420,
+                input_candidate_count=0,
+                unique_candidate_count=0,
+                selected_item_count=0,
+                hidden_item_count=0,
+                truncated_item_count=0,
+                used_char_count=0,
+                section_budget_exhausted=False,
+                ordering_fields=("-boost_score", "fts_rank", "memory_id"),
+                dedupe_key="memory_id",
+            ),
+        ),
+    )
 
 
 @pytest.fixture
@@ -181,6 +224,82 @@ def test_start_context_uses_unified_startup_builder(tmp_db, project, mock_git, m
     assert "Selected task memory" in result.output
     assert "No secrets" in result.output
     assert "Use WAL" not in result.output
+
+
+def test_start_context_shows_compact_relevant_file_hints(tmp_db, project, mock_git, monkeypatch):
+    """engram start prints path-only relevant file hints and hides overflow via cap."""
+    long_path = "src/" + ("a" * 140) + "/task_context.py"
+    task = Task.create(
+        project_id=project.id,
+        title="Task with file hints",
+        phase="Phase 1",
+        status="todo",
+        relevant_files=[
+            long_path,
+            "src/engram/cli/task_cmds.py",
+            "src/engram/models/task.py",
+            "tests/test_work_cmds.py",
+            "README.md",
+            "docs/USER_MANUAL.md",
+        ],
+    )
+    monkeypatch.setattr(
+        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        lambda **kwargs: _empty_startup_memory_result(project.id, task.id),
+    )
+
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+    result = runner.invoke(cli, ["start"])
+    assert result.exit_code == 0, result.output
+    assert "Relevant files:" in result.output
+    assert "- src/engram/cli/task_cmds.py" in result.output
+    assert "- docs/USER_MANUAL.md" not in result.output
+    assert "... 1 additional relevant file path(s) hidden by cap." in result.output
+    assert long_path not in result.output
+
+
+def test_startup_context_hides_guardrail_after_l1_to_l2_demotion(
+    tmp_db, project, mock_git, monkeypatch
+):
+    """After demotion from L1 to L2, startup guardrails no longer include that memory."""
+    task = Task.create(project_id=project.id, title="Task 1", phase="Phase 1", status="todo")
+    memory = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Temporary startup guardrail",
+        content="Only needed during initial rollout.",
+        scope="project",
+        level="L1",
+    )
+    monkeypatch.setattr(
+        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        lambda **kwargs: _empty_startup_memory_result(project.id, task.id),
+    )
+    runner = make_runner_with_project(monkeypatch, tmp_db, project)
+
+    before_result = runner.invoke(cli, ["start"])
+    assert before_result.exit_code == 0, before_result.output
+    assert "Temporary startup guardrail" in before_result.output
+
+    old_level, new_level = memory.demote_project_guardrail_level(
+        "Reduce startup noise after rollout."
+    )
+    assert old_level == "L1"
+    assert new_level == "L2"
+    refreshed = Memory.get(memory.id)
+    assert refreshed is not None
+    assert refreshed.level == "L2"
+
+    startup_context_output = build_startup_context(
+        project=project,
+        selected_task=task,
+        startup_task_memory_result=_empty_startup_memory_result(project.id, task.id),
+    )
+    guardrails_section = startup_context_output.split("## PROJECT GUARDRAILS\n", maxsplit=1)[
+        1
+    ].split("\n\n## TASK MEMORY CANDIDATES", maxsplit=1)[0]
+    assert "Temporary startup guardrail" not in guardrails_section
+    assert "No L0/L1 project guardrails found." in guardrails_section
 
 
 def test_start_debug_retrieval_is_hidden_by_default(tmp_db, project, mock_git, monkeypatch):

@@ -100,6 +100,68 @@ def test_startup_builder_handles_no_task_input(project):
     assert "## NEXT ACTION" in ctx
 
 
+def test_startup_builder_renders_selected_task_relevant_files(project):
+    phase = Phase.create(project_id=project.id, title="Phase Files", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Task With Relevant Files",
+        phase_id=phase.id,
+        status="in-progress",
+        relevant_files=["src/engram/context_helpers/startup.py", "tests/test_context.py"],
+    )
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
+
+    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
+        "\n## PROJECT GUARDRAILS", maxsplit=1
+    )[0]
+    assert "Relevant files:" in task_section
+    assert "- src/engram/context_helpers/startup.py" in task_section
+    assert "- tests/test_context.py" in task_section
+
+
+def test_startup_builder_hides_relevant_files_label_when_selected_task_has_none(project):
+    phase = Phase.create(project_id=project.id, title="Phase No Files", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Task Without Relevant Files",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
+
+    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
+        "\n## PROJECT GUARDRAILS", maxsplit=1
+    )[0]
+    assert "Relevant files:" not in task_section
+
+
+def test_startup_builder_caps_and_truncates_relevant_file_paths(project):
+    phase = Phase.create(project_id=project.id, title="Phase File Cap", status="active")
+    long_path = "src/" + ("a" * 48) + "/task_context.py"
+    task = Task.create(
+        project_id=project.id,
+        title="Task With Many Relevant Files",
+        phase_id=phase.id,
+        status="in-progress",
+        relevant_files=[long_path, "tests/test_context.py", "src/engram/models/task.py"],
+    )
+    options = StartupContextOptions(relevant_file_limit=2, relevant_file_path_char_limit=24)
+
+    ctx = build_startup_context(
+        project=project, active_phase=phase, selected_task=task, options=options
+    )
+
+    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
+        "\n## PROJECT GUARDRAILS", maxsplit=1
+    )[0]
+    assert f"- {_compact_with_limit(long_path, 24)}" in task_section
+    assert "- tests/test_context.py" in task_section
+    assert "- src/engram/models/task.py" not in task_section
+    assert "... 1 additional relevant file path(s) hidden by cap." in task_section
+
+
 def test_startup_builder_caps_l1_guardrails(project):
     Memory.create(
         id="l0a00001",
@@ -434,6 +496,28 @@ def test_startup_builder_task_memory_empty_state_compaction_is_deterministic(pro
 def test_task_context_shows_title(task):
     ctx = get_task_context(task.id)
     assert task.title in ctx
+
+
+def test_task_context_renders_relevant_file_paths_when_present(project):
+    task_item = Task.create(
+        project_id=project.id,
+        title="Task Context Relevant Files",
+        relevant_files=["src/engram/context_helpers/task.py", "tests/test_context.py"],
+    )
+
+    ctx = get_task_context(task_item.id)
+
+    assert "## RELEVANT FILES" in ctx
+    assert "- src/engram/context_helpers/task.py" in ctx
+    assert "- tests/test_context.py" in ctx
+
+
+def test_task_context_hides_relevant_files_when_absent(project):
+    task_item = Task.create(project_id=project.id, title="Task Context No Relevant Files")
+
+    ctx = get_task_context(task_item.id)
+
+    assert "## RELEVANT FILES" not in ctx
 
 
 def test_task_context_shows_acceptance(project):

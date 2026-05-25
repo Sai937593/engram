@@ -188,3 +188,145 @@ def test_task_next_shows_effective_phase_title_for_phase_id_task(
     assert result.exit_code == 0, result.output
     assert "Title: Next Task" in result.output
     assert "Phase: Phase Roadmap" in result.output
+
+
+def test_task_add_accepts_relevant_files_csv(tmp_db, project, monkeypatch) -> None:
+    """task add --files stores normalized comma-separated path hints."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    result = runner.invoke(
+        cli,
+        [
+            "task",
+            "add",
+            "Task with files",
+            "--files",
+            " src/engram/cli/task_cmds.py , tests/test_task_cmds.py ",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    created = next(t for t in Task.list_by_project(project.id) if t.title == "Task with files")
+    assert created.relevant_files == ["src/engram/cli/task_cmds.py", "tests/test_task_cmds.py"]
+
+
+def test_task_add_relevant_files_validation_errors(tmp_db, project, monkeypatch) -> None:
+    """task add --files rejects duplicates and blank entries with clear errors."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    duplicate_result = runner.invoke(
+        cli,
+        ["task", "add", "Duplicate files", "--files", "src/a.py,src/a.py"],
+    )
+    assert duplicate_result.exit_code != 0
+    assert "--files contains duplicate path(s): src/a.py" in duplicate_result.output
+
+    blank_result = runner.invoke(
+        cli,
+        ["task", "add", "Blank files", "--files", "src/a.py,,tests/b.py"],
+    )
+    assert blank_result.exit_code != 0
+    assert "--files contains blank path entries at position(s): 2" in blank_result.output
+
+
+def test_task_get_relevant_files_visibility(tmp_db, project, monkeypatch) -> None:
+    """task get prints relevant file paths only when metadata is present."""
+    runner = make_runner_with_project(monkeypatch, project)
+    with_files = Task.create(
+        project_id=project.id,
+        title="Task With Files",
+        relevant_files=["src/engram/models/task.py", "tests/test_task.py"],
+    )
+    without_files = Task.create(project_id=project.id, title="Task Without Files")
+
+    with_result = runner.invoke(cli, ["task", "get", with_files.id])
+    assert with_result.exit_code == 0, with_result.output
+    assert "Relevant Files:" in with_result.output
+    assert "- src/engram/models/task.py" in with_result.output
+    assert "- tests/test_task.py" in with_result.output
+
+    without_result = runner.invoke(cli, ["task", "get", without_files.id])
+    assert without_result.exit_code == 0, without_result.output
+    assert "Relevant Files:" not in without_result.output
+
+
+def test_task_files_workflow_list_add_remove(tmp_db, project, monkeypatch) -> None:
+    """task files list/add/remove manages relevant path hints on an existing task."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task_item = Task.create(
+        project_id=project.id,
+        title="Task File Workflow",
+        relevant_files=["src/engram/cli/task_helpers.py"],
+    )
+
+    list_result = runner.invoke(cli, ["task", "files", "list", task_item.id])
+    assert list_result.exit_code == 0, list_result.output
+    assert "Relevant file paths for task" in list_result.output
+    assert "- src/engram/cli/task_helpers.py" in list_result.output
+
+    add_result = runner.invoke(
+        cli,
+        [
+            "task",
+            "files",
+            "add",
+            task_item.id,
+            "--files",
+            "src/engram/cli/task_cmds_query.py,tests/test_task_cmds.py",
+        ],
+    )
+    assert add_result.exit_code == 0, add_result.output
+    refreshed_after_add = Task.get(task_item.id)
+    assert refreshed_after_add is not None
+    assert refreshed_after_add.relevant_files == [
+        "src/engram/cli/task_helpers.py",
+        "src/engram/cli/task_cmds_query.py",
+        "tests/test_task_cmds.py",
+    ]
+
+    remove_result = runner.invoke(
+        cli,
+        ["task", "files", "remove", task_item.id, "--files", "src/engram/cli/task_helpers.py"],
+    )
+    assert remove_result.exit_code == 0, remove_result.output
+    refreshed_after_remove = Task.get(task_item.id)
+    assert refreshed_after_remove is not None
+    assert refreshed_after_remove.relevant_files == [
+        "src/engram/cli/task_cmds_query.py",
+        "tests/test_task_cmds.py",
+    ]
+
+
+def test_task_files_validation_and_missing_task(tmp_db, project, monkeypatch) -> None:
+    """task files commands reject missing tasks, blanks, and duplicate additions."""
+    runner = make_runner_with_project(monkeypatch, project)
+    task_item = Task.create(
+        project_id=project.id,
+        title="Task File Validation",
+        relevant_files=["src/engram/cli/task_helpers.py"],
+    )
+
+    missing_result = runner.invoke(cli, ["task", "files", "list", "deadbeef"])
+    assert missing_result.exit_code != 0
+    assert "Task 'deadbeef' not found in this project." in missing_result.output
+
+    blank_result = runner.invoke(
+        cli,
+        ["task", "files", "add", task_item.id, "--files", "src/a.py, ,src/b.py"],
+    )
+    assert blank_result.exit_code != 0
+    assert "--files contains blank path entries at position(s): 2" in blank_result.output
+
+    duplicate_add_result = runner.invoke(
+        cli,
+        ["task", "files", "add", task_item.id, "--files", "src/engram/cli/task_helpers.py"],
+    )
+    assert duplicate_add_result.exit_code != 0
+    assert "already includes path(s): src/engram/cli/task_helpers.py" in duplicate_add_result.output
+
+    missing_remove_result = runner.invoke(
+        cli,
+        ["task", "files", "remove", task_item.id, "--files", "src/missing.py"],
+    )
+    assert missing_remove_result.exit_code != 0
+    assert "does not include path(s): src/missing.py" in missing_remove_result.output

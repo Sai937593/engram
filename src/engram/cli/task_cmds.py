@@ -9,7 +9,9 @@ from engram.cli.task_helpers import (
     VALID_TASK_STATUSES,
     check_dependency_cycle,
     get_effective_status,
+    parse_relevant_files_csv,
     resolve_task_dependency,
+    resolve_task_id_in_project,
 )
 
 
@@ -34,6 +36,8 @@ __all__ = [
     "VALID_TASK_STATUSES",
     "check_dependency_cycle",
     "get_effective_status",
+    "parse_relevant_files_csv",
     "resolve_task_dependency",
+    "resolve_task_id_in_project",
     "task",
 ]

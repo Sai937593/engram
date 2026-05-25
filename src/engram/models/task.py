@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Any
 
@@ -12,6 +13,45 @@ def _normalize_phase_title(phase: str | None) -> str:
     if phase is None:
         return ""
     return " ".join(phase.split()).casefold()
+
+
+def _normalize_relevant_files(relevant_files: Any) -> list[str]:
+    """Normalize relevant file paths by trimming entries, dropping empties, and deduplicating."""
+    if relevant_files is None:
+        return []
+    if isinstance(relevant_files, str):
+        candidates = [relevant_files]
+    else:
+        candidates = list(relevant_files)
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for path in candidates:
+        if path is None:
+            continue
+        cleaned = str(path).strip()
+        if cleaned and cleaned not in seen:
+            normalized.append(cleaned)
+            seen.add(cleaned)
+    return normalized
+
+
+def _serialize_relevant_files(relevant_files: list[str]) -> str:
+    """Serialize relevant files for database storage."""
+    return json.dumps(relevant_files)
+
+
+def _deserialize_relevant_files(value: Any) -> list[str]:
+    """Deserialize relevant file path metadata from DB values."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            loaded = json.loads(value)
+        except json.JSONDecodeError:
+            return _normalize_relevant_files(value.split(","))
+        return _normalize_relevant_files(loaded)
+    return _normalize_relevant_files(value)
 
 
 class Task:
@@ -29,6 +69,7 @@ class Task:
         acceptance=None,
         evidence=None,
         tags=None,
+        relevant_files=None,
     ):
         self.id = id
         self.project_id = project_id
@@ -42,6 +83,7 @@ class Task:
         self.acceptance = acceptance
         self.evidence = evidence
         self.tags = tags or []
+        self.relevant_files = _normalize_relevant_files(relevant_files)
 
     @classmethod
     def create(
@@ -56,6 +98,7 @@ class Task:
         depends_on=None,
         acceptance=None,
         tags=None,
+        relevant_files=None,
         id=None,
     ):
         if not id:
@@ -64,8 +107,8 @@ class Task:
         conn = get_db_connection()
         conn.execute(
             """
-            INSERT INTO tasks (id, project_id, title, description, status, priority, phase, phase_id, depends_on, acceptance, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (id, project_id, title, description, status, priority, phase, phase_id, depends_on, acceptance, tags, relevant_files)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 id,
@@ -79,6 +122,7 @@ class Task:
                 depends_on,
                 acceptance,
                 ",".join(tags or []),
+                _serialize_relevant_files(_normalize_relevant_files(relevant_files)),
             ),
         )
         conn.commit()
@@ -99,6 +143,7 @@ class Task:
             acceptance,
             None,
             tags,
+            relevant_files,
         )
 
     @classmethod
@@ -227,6 +272,9 @@ class Task:
 
     @classmethod
     def from_row(cls, row):
+        relevant_files = []
+        if "relevant_files" in row.keys():
+            relevant_files = _deserialize_relevant_files(row["relevant_files"])
         return cls(
             row["id"],
             row["project_id"],
@@ -240,6 +288,7 @@ class Task:
             row["acceptance"],
             row["evidence"],
             row["tags"].split(",") if row["tags"] else [],
+            relevant_files,
         )
 
     def update(self, **kwargs):
@@ -250,17 +299,23 @@ class Task:
         for key, value in kwargs.items():
             if hasattr(self, key):
                 old_value = getattr(self, key)
-                if old_value != value:
+                new_value = value
+                if key == "relevant_files":
+                    new_value = _normalize_relevant_files(value)
+                if old_value != new_value:
                     updates.append(f"{key} = ?")
-                    params.append(value if not isinstance(value, list) else ",".join(value))
-                    setattr(self, key, value)
+                    if key == "relevant_files":
+                        params.append(_serialize_relevant_files(new_value))
+                    else:
+                        params.append(value if not isinstance(value, list) else ",".join(value))
+                    setattr(self, key, new_value)
                     AuditLog.log(
                         "tasks",
                         self.id,
                         "update",
                         field=key,
                         old_value=str(old_value),
-                        new_value=str(value),
+                        new_value=str(new_value),
                     )
 
         if not updates:

@@ -5,6 +5,7 @@ import sqlite3
 import pytest
 
 from engram.db import get_db_connection, init_db
+from engram.models.audit import AuditLog
 from engram.models.memory import Memory
 
 
@@ -454,6 +455,75 @@ def test_update_rejects_task_scope_with_level(project):
 
     with pytest.raises(ValueError, match="Task-scope memories must not"):
         memory.update(level="L1")
+
+
+def test_demote_project_guardrail_level_success_records_audit(project):
+    memory = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Guardrail",
+        content="Keep responses concise.",
+        scope="project",
+        level="L1",
+    )
+
+    old_level, new_level = memory.demote_project_guardrail_level("Reducing startup noise.")
+
+    assert (old_level, new_level) == ("L1", "L2")
+    refreshed = Memory.get(memory.id)
+    assert refreshed is not None
+    assert refreshed.level == "L2"
+
+    logs = AuditLog.get_logs_for_target("memories", memory.id)
+    demote_logs = [row for row in logs if row["operation"] == "guardrail_demote"]
+    level_log = next(row for row in demote_logs if row["field"] == "level")
+    reason_log = next(row for row in demote_logs if row["field"] == "reason")
+    assert level_log["old_value"] == "L1"
+    assert level_log["new_value"] == "L2"
+    assert reason_log["new_value"] == "Reducing startup noise."
+
+
+def test_demote_project_guardrail_level_rejects_empty_reason(project):
+    memory = Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Guardrail",
+        content="Keep responses concise.",
+        scope="project",
+        level="L1",
+    )
+
+    with pytest.raises(ValueError, match="Demotion reason cannot be empty"):
+        memory.demote_project_guardrail_level("   ")
+
+
+def test_demote_project_guardrail_level_rejects_task_scope(project):
+    memory = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Task memory",
+        content="Task-scoped learning.",
+        scope="task",
+        task_id="task-1",
+        level=None,
+    )
+
+    with pytest.raises(ValueError, match="Only project-scope memories can be demoted"):
+        memory.demote_project_guardrail_level("Need to lower memory level.")
+
+
+def test_demote_project_guardrail_level_rejects_lowest_level(project):
+    memory = Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Already low",
+        content="At lowest level.",
+        scope="project",
+        level="L3",
+    )
+
+    with pytest.raises(ValueError, match="already at the lowest level"):
+        memory.demote_project_guardrail_level("Need to lower memory level.")
 
 
 def test_delete_memory(memory):
