@@ -127,6 +127,10 @@ def test_register_resources_registers_expected_fastmcp_resources(monkeypatch) ->
         "engram.mcp.resources.get_handoff_context_for_current_project",
         lambda: "handoff_payload",
     )
+    monkeypatch.setattr(
+        "engram.mcp.resources.get_task_context_for_current_project",
+        lambda task_id: f"task_payload:{task_id}",
+    )
 
     register_resources(server)
 
@@ -138,7 +142,7 @@ def test_register_resources_registers_expected_fastmcp_resources(monkeypatch) ->
     # Verify resource returns
     assert server.resources["engram://startup"]() == "startup_payload"
     assert (
-        server.resources["engram://task/{task_id}/context"]("test-task") == "placeholder: test-task"
+        server.resources["engram://task/{task_id}/context"]("test-task") == "task_payload:test-task"
     )
     assert server.resources["engram://snapshot"]() == "snapshot_payload"
     assert server.resources["engram://handoff"]() == "handoff_payload"
@@ -148,19 +152,37 @@ def test_mcp_resources_wire_to_context_service_and_resolve_bound_project(tmp_db,
     """Verify resources correctly resolve the bound project and invoke context service builders."""
     import os
 
+    import pytest
+
+    from engram.models.phase import Phase
     from engram.models.project import Project
+    from engram.models.task import Task
+    from engram.services.errors import EngramServiceError
 
     cwd = os.path.abspath("repo/fake-bound-repo")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
-    Project.create(
+    project = Project.create(
         id="proj-mcp-1",
         name="MCP Project",
         summary="Test project for MCP",
         repo_paths=[cwd],
     )
+    phase = Phase.create(
+        project_id=project.id,
+        id="phase-1",
+        title="Test Phase",
+        status="active",
+    )
+    Task.create(
+        project_id=project.id,
+        id="task-12345",
+        title="Test Task 1",
+        phase=phase.title,
+        phase_id=phase.id,
+    )
 
-    # Mock context builders to verify they receive project ID
+    # Mock context builders to verify they receive project ID or task ID
     monkeypatch.setattr(
         "engram.services.context_service.context.get_startup_context",
         lambda pid: f"startup:{pid}",
@@ -172,6 +194,10 @@ def test_mcp_resources_wire_to_context_service_and_resolve_bound_project(tmp_db,
     monkeypatch.setattr(
         "engram.services.context_service.context.get_handoff_context",
         lambda pid: f"handoff:{pid}",
+    )
+    monkeypatch.setattr(
+        "engram.services.context_service.context.get_task_context",
+        lambda tid: f"task:{tid}",
     )
 
     class MockServer:
@@ -193,6 +219,29 @@ def test_mcp_resources_wire_to_context_service_and_resolve_bound_project(tmp_db,
     assert server.resources["engram://startup"]() == "startup:proj-mcp-1"
     assert server.resources["engram://snapshot"]() == "snapshot:proj-mcp-1"
     assert server.resources["engram://handoff"]() == "handoff:proj-mcp-1"
+
+    # Exact task ID resolution
+    assert server.resources["engram://task/{task_id}/context"]("task-12345") == "task:task-12345"
+
+    # Unique prefix resolution
+    assert server.resources["engram://task/{task_id}/context"]("task-12") == "task:task-12345"
+
+    # Missing task reference raises EngramServiceError (TASK_NOT_FOUND)
+    with pytest.raises(EngramServiceError) as raised_missing:
+        server.resources["engram://task/{task_id}/context"]("task-999")
+    assert raised_missing.value.code == "TASK_NOT_FOUND"
+
+    # Ambiguous task reference raises EngramServiceError (TASK_AMBIGUOUS)
+    Task.create(
+        project_id=project.id,
+        id="task-12777",
+        title="Test Task 2",
+        phase=phase.title,
+        phase_id=phase.id,
+    )
+    with pytest.raises(EngramServiceError) as raised_ambiguous:
+        server.resources["engram://task/{task_id}/context"]("task-12")
+    assert raised_ambiguous.value.code == "TASK_AMBIGUOUS"
 
 
 def test_mcp_resources_raise_project_not_bound_for_unbound_repos(tmp_db, monkeypatch):
@@ -226,6 +275,10 @@ def test_mcp_resources_raise_project_not_bound_for_unbound_repos(tmp_db, monkeyp
         with pytest.raises(EngramServiceError) as raised:
             server.resources[uri]()
         assert raised.value.code == "PROJECT_NOT_BOUND"
+
+    with pytest.raises(EngramServiceError) as raised_task:
+        server.resources["engram://task/{task_id}/context"]("some-task")
+    assert raised_task.value.code == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_resources_are_read_only_and_do_not_mutate_db(tmp_db, monkeypatch):
@@ -293,6 +346,10 @@ def test_mcp_resources_are_read_only_and_do_not_mutate_db(tmp_db, monkeypatch):
         "engram.services.context_service.context.get_handoff_context",
         lambda pid: f"handoff:{pid}",
     )
+    monkeypatch.setattr(
+        "engram.services.context_service.context.get_task_context",
+        lambda tid: f"task:{tid}",
+    )
 
     class MockServer:
         def __init__(self):
@@ -313,6 +370,7 @@ def test_mcp_resources_are_read_only_and_do_not_mutate_db(tmp_db, monkeypatch):
     server.resources["engram://startup"]()
     server.resources["engram://snapshot"]()
     server.resources["engram://handoff"]()
+    server.resources["engram://task/{task_id}/context"]("task1001")
 
     after_rows = {
         "projects": _table_rows("projects"),

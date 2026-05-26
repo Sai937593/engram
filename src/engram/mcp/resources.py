@@ -8,6 +8,7 @@ from engram.services.context_service import (
     get_handoff_context_for_current_project,
     get_snapshot_context_for_current_project,
     get_startup_context_for_current_project,
+    get_task_context_for_current_project,
 )
 
 
@@ -22,7 +23,7 @@ def register_resources(server: Any) -> None:
     @server.resource("engram://task/{task_id}/context")
     def get_task_context(task_id: str) -> str:
         """Get engram task context."""
-        return f"placeholder: {task_id}"
+        return get_task_context_for_current_project(task_id)
 
     @server.resource("engram://snapshot")
     def get_snapshot() -> str:
