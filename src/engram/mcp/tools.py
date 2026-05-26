@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from engram.services.memory_service import search_memories
+from engram.services.phase_service import list_phases
 from engram.services.project_service import resolve_current_project
 from engram.services.task_service import get_next_task, get_task, list_tasks
 
@@ -70,4 +71,14 @@ def register_tools(server: Any) -> None:
         return {
             "ok": True,
             "memories": memories,
+        }
+
+    @server.tool()
+    def engram_phase_list(status: str | None = None) -> dict[str, Any]:
+        """List phases for the currently bound engram project, optionally filtering by status."""
+        project = resolve_current_project()
+        phases = list_phases(project_id=str(project["id"]), status=status)
+        return {
+            "ok": True,
+            "phases": phases,
         }

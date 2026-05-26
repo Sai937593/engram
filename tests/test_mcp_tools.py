@@ -46,6 +46,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_get"].__name__ == "engram_task_get"
     assert "engram_task_next" in server.tools
     assert server.tools["engram_task_next"].__name__ == "engram_task_next"
+    assert "engram_phase_list" in server.tools
+    assert server.tools["engram_phase_list"].__name__ == "engram_phase_list"
 
 
 def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
@@ -372,6 +374,66 @@ def test_mcp_tool_task_next_raises_project_not_bound(tmp_db, monkeypatch) -> Non
 
     register_tools(server)
     handler = server.tools["engram_task_next"]
+
+    with pytest.raises(EngramServiceError) as raised:
+        handler()
+
+    assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
+    """Verify engram_phase_list returns serialized phases for a bound repo."""
+    cwd = os.path.abspath("repo/bound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-phases",
+        name="MCP Phase List Project",
+        summary="Service tool phases summary",
+        repo_paths=[cwd],
+    )
+    Phase.create(
+        project_id=project.id,
+        id="phase-1",
+        title="First Phase",
+        status="done",
+    )
+    Phase.create(
+        project_id=project.id,
+        id="phase-2",
+        title="Second Phase",
+        status="active",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_phase_list"]
+
+    # All phases
+    res_all = handler(status="all")
+    assert res_all["ok"] is True
+    assert len(res_all["phases"]) == 2
+    assert {p["id"] for p in res_all["phases"]} == {"phase-1", "phase-2"}
+
+    # Filtered by status
+    res_active = handler(status="active")
+    assert res_active["ok"] is True
+    assert len(res_active["phases"]) == 1
+    assert res_active["phases"][0]["id"] == "phase-2"
+
+
+def test_mcp_tool_phase_list_raises_project_not_bound(tmp_db, monkeypatch) -> None:
+    """Verify engram_phase_list raises PROJECT_NOT_BOUND for unbound cwd."""
+    cwd = os.path.abspath("repo/unbound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_phase_list"]
 
     with pytest.raises(EngramServiceError) as raised:
         handler()
