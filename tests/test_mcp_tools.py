@@ -58,6 +58,14 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_note_append"].__name__ == "engram_task_note_append"
     assert "engram_memory_create" in server.tools
     assert server.tools["engram_memory_create"].__name__ == "engram_memory_create"
+    assert "engram_phase_start" in server.tools
+    assert server.tools["engram_phase_start"].__name__ == "engram_phase_start"
+    assert "engram_phase_complete" in server.tools
+    assert server.tools["engram_phase_complete"].__name__ == "engram_phase_complete"
+    assert "engram_task_start" in server.tools
+    assert server.tools["engram_task_start"].__name__ == "engram_task_start"
+    assert "engram_task_done" in server.tools
+    assert server.tools["engram_task_done"].__name__ == "engram_task_done"
 
 
 def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
@@ -704,3 +712,152 @@ def test_mcp_memory_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_err["ok"] is False
     assert "error" in res_err
     assert res_err["error"]["code"] == "INVALID_MEMORY_LEVEL"
+
+
+def test_mcp_phase_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_phase_start tool starts a phase and gracefully handles errors."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+    Phase.create(project_id=project.id, id="ph-start-1", title="Phase 1", status="planned")
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    handler = server.tools["engram_phase_start"]
+
+    # 1. Happy path
+    res = handler(phase_ref="Phase 1")
+    assert res["ok"] is True
+    assert res["phase"]["status"] == "active"
+
+    # 2. Error path (invalid phase_ref)
+    res_err = handler(phase_ref="Non-existent Phase")
+    assert res_err["ok"] is False
+    assert res_err["error"]["code"] == "PHASE_NOT_FOUND"
+
+
+def test_mcp_phase_complete_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_phase_complete tool completes a phase and handles validation errors."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(project_id=project.id, id="ph-comp-1", title="Phase 1", status="active")
+
+    # Add unfinished task to trigger validation error
+    Task.create(
+        project_id=project.id,
+        id="task-unfinished",
+        title="Unfinished Task",
+        phase_id=phase.id,
+        status="todo",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    handler = server.tools["engram_phase_complete"]
+
+    # 1. Error path (unfinished tasks exist)
+    res_err = handler(phase_ref="Phase 1")
+    assert res_err["ok"] is False
+    assert res_err["error"]["code"] == "UNFINISHED_TASKS"
+
+    # Complete the task first
+    task = Task.get("task-unfinished")
+    task.update(status="done")
+
+    # 2. Happy path
+    res = handler(phase_ref="Phase 1")
+    assert res["ok"] is True
+    assert res["phase"]["status"] == "done"
+
+
+def test_mcp_task_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_start tool starts a task and handles validation/dependency errors."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+    # Pre-populate dependency and target task
+    dep = Task.create(project_id=project.id, id="task-dep", title="Dependency Task", status="todo")
+    Task.create(
+        project_id=project.id,
+        id="task-start-1",
+        title="Target Task",
+        status="todo",
+        depends_on=dep.id,
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    handler = server.tools["engram_task_start"]
+
+    # 1. Error path (dependency not satisfied)
+    res_err = handler(task_ref="task-start-1")
+    assert res_err["ok"] is False
+    assert res_err["error"]["code"] == "DEPENDENCY_UNSATISFIED"
+
+    # Complete dependency
+    dep.update(status="done")
+
+    # 2. Happy path
+    res = handler(task_ref="task-start-1")
+    assert res["ok"] is True
+    assert res["task"]["status"] == "in-progress"
+
+
+def test_mcp_task_done_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_done tool completes a task with optional evidence."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+    Task.create(project_id=project.id, id="task-done-1", title="Done Task", status="in-progress")
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    handler = server.tools["engram_task_done"]
+
+    # 1. Happy path (with evidence)
+    res = handler(task_ref="task-done-1", evidence="Finished successfully!")
+    assert res["ok"] is True
+    assert res["task"]["status"] == "done"
+    assert "Finished successfully!" in res["task"]["evidence"]
+
+    # 2. Error path (non-existent task)
+    res_err = handler(task_ref="missing-task")
+    assert res_err["ok"] is False
+    assert res_err["error"]["code"] == "TASK_NOT_FOUND"

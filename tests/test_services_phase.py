@@ -12,8 +12,8 @@ import pytest
 from engram.db import get_db_connection
 from engram.models.phase import Phase
 from engram.models.project import Project
-from engram.services.errors import EngramServiceError
-from engram.services.phase_service import get_active_phase, list_phases
+from engram.services.errors import EngramServiceError, ValidationError
+from engram.services.phase_service import complete_phase, get_active_phase, list_phases, start_phase
 
 
 def _create_project(project_id: str, repo_path: str) -> Project:
@@ -189,3 +189,48 @@ def test_phase_service_calls_are_read_only_on_phase_rows(tmp_db):
     after_rows = _phase_rows(project.id)
 
     assert after_rows == before_rows
+
+
+def test_start_phase_activates_and_demotes_others(tmp_db):
+    project = _create_project("proj-start-p", "/tmp/proj-start-p")
+    p1 = Phase.create(project_id=project.id, id="ph100001", title="Phase 1", status="active")
+    p2 = Phase.create(project_id=project.id, id="ph100002", title="Phase 2", status="planned")
+
+    dto = start_phase(project.id, "Phase 2")
+    assert dto["id"] == p2.id
+    assert dto["status"] == "active"
+
+    # Verify p1 was demoted to planned
+    p1_refreshed = Phase.get(p1.id)
+    assert p1_refreshed.status == "planned"
+
+
+def test_start_phase_raises_if_not_found(tmp_db):
+    project = _create_project("proj-start-p2", "/tmp/proj-start-p2")
+    with pytest.raises(ValidationError) as exc:
+        start_phase(project.id, "Nonexistent Phase")
+    assert exc.value.code == "PHASE_NOT_FOUND"
+
+
+def test_complete_phase_success(tmp_db):
+    project = _create_project("proj-comp-p", "/tmp/proj-comp-p")
+    p = Phase.create(project_id=project.id, id="phc10001", title="Phase 1", status="active")
+
+    dto = complete_phase(project.id, p.id)
+    assert dto["id"] == p.id
+    assert dto["status"] == "done"
+
+
+def test_complete_phase_fails_if_unfinished_tasks_exist(tmp_db):
+    project = _create_project("proj-comp-p2", "/tmp/proj-comp-p2")
+    p = Phase.create(project_id=project.id, id="phc20001", title="Phase 1", status="active")
+
+    from engram.models.task import Task
+
+    Task.create(project_id=project.id, title="Unfinished task", phase_id=p.id, status="todo")
+
+    with pytest.raises(ValidationError) as exc:
+        complete_phase(project.id, p.id)
+
+    assert exc.value.code == "UNFINISHED_TASKS"
+    assert p.id in exc.value.details["phase_id"]
