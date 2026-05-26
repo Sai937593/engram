@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import time
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.models.project import Project
 from engram.services.errors import EngramServiceError
-from engram.services.memory_service import list_memories, search_memories
+from engram.services.memory_service import get_recent_memories, list_memories, search_memories
 
 
 def _create_project(project_id: str, repo_path: str) -> Project:
@@ -316,3 +317,120 @@ def test_search_memories_calls_are_read_only_on_memory_rows(tmp_db):
 
     after_rows = _memory_rows(project.id)
     assert after_rows == before_rows
+
+
+def test_get_recent_memories_returns_correct_order(tmp_db):
+    project = _create_project("proj-recent-a", "/tmp/proj-recent-a")
+    Memory.create(
+        project_id=project.id,
+        id="reca0001",
+        type="lesson",
+        title="Oldest memory",
+        content="This is the oldest memory.",
+        level="L3",
+    )
+    time.sleep(1)  # SQLite datetime('now') resolution is seconds
+    Memory.create(
+        project_id=project.id,
+        id="reca0002",
+        type="lesson",
+        title="Newest memory",
+        content="This is the newest memory.",
+        level="L3",
+    )
+
+    memories = get_recent_memories(project_id=project.id)
+    assert len(memories) == 2
+    assert memories[0].id == "reca0002"
+    assert memories[1].id == "reca0001"
+
+
+def test_get_recent_memories_limits_to_requested(tmp_db):
+    project = _create_project("proj-recent-b", "/tmp/proj-recent-b")
+    for i in range(5):
+        Memory.create(
+            project_id=project.id,
+            id=f"recb000{i}",
+            type="note",
+            title=f"Note {i}",
+            content=f"Content {i}",
+            level="L3",
+        )
+
+    memories = get_recent_memories(limit=3, project_id=project.id)
+    assert len(memories) == 3
+
+
+def test_get_recent_memories_caps_at_1000(tmp_db):
+    project = _create_project("proj-recent-c", "/tmp/proj-recent-c")
+    for i in range(3):
+        Memory.create(
+            project_id=project.id,
+            id=f"recc000{i}",
+            type="note",
+            title=f"Note {i}",
+            content=f"Content {i}",
+            level="L3",
+        )
+    memories = get_recent_memories(limit=2000, project_id=project.id)
+    assert len(memories) == 3
+
+
+def test_get_recent_memories_filters_by_project_id(tmp_db):
+    project1 = _create_project("proj-recent-d1", "/tmp/proj-recent-d1")
+    project2 = _create_project("proj-recent-d2", "/tmp/proj-recent-d2")
+    Memory.create(
+        project_id=project1.id,
+        id="recd0001",
+        type="note",
+        title="Note 1",
+        content="Content 1",
+        level="L3",
+    )
+    Memory.create(
+        project_id=project2.id,
+        id="recd0002",
+        type="note",
+        title="Note 2",
+        content="Content 2",
+        level="L3",
+    )
+
+    memories = get_recent_memories(project_id=project1.id)
+    assert len(memories) == 1
+    assert memories[0].id == "recd0001"
+
+
+def test_get_recent_memories_no_project_id_returns_all(tmp_db):
+    project1 = _create_project("proj-recent-e1", "/tmp/proj-recent-e1")
+    project2 = _create_project("proj-recent-e2", "/tmp/proj-recent-e2")
+    Memory.create(
+        project_id=project1.id,
+        id="rece0001",
+        type="note",
+        title="Note 1",
+        content="Content 1",
+        level="L3",
+    )
+    Memory.create(
+        project_id=project2.id,
+        id="rece0002",
+        type="note",
+        title="Note 2",
+        content="Content 2",
+        level="L3",
+    )
+
+    memories = get_recent_memories()
+    assert len(memories) == 2
+    assert {m.id for m in memories} == {"rece0001", "rece0002"}
+
+
+@pytest.mark.parametrize("invalid_limit", [0, -1, -99])
+def test_get_recent_memories_raises_validation_error_for_non_positive_limit(tmp_db, invalid_limit):
+    with pytest.raises(EngramServiceError) as raised:
+        get_recent_memories(limit=invalid_limit)
+    error = raised.value
+    assert error.code == "VALIDATION_ERROR"
+    assert error.message == "Limit must be a positive integer."
+    assert error.details == {"field": "limit", "value": invalid_limit}
