@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+- feat(mcp): implement `engram_phase_list` MCP tool handler wired to the read-only phase service list API, supporting optional status filter with dedicated unit and read-only tests.
+- feat(mcp): implement `engram_memory_search` MCP tool handler wired to the read-only memory service search API, supporting query/type/tag/limit filters with list fallback and dedicated unit/read-only tests.
+- feat(mcp): implement `engram_task_next` MCP tool handler wired to the read-only task service next-task API, returning JSON-safe serialized next task payloads with dedicated unit and read-only tests.
+- feat(mcp): implement `engram_task_get` MCP tool handler wired to the read-only task service get API, supporting exact ID and unique-prefix resolution with full unit and DB read-only tests.
+- feat(mcp): implement `engram_task_list` MCP tool handler wired to the read-only task service list API, supporting optional status and phase filters with full unit and DB read-only tests.
+- feat(mcp): implement `engram_project_current` MCP tool handler wired to the read-only project service boundary, returning JSON-safe serialized project payloads with dedicated unit and read-only tests.
 - feat(mcp): register read-only task context MCP resource `engram://task/{task_id}/context` wired to `get_task_context_for_current_project` context service wrapper with full unit, bound/unbound project, and database read-only tests.
 - feat(mcp): implement project-level read-only MCP resources for startup, snapshot, and handoff in `engram.mcp.resources` wired to context_service wrappers with robust unit and database read-only tests.
 - feat(mcp): define FastMCP resource registration contract and placeholder handlers in `engram.mcp.resources` with registration call shape and package boundary tests.

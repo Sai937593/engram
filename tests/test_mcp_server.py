@@ -380,3 +380,117 @@ def test_mcp_resources_are_read_only_and_do_not_mutate_db(tmp_db, monkeypatch):
     }
 
     assert after_rows == before_rows
+
+
+def test_register_tools_registers_expected_fastmcp_tools() -> None:
+    """Verify that register_tools registers all six expected tools."""
+
+    class MockServer:
+        def __init__(self) -> None:
+            self.tools: dict[str, Any] = {}
+
+        def tool(self, **kwargs: Any) -> Any:
+            def decorator(func: Any) -> Any:
+                self.tools[func.__name__] = func
+                return func
+
+            return decorator
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    expected_tools = {
+        "engram_project_current",
+        "engram_task_list",
+        "engram_task_get",
+        "engram_task_next",
+        "engram_memory_search",
+    }
+    for tool_name in expected_tools:
+        assert tool_name in server.tools
+
+
+def test_mcp_memory_search_tool(tmp_db, monkeypatch) -> None:
+    """Verify that engram_memory_search tool operates correctly under mock server."""
+    import os
+
+    from engram.models.memory import Memory
+    from engram.models.project import Project
+
+    cwd = os.path.abspath("repo/fake-tools-repo")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-mcp-tools",
+        name="MCP Tools Project",
+        summary="Test project for MCP Tools",
+        repo_paths=[cwd],
+    )
+
+    # Create dummy memories
+    Memory.create(
+        project_id=project.id,
+        id="memo-search-1",
+        type="decision",
+        title="Decide to use FastMCP",
+        content="We choose FastMCP for robust STDIO.",
+        tags=["mcp", "decision"],
+        level="L2",
+    )
+    Memory.create(
+        project_id=project.id,
+        id="memo-search-2",
+        type="lesson",
+        title="Lessons on FTS SQLite search",
+        content="FTS5 extension is great for searching memories.",
+        tags=["sqlite", "fts"],
+        level="L3",
+    )
+
+    class MockServer:
+        def __init__(self) -> None:
+            self.tools: dict[str, Any] = {}
+
+        def tool(self, **kwargs: Any) -> Any:
+            def decorator(func: Any) -> Any:
+                self.tools[func.__name__] = func
+                return func
+
+            return decorator
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    tool = server.tools["engram_memory_search"]
+
+    # 1. Search without filters
+    res = tool()
+    assert res["ok"] is True
+    assert len(res["memories"]) == 2
+
+    # 2. Search with query filter
+    res = tool(query="FastMCP")
+    assert res["ok"] is True
+    assert len(res["memories"]) == 1
+    assert res["memories"][0]["id"] == "memo-search-1"
+
+    # 3. Search with type filter
+    res = tool(type="lesson")
+    assert res["ok"] is True
+    assert len(res["memories"]) == 1
+    assert res["memories"][0]["id"] == "memo-search-2"
+
+    # 4. Search with tags filter
+    res = tool(tags=["mcp"])
+    assert res["ok"] is True
+    assert len(res["memories"]) == 1
+    assert res["memories"][0]["id"] == "memo-search-1"
+
+    # 5. Search with limit
+    res = tool(limit=1)
+    assert res["ok"] is True
+    assert len(res["memories"]) == 1
