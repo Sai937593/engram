@@ -11,8 +11,8 @@ import pytest
 from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.models.project import Project
-from engram.services.errors import EngramServiceError
-from engram.services.memory_service import list_memories, search_memories
+from engram.services.errors import EngramServiceError, ValidationError
+from engram.services.memory_service import create_memory, list_memories, search_memories
 
 
 def _create_project(project_id: str, repo_path: str) -> Project:
@@ -316,3 +316,125 @@ def test_search_memories_calls_are_read_only_on_memory_rows(tmp_db):
 
     after_rows = _memory_rows(project.id)
     assert after_rows == before_rows
+
+
+def test_create_memory_happy_path_project_scope(tmp_db):
+    project = _create_project("proj-create-a", "/tmp/proj-create-a")
+    dto = create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Valid lesson title",
+        content="Valid lesson content",
+        scope="project",
+        level="L2",
+        tags=["foo", "bar"],
+    )
+
+    assert dto["project_id"] == project.id
+    assert dto["type"] == "lesson"
+    assert dto["title"] == "Valid lesson title"
+    assert dto["content"] == "Valid lesson content"
+    assert dto["scope"] == "project"
+    assert dto["level"] == "L2"
+    assert dto["tags"] == ["foo", "bar"]
+    assert dto["always_include"] is False
+    assert len(dto["id"]) == 8
+
+    # Fetch from db to verify it's persisted
+    fetched = Memory.get(dto["id"])
+    assert fetched is not None
+    assert fetched.title == "Valid lesson title"
+
+
+def test_create_memory_happy_path_task_scope(tmp_db):
+    project = _create_project("proj-create-b", "/tmp/proj-create-b")
+    dto = create_memory(
+        project_id=project.id,
+        type="note",
+        title="Valid note title",
+        content="Valid note content",
+        scope="task",
+        task_id="task0001",
+        level=None,
+    )
+
+    assert dto["project_id"] == project.id
+    assert dto["type"] == "note"
+    assert dto["scope"] == "task"
+    assert dto["task_id"] == "task0001"
+    assert dto["level"] is None
+
+    fetched = Memory.get(dto["id"])
+    assert fetched is not None
+    assert fetched.scope == "task"
+
+
+def test_create_memory_invalid_type_raises_validation_error(tmp_db):
+    project = _create_project("proj-create-c", "/tmp/proj-create-c")
+    with pytest.raises(ValidationError) as exc:
+        create_memory(
+            project_id=project.id,
+            type="invalid_type",
+            title="Title",
+            content="Content",
+            scope="project",
+            level="L1",
+        )
+    assert exc.value.code == "INVALID_MEMORY_TYPE"
+    assert "type" in exc.value.details
+
+
+def test_create_memory_invalid_scope_raises_validation_error(tmp_db):
+    project = _create_project("proj-create-d", "/tmp/proj-create-d")
+    with pytest.raises(ValidationError) as exc:
+        create_memory(
+            project_id=project.id,
+            type="lesson",
+            title="Title",
+            content="Content",
+            scope="invalid_scope",
+            level="L1",
+        )
+    assert exc.value.code == "INVALID_MEMORY_SCOPE"
+    assert "scope" in exc.value.details
+
+
+def test_create_memory_project_scope_without_level_raises_validation_error(tmp_db):
+    project = _create_project("proj-create-e", "/tmp/proj-create-e")
+    # Empty level
+    with pytest.raises(ValidationError) as exc:
+        create_memory(
+            project_id=project.id,
+            type="lesson",
+            title="Title",
+            content="Content",
+            scope="project",
+            level=None,
+        )
+    assert exc.value.code == "INVALID_MEMORY_LEVEL"
+
+    # Invalid level
+    with pytest.raises(ValidationError) as exc:
+        create_memory(
+            project_id=project.id,
+            type="lesson",
+            title="Title",
+            content="Content",
+            scope="project",
+            level="L5",
+        )
+    assert exc.value.code == "INVALID_MEMORY_LEVEL"
+
+
+def test_create_memory_task_scope_with_level_raises_validation_error(tmp_db):
+    project = _create_project("proj-create-f", "/tmp/proj-create-f")
+    with pytest.raises(ValidationError) as exc:
+        create_memory(
+            project_id=project.id,
+            type="note",
+            title="Title",
+            content="Content",
+            scope="task",
+            level="L1",
+        )
+    assert exc.value.code == "INVALID_MEMORY_LEVEL"

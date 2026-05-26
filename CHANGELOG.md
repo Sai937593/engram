@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(services): add `create_memory` service API with input validations (type, scope, level), ValidationError handling, and Memory.create wiring.
 - feat(services): add `update_task` and `append_task_note` service operations with comprehensive validation constraints, first-class/legacy phase link checks, cycle detection, and dedicated test suite.
 - feat(services): add `create_task` service API with input validations (status, priority), ValidationError handling, and Task.create wiring.
 - refactor(cli): remove unused resolve_task_id_in_project CLI helper and clean up redundant task command exports.
