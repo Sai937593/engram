@@ -48,9 +48,7 @@ def search_memories(
         return memories[:validated_limit]
 
     # Optimization: Filter by project_id in the database instead of in-memory.
-    matches = Memory.search(
-        query, type_filter=type_filter, tag_filters=tags, project_id=project_id
-    )
+    matches = Memory.search(query, type_filter=type_filter, tag_filters=tags, project_id=project_id)
 
     return [memory_to_dict(memory_item) for memory_item in matches[:validated_limit]]
 
