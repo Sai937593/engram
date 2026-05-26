@@ -121,3 +121,10 @@ def create_memories_fts_and_triggers(cursor: sqlite3.Cursor) -> None:
       INSERT INTO memories_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
     END;
     """)
+
+
+def create_indexes(cursor: sqlite3.Cursor) -> None:
+    """Create secondary indexes for performance."""
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_phases_project_id ON phases(project_id)")
