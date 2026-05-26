@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- docs(mcp): add comprehensive Codex custom MCP setup documentation under docs/mcp-codex-setup.md.
 - feat(mcp): implement `engram_phase_list` MCP tool handler wired to the read-only phase service list API, supporting optional status filter with dedicated unit and read-only tests.
 - feat(mcp): implement `engram_memory_search` MCP tool handler wired to the read-only memory service search API, supporting query/type/tag/limit filters with list fallback and dedicated unit/read-only tests.
 - feat(mcp): implement `engram_task_next` MCP tool handler wired to the read-only task service next-task API, returning JSON-safe serialized next task payloads with dedicated unit and read-only tests.
