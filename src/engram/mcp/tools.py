@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from engram.services.errors import EngramServiceError
-from engram.services.memory_service import search_memories
+from engram.services.memory_service import create_memory, search_memories
 from engram.services.phase_service import list_phases
 from engram.services.project_service import resolve_current_project
 from engram.services.task_service import (
@@ -169,6 +169,43 @@ def register_tools(server: Any) -> None:
             return {
                 "ok": True,
                 "task": task,
+            }
+        except EngramServiceError as exc:
+            return {
+                "ok": False,
+                "error": exc.to_dict(),
+            }
+
+    @server.tool()
+    def engram_memory_create(
+        type: str,
+        title: str,
+        content: str,
+        scope: str = "project",
+        task_id: str | None = None,
+        tags: list[str] | None = None,
+        always_include: bool = False,
+        level: str | None = None,
+        id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new memory in the currently bound engram project."""
+        try:
+            project = resolve_current_project()
+            memory = create_memory(
+                project_id=str(project["id"]),
+                type=type,
+                title=title,
+                content=content,
+                scope=scope,
+                task_id=task_id,
+                tags=tags,
+                always_include=always_include,
+                level=level,
+                id=id,
+            )
+            return {
+                "ok": True,
+                "memory": memory,
             }
         except EngramServiceError as exc:
             return {
