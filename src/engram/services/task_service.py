@@ -1,11 +1,11 @@
-"""Task service read operations."""
+"""Task service operations."""
 
 from __future__ import annotations
 
 from engram.db import get_db_connection
 from engram.models.phase import Phase
 from engram.models.task import Task
-from engram.services.errors import EngramServiceError
+from engram.services.errors import EngramServiceError, ValidationError
 from engram.services.serializers import task_to_dict
 
 VALID_TASK_STATUSES = {"todo", "in-progress", "done", "blocked", "cancelled", "all"}
@@ -158,3 +158,51 @@ def get_next_task(project_id: str) -> dict[str, object] | None:
     if next_task is None:
         return None
     return task_to_dict(next_task)
+
+
+def create_task(
+    project_id: str,
+    title: str,
+    description: str | None = None,
+    status: str = "todo",
+    priority: str = "medium",
+    phase: str | None = None,
+    phase_id: str | None = None,
+    depends_on: str | None = None,
+    acceptance: str | None = None,
+    tags: list[str] | None = None,
+    relevant_files: list[str] | None = None,
+    id: str | None = None,
+) -> dict[str, object]:
+    """Create a new task with validation and return its JSON-safe DTO."""
+    allowed_statuses = VALID_TASK_STATUSES - {"all"}
+    if status not in allowed_statuses:
+        raise ValidationError(
+            code="INVALID_TASK_STATUS",
+            message="Task status is invalid.",
+            details={"status": status, "allowed_statuses": sorted(allowed_statuses)},
+        )
+
+    allowed_priorities = {"critical", "high", "medium", "low"}
+    if priority not in allowed_priorities:
+        raise ValidationError(
+            code="INVALID_TASK_PRIORITY",
+            message="Task priority is invalid.",
+            details={"priority": priority, "allowed_priorities": sorted(allowed_priorities)},
+        )
+
+    task_item = Task.create(
+        project_id=project_id,
+        title=title,
+        description=description,
+        status=status,
+        priority=priority,
+        phase=phase,
+        phase_id=phase_id,
+        depends_on=depends_on,
+        acceptance=acceptance,
+        tags=tags,
+        relevant_files=relevant_files,
+        id=id,
+    )
+    return task_to_dict(task_item)

@@ -44,3 +44,7 @@ class EngramServiceError(Exception):
             "message": self.message,
             "details": dict(self.details),
         }
+
+
+class ValidationError(EngramServiceError):
+    """Raised when service inputs or parameters fail validation rules."""

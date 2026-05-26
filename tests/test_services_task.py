@@ -13,8 +13,14 @@ from engram.db import get_db_connection
 from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task
-from engram.services.errors import EngramServiceError
-from engram.services.task_service import get_next_task, get_task, list_tasks, resolve_task_ref
+from engram.services.errors import EngramServiceError, ValidationError
+from engram.services.task_service import (
+    create_task,
+    get_next_task,
+    get_task,
+    list_tasks,
+    resolve_task_ref,
+)
 
 
 def _create_project(project_id: str, repo_path: str) -> Project:
@@ -326,3 +332,49 @@ def test_task_service_calls_are_read_only_on_task_rows(tmp_db):
     after_rows = _task_rows(project.id)
 
     assert after_rows == before_rows
+
+
+def test_create_task_saves_and_returns_dto(tmp_db):
+    project = _create_project("proj-q", "/tmp/proj-q")
+    dto = create_task(
+        project_id=project.id,
+        title="Valid new task",
+        description="With description",
+        status="in-progress",
+        priority="high",
+        tags=["t1", "t2"],
+        relevant_files=["path/a", "path/b"],
+    )
+
+    assert dto["project_id"] == project.id
+    assert dto["title"] == "Valid new task"
+    assert dto["description"] == "With description"
+    assert dto["status"] == "in-progress"
+    assert dto["priority"] == "high"
+    assert dto["tags"] == ["t1", "t2"]
+    assert dto["relevant_files"] == ["path/a", "path/b"]
+    assert len(dto["id"]) == 8
+
+    # Verify it actually persisted in the database by fetching it back
+    fetched = get_task(project.id, dto["id"])
+    assert fetched["id"] == dto["id"]
+    assert fetched["title"] == "Valid new task"
+    _assert_json_safe(dto)
+
+
+def test_create_task_invalid_status_raises_validation_error(tmp_db):
+    project = _create_project("proj-r", "/tmp/proj-r")
+    with pytest.raises(ValidationError) as exc:
+        create_task(project_id=project.id, title="Invalid task", status="waiting")
+
+    assert exc.value.code == "INVALID_TASK_STATUS"
+    assert "status" in exc.value.details
+
+
+def test_create_task_invalid_priority_raises_validation_error(tmp_db):
+    project = _create_project("proj-s", "/tmp/proj-s")
+    with pytest.raises(ValidationError) as exc:
+        create_task(project_id=project.id, title="Invalid task", priority="super-critical")
+
+    assert exc.value.code == "INVALID_TASK_PRIORITY"
+    assert "priority" in exc.value.details
