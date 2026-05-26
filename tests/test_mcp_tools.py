@@ -44,6 +44,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_list"].__name__ == "engram_task_list"
     assert "engram_task_get" in server.tools
     assert server.tools["engram_task_get"].__name__ == "engram_task_get"
+    assert "engram_task_next" in server.tools
+    assert server.tools["engram_task_next"].__name__ == "engram_task_next"
 
 
 def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
@@ -313,3 +315,65 @@ def test_mcp_tool_task_get_raises_task_not_found(tmp_db, monkeypatch) -> None:
         handler(task_ref="missing-task")
 
     assert raised.value.code == "TASK_NOT_FOUND"
+
+
+def test_mcp_tool_task_next_returns_next_task(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_next returns the next actionable task, or None if none exist."""
+    cwd = os.path.abspath("repo/bound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-tasks-next",
+        name="MCP Task Next Project",
+        summary="Service tool tasks next summary",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(
+        project_id=project.id,
+        id="phase-task-next",
+        title="Task Phase",
+        status="active",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_task_next"]
+
+    # When no tasks exist, returns None
+    res_none = handler()
+    assert res_none["ok"] is True
+    assert res_none["task"] is None
+
+    # Create an active task
+    Task.create(
+        project_id=project.id,
+        id="task-next-1",
+        title="Next Actionable Task",
+        phase=phase.title,
+        phase_id=phase.id,
+        status="todo",
+    )
+
+    res_task = handler()
+    assert res_task["ok"] is True
+    assert res_task["task"]["id"] == "task-next-1"
+    assert res_task["task"]["title"] == "Next Actionable Task"
+
+
+def test_mcp_tool_task_next_raises_project_not_bound(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_next raises PROJECT_NOT_BOUND for unbound cwd."""
+    cwd = os.path.abspath("repo/unbound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_task_next"]
+
+    with pytest.raises(EngramServiceError) as raised:
+        handler()
+
+    assert raised.value.code == "PROJECT_NOT_BOUND"
