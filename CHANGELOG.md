@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(mcp): implement `engram_task_list` MCP tool handler wired to the read-only task service list API, supporting optional status and phase filters with full unit and DB read-only tests.
 - feat(mcp): implement `engram_project_current` MCP tool handler wired to the read-only project service boundary, returning JSON-safe serialized project payloads with dedicated unit and read-only tests.
 - feat(mcp): register read-only task context MCP resource `engram://task/{task_id}/context` wired to `get_task_context_for_current_project` context service wrapper with full unit, bound/unbound project, and database read-only tests.
 - feat(mcp): implement project-level read-only MCP resources for startup, snapshot, and handoff in `engram.mcp.resources` wired to context_service wrappers with robust unit and database read-only tests.
