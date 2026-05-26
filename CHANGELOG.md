@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- refactor(cli): delegate context startup/task and export snapshot/handoff commands to context_service wrappers with EngramServiceError handling.
 - refactor(cli): delegate memory search CLI command to memory_service.search_memories, using serialized DTO fields and handling errors.
 - refactor(cli): delegate task list/get and files CLI commands to task_service while preserving output and error compatibility.
 - docs(mcp): add comprehensive Codex custom MCP setup documentation under docs/mcp-codex-setup.md.
