@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engram.services.memory_service import search_memories
 from engram.services.project_service import resolve_current_project
 from engram.services.task_service import get_next_task, get_task, list_tasks
 
@@ -48,4 +49,25 @@ def register_tools(server: Any) -> None:
         return {
             "ok": True,
             "task": task,
+        }
+
+    @server.tool()
+    def engram_memory_search(
+        query: str | None = None,
+        type: str | None = None,
+        tags: list[str] | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        """Search memories in the currently bound engram project."""
+        project = resolve_current_project()
+        memories = search_memories(
+            project_id=str(project["id"]),
+            query=query,
+            type_filter=type,
+            tags=tags,
+            limit=limit,
+        )
+        return {
+            "ok": True,
+            "memories": memories,
         }
