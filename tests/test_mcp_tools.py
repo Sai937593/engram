@@ -48,6 +48,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_next"].__name__ == "engram_task_next"
     assert "engram_phase_list" in server.tools
     assert server.tools["engram_phase_list"].__name__ == "engram_phase_list"
+    assert "engram_memory_search" in server.tools
+    assert server.tools["engram_memory_search"].__name__ == "engram_memory_search"
 
 
 def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
@@ -91,6 +93,84 @@ def test_mcp_tool_raises_project_not_bound_for_unbound_repo(tmp_db, monkeypatch)
 
     register_tools(server)
     handler = server.tools["engram_project_current"]
+
+    with pytest.raises(EngramServiceError) as raised:
+        handler()
+
+    assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
+    """Verify engram_memory_search returns serialized memories for a bound repo."""
+    cwd = os.path.abspath("repo/bound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-memories",
+        name="MCP Memory Search Project",
+        summary="Service tool memory search summary",
+        repo_paths=[cwd],
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-1",
+        type="note",
+        title="First Memory",
+        content="This is the first memory.",
+        tags=["important"],
+        level="L1",
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-2",
+        type="issue",
+        title="Second Memory",
+        content="This is the second memory.",
+        tags=["issue", "bug"],
+        level="L2",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_memory_search"]
+
+    # All memories
+    res_all = handler()
+    assert res_all["ok"] is True
+    assert len(res_all["memories"]) == 2
+    assert {m["id"] for m in res_all["memories"]} == {"mem-1", "mem-2"}
+
+    # Filtered by type
+    res_note = handler(type="note")
+    assert res_note["ok"] is True
+    assert len(res_note["memories"]) == 1
+    assert res_note["memories"][0]["id"] == "mem-1"
+
+    # Search with a query
+    res_query = handler(query="second")
+    assert res_query["ok"] is True
+    assert len(res_query["memories"]) == 1
+    assert res_query["memories"][0]["id"] == "mem-2"
+
+    # Search with tags
+    res_tags = handler(tags=["important"])
+    assert res_tags["ok"] is True
+    assert len(res_tags["memories"]) == 1
+    assert res_tags["memories"][0]["id"] == "mem-1"
+
+
+def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) -> None:
+    """Verify engram_memory_search raises PROJECT_NOT_BOUND for unbound cwd."""
+    cwd = os.path.abspath("repo/unbound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_memory_search"]
 
     with pytest.raises(EngramServiceError) as raised:
         handler()
