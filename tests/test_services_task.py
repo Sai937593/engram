@@ -15,11 +15,13 @@ from engram.models.project import Project
 from engram.models.task import Task
 from engram.services.errors import EngramServiceError, ValidationError
 from engram.services.task_service import (
+    append_task_note,
     create_task,
     get_next_task,
     get_task,
     list_tasks,
     resolve_task_ref,
+    update_task,
 )
 
 
@@ -378,3 +380,128 @@ def test_create_task_invalid_priority_raises_validation_error(tmp_db):
 
     assert exc.value.code == "INVALID_TASK_PRIORITY"
     assert "priority" in exc.value.details
+
+
+def test_update_task_happy_path(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0001", title="Original Title", status="todo")
+
+    updated = update_task(
+        project_id=project.id,
+        task_ref="task0001",
+        title="Updated Title",
+        status="in-progress",
+        priority="high",
+        tags=["foo", "bar"],
+    )
+
+    assert updated["id"] == "task0001"
+    assert updated["title"] == "Updated Title"
+    assert updated["status"] == "in-progress"
+    assert updated["priority"] == "high"
+    assert updated["tags"] == ["foo", "bar"]
+
+    # Verify db persistence
+    db_task = get_task(project.id, "task0001")
+    assert db_task["title"] == "Updated Title"
+    _assert_json_safe(updated)
+
+
+def test_update_task_rejects_unknown_fields(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0002", title="Task title")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project_id=project.id, task_ref="task0002", invalid_field_name="some value")
+
+    assert exc.value.code == "UNKNOWN_UPDATE_FIELDS"
+    assert "invalid_field_name" in exc.value.details["unknown_fields"]
+
+
+def test_update_task_invalid_status_and_priority(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0003", title="Task title")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project_id=project.id, task_ref="task0003", status="invalid_status")
+    assert exc.value.code == "INVALID_TASK_STATUS"
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project_id=project.id, task_ref="task0003", priority="invalid_priority")
+    assert exc.value.code == "INVALID_TASK_PRIORITY"
+
+
+def test_update_task_prevents_direct_cycle_and_self_dependency(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0004", title="Task title")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project_id=project.id, task_ref="task0004", depends_on="task0004")
+
+    assert exc.value.code == "DEPENDENCY_CYCLE"
+    assert "cannot depend on itself" in exc.value.message
+
+
+def test_update_task_prevents_indirect_cycle(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0005", title="Task 5")
+    Task.create(project_id=project.id, id="task0006", title="Task 6", depends_on="task0005")
+
+    # Making 5 depend on 6 would create a cycle: 5 -> 6 -> 5
+    with pytest.raises(ValidationError) as exc:
+        update_task(project_id=project.id, task_ref="task0005", depends_on="task0006")
+
+    assert exc.value.code == "DEPENDENCY_CYCLE"
+
+
+def test_update_task_first_class_vs_legacy_phase_constraints(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Phase.create(project_id=project.id, id="phase001", title="First Class Phase")
+    Task.create(project_id=project.id, id="task0007", title="Task 7")
+
+    # Happy path: link to first class phase via phase_id
+    updated = update_task(project_id=project.id, task_ref="task0007", phase_id="phase001")
+    assert updated["phase_id"] == "phase001"
+    assert updated["phase"] == "First Class Phase"
+
+    # Try to change legacy phase text while first class is linked -> ValidationError
+    with pytest.raises(ValidationError) as exc:
+        update_task(project_id=project.id, task_ref="task0007", phase="New Legacy Title")
+    assert exc.value.code == "PHASE_LINKED_TO_FIRST_CLASS"
+
+    # Happy path: clear link by passing phase_id=None
+    cleared = update_task(project_id=project.id, task_ref="task0007", phase_id=None)
+    assert cleared["phase_id"] is None
+    assert cleared["phase"] is None
+
+    # Now we can update legacy phase
+    legacy_updated = update_task(
+        project_id=project.id, task_ref="task0007", phase="New Legacy Title"
+    )
+    assert legacy_updated["phase_id"] is None
+    assert legacy_updated["phase"] == "New Legacy Title"
+
+
+def test_append_task_note_happy_path(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    t = Task.create(project_id=project.id, id="task0008", title="Task 8")
+    t.update(evidence="initial note")
+
+    updated = append_task_note(project_id=project.id, task_ref="task0008", note="new progress note")
+
+    assert "initial note" in updated["evidence"]
+    assert "new progress note" in updated["evidence"]
+    # Check that a timestamp format is prepended: [YYYY-MM-DD HH:MM]
+    assert "[" in updated["evidence"]
+    assert "]" in updated["evidence"]
+    _assert_json_safe(updated)
+
+
+def test_append_task_note_blank_rejection(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0009", title="Task 9")
+
+    with pytest.raises(ValidationError) as exc:
+        append_task_note(project_id=project.id, task_ref="task0009", note="   ")
+
+    assert exc.value.code == "INVALID_NOTE"
