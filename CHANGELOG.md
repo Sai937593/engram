@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- refactor(cli): remove unused resolve_task_id_in_project CLI helper and clean up redundant task command exports.
 - refactor(cli): delegate context startup/task and export snapshot/handoff commands to context_service wrappers with EngramServiceError handling.
 - refactor(cli): delegate memory search CLI command to memory_service.search_memories, using serialized DTO fields and handling errors.
 - refactor(cli): delegate task list/get and files CLI commands to task_service while preserving output and error compatibility.
