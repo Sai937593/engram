@@ -25,7 +25,7 @@ def search_memories(
     tags: list[str] | tuple[str, ...] | None = None,
     limit: int = 10,
 ) -> list[dict[str, JsonValue]]:
-    """Return project-scoped JSON-safe memory DTOs matching an FTS query."""
+    """Return project-scoped JSON-safe memory DTOs matching an FTS query or list fallback."""
     validated_limit = _validate_limit(limit)
 
     # Check if query actually has signal terms. If not, use list fallback.
