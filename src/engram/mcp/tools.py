@@ -4,10 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from engram.services.memory_service import search_memories
+from engram.services.errors import EngramServiceError
+from engram.services.memory_service import create_memory, search_memories
 from engram.services.phase_service import list_phases
 from engram.services.project_service import resolve_current_project
-from engram.services.task_service import get_next_task, get_task, list_tasks
+from engram.services.task_service import (
+    append_task_note,
+    create_task,
+    get_next_task,
+    get_task,
+    list_tasks,
+    update_task,
+)
 
 
 def register_tools(server: Any) -> None:
@@ -82,3 +90,125 @@ def register_tools(server: Any) -> None:
             "ok": True,
             "phases": phases,
         }
+
+    @server.tool()
+    def engram_task_create(
+        title: str,
+        description: str | None = None,
+        status: str = "todo",
+        priority: str = "medium",
+        phase: str | None = None,
+        phase_id: str | None = None,
+        depends_on: str | None = None,
+        acceptance: str | None = None,
+        tags: list[str] | None = None,
+        relevant_files: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create a new task in the currently bound engram project."""
+        try:
+            project = resolve_current_project()
+            task = create_task(
+                project_id=str(project["id"]),
+                title=title,
+                description=description,
+                status=status,
+                priority=priority,
+                phase=phase,
+                phase_id=phase_id,
+                depends_on=depends_on,
+                acceptance=acceptance,
+                tags=tags,
+                relevant_files=relevant_files,
+            )
+            return {
+                "ok": True,
+                "task": task,
+            }
+        except EngramServiceError as exc:
+            return {
+                "ok": False,
+                "error": exc.to_dict(),
+            }
+
+    @server.tool()
+    def engram_task_update(
+        task_ref: str,
+        updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update an existing task in the currently bound engram project."""
+        try:
+            project = resolve_current_project()
+            task = update_task(
+                project_id=str(project["id"]),
+                task_ref=task_ref,
+                **updates,
+            )
+            return {
+                "ok": True,
+                "task": task,
+            }
+        except EngramServiceError as exc:
+            return {
+                "ok": False,
+                "error": exc.to_dict(),
+            }
+
+    @server.tool()
+    def engram_task_note_append(
+        task_ref: str,
+        note: str,
+    ) -> dict[str, Any]:
+        """Append a note to a task's evidence log in the currently bound engram project."""
+        try:
+            project = resolve_current_project()
+            task = append_task_note(
+                project_id=str(project["id"]),
+                task_ref=task_ref,
+                note=note,
+            )
+            return {
+                "ok": True,
+                "task": task,
+            }
+        except EngramServiceError as exc:
+            return {
+                "ok": False,
+                "error": exc.to_dict(),
+            }
+
+    @server.tool()
+    def engram_memory_create(
+        type: str,
+        title: str,
+        content: str,
+        scope: str = "project",
+        task_id: str | None = None,
+        tags: list[str] | None = None,
+        always_include: bool = False,
+        level: str | None = None,
+        id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new memory in the currently bound engram project."""
+        try:
+            project = resolve_current_project()
+            memory = create_memory(
+                project_id=str(project["id"]),
+                type=type,
+                title=title,
+                content=content,
+                scope=scope,
+                task_id=task_id,
+                tags=tags,
+                always_include=always_include,
+                level=level,
+                id=id,
+            )
+            return {
+                "ok": True,
+                "memory": memory,
+            }
+        except EngramServiceError as exc:
+            return {
+                "ok": False,
+                "error": exc.to_dict(),
+            }
