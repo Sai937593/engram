@@ -48,6 +48,12 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_next"].__name__ == "engram_task_next"
     assert "engram_phase_list" in server.tools
     assert server.tools["engram_phase_list"].__name__ == "engram_phase_list"
+    assert "engram_task_create" in server.tools
+    assert server.tools["engram_task_create"].__name__ == "engram_task_create"
+    assert "engram_task_update" in server.tools
+    assert server.tools["engram_task_update"].__name__ == "engram_task_update"
+    assert "engram_task_note_append" in server.tools
+    assert server.tools["engram_task_note_append"].__name__ == "engram_task_note_append"
 
 
 def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
@@ -439,3 +445,133 @@ def test_mcp_tool_phase_list_raises_project_not_bound(tmp_db, monkeypatch) -> No
         handler()
 
     assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_mcp_task_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_create tool creates a task and gracefully handles service validation errors."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    create_handler = server.tools["engram_task_create"]
+
+    # 1. Happy path
+    res = create_handler(
+        title="Test Task Title",
+        description="Test description",
+        priority="high",
+        tags=["mcp", "test"],
+    )
+    assert res["ok"] is True
+    assert "task" in res
+    assert res["task"]["title"] == "Test Task Title"
+    assert res["task"]["priority"] == "high"
+    assert res["task"]["tags"] == ["mcp", "test"]
+
+    # 2. Validation error path (invalid priority)
+    res_err = create_handler(
+        title="Invalid priority task",
+        priority="ultra-high",
+    )
+    assert res_err["ok"] is False
+    assert "error" in res_err
+    assert res_err["error"]["code"] == "INVALID_TASK_PRIORITY"
+
+
+def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_update tool updates a task and gracefully handles service validation errors."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+
+    # Pre-populate task
+    Task.create(
+        project_id=project.id,
+        id="task-to-update",
+        title="Original Title",
+        status="todo",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    update_handler = server.tools["engram_task_update"]
+
+    # 1. Happy path
+    res = update_handler(
+        task_ref="task-to-update",
+        updates={"title": "Updated Title", "status": "in-progress"},
+    )
+    assert res["ok"] is True
+    assert res["task"]["title"] == "Updated Title"
+    assert res["task"]["status"] == "in-progress"
+
+    # 2. Validation error path (invalid status)
+    res_err = update_handler(
+        task_ref="task-to-update",
+        updates={"status": "not-a-valid-status"},
+    )
+    assert res_err["ok"] is False
+    assert res_err["error"]["code"] == "INVALID_TASK_STATUS"
+
+
+def test_mcp_task_note_append_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_note_append tool appends notes and gracefully handles service validation errors."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+
+    Task.create(
+        project_id=project.id,
+        id="task-for-note",
+        title="Note Task",
+        status="todo",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    note_handler = server.tools["engram_task_note_append"]
+
+    # 1. Happy path
+    res = note_handler(
+        task_ref="task-for-note",
+        note="First important comment",
+    )
+    assert res["ok"] is True
+    assert "First important comment" in res["task"]["evidence"]
+
+    # 2. Validation error path (empty note)
+    res_err = note_handler(
+        task_ref="task-for-note",
+        note="  ",
+    )
+    assert res_err["ok"] is False
+    assert res_err["error"]["code"] == "INVALID_NOTE"
