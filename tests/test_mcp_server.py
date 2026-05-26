@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib
 from pathlib import Path
+from typing import Any
 
 MCP_MODULES = (
     "engram.mcp",
@@ -90,3 +91,40 @@ def test_load_fastmcp_class_missing_dependency_has_clear_install_message(monkeyp
 
     assert "Missing optional MCP dependency" in message
     assert "engram[mcp]" in message
+
+
+def test_register_resources_registers_expected_fastmcp_resources() -> None:
+    """Verify that register_resources registers the four expected URIs with placeholders."""
+
+    class MockServer:
+        """A mock implementation of the FastMCP server for registration testing."""
+
+        def __init__(self) -> None:
+            self.resources: dict[str, Any] = {}
+
+        def resource(self, uri: str, **kwargs: Any) -> Any:
+            """Mock the resource decorator."""
+
+            def decorator(func: Any) -> Any:
+                self.resources[uri] = func
+                return func
+
+            return decorator
+
+    server = MockServer()
+    from engram.mcp.resources import register_resources
+
+    register_resources(server)
+
+    assert "engram://startup" in server.resources
+    assert "engram://task/{task_id}/context" in server.resources
+    assert "engram://snapshot" in server.resources
+    assert "engram://handoff" in server.resources
+
+    # Verify placeholder return strings
+    assert server.resources["engram://startup"]() == "placeholder"
+    assert (
+        server.resources["engram://task/{task_id}/context"]("test-task") == "placeholder: test-task"
+    )
+    assert server.resources["engram://snapshot"]() == "placeholder"
+    assert server.resources["engram://handoff"]() == "placeholder"
