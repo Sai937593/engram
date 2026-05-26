@@ -553,3 +553,108 @@ def test_memory_reindex_dependency_error_is_clear(tmp_db, project, monkeypatch) 
 
     assert result.exit_code != 0
     assert "missing optional semantic dependencies" in result.output
+
+
+def test_memory_search_success(tmp_db, project, monkeypatch) -> None:
+    """memory search returns matching memories in a table."""
+    runner = make_runner_with_project(monkeypatch, project)
+    Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Python coding tips",
+        content="Always write type annotations in Python.",
+        tags=["python", "coding"],
+        level="L3",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Docker tips",
+        content="Keep Docker images small.",
+        tags=["docker"],
+        level="L3",
+    )
+
+    result = runner.invoke(cli, ["memory", "search", "Python"])
+    assert result.exit_code == 0, result.output
+    assert "Search Results for: Python" in result.output
+    assert "Python coding tips" in result.output
+    assert "Always write type annotations in Python." in result.output
+    assert "Docker tips" not in result.output
+
+
+def test_memory_search_empty_results(tmp_db, project, monkeypatch) -> None:
+    """memory search returns a clean message when no results are found."""
+    runner = make_runner_with_project(monkeypatch, project)
+    result = runner.invoke(cli, ["memory", "search", "nonexistent"])
+    assert result.exit_code == 0, result.output
+    assert "No results found." in result.output
+
+
+def test_memory_search_with_type_filter(tmp_db, project, monkeypatch) -> None:
+    """memory search filters results by type option."""
+    runner = make_runner_with_project(monkeypatch, project)
+    Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Python tip",
+        content="Always write type annotations in Python.",
+        level="L3",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Python lesson",
+        content="Python is dynamically but strongly typed.",
+        level="L3",
+    )
+
+    result = runner.invoke(cli, ["memory", "search", "Python", "--type", "lesson"])
+    assert result.exit_code == 0, result.output
+    assert "Python lesson" in result.output
+    assert "Python tip" not in result.output
+
+
+def test_memory_search_with_tag_filters(tmp_db, project, monkeypatch) -> None:
+    """memory search filters results by tags."""
+    runner = make_runner_with_project(monkeypatch, project)
+    Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Python tip",
+        content="Always write type annotations in Python.",
+        tags=["python", "typing"],
+        level="L3",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="note",
+        title="Python general",
+        content="Python is awesome.",
+        tags=["python"],
+        level="L3",
+    )
+
+    result = runner.invoke(cli, ["memory", "search", "Python", "--tag", "typing"])
+    assert result.exit_code == 0, result.output
+    assert "Python tip" in result.output
+    assert "Python general" not in result.output
+
+
+def test_memory_search_service_error_handling(tmp_db, project, monkeypatch) -> None:
+    """memory search handles EngramServiceError and raises click.ClickException."""
+    runner = make_runner_with_project(monkeypatch, project)
+
+    def mock_search_memories(*args, **kwargs):
+        from engram.services.errors import EngramServiceError
+
+        raise EngramServiceError(code="TEST_ERROR", message="Mock service failure")
+
+    monkeypatch.setattr(
+        "engram.cli.memory_cmds_generic.search_memories",
+        mock_search_memories,
+    )
+
+    result = runner.invoke(cli, ["memory", "search", "Python"])
+    assert result.exit_code != 0
+    assert "Error: Mock service failure" in result.output

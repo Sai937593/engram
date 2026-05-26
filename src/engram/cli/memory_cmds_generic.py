@@ -25,6 +25,8 @@ from engram.memory_retrieval.startup_orchestration import (
 )
 from engram.models.memory import Memory
 from engram.models.task import Task
+from engram.services.errors import EngramServiceError
+from engram.services.memory_service import search_memories
 
 
 @memory.command(name="add")
@@ -115,7 +117,17 @@ def memory_list() -> None:
 def memory_search(query: str, type: str | None, tags: tuple[str, ...]) -> None:
     """Search memories using FTS5."""
     project = cli_root.get_current_project()
-    results = Memory.search(query, type_filter=type, tag_filters=tags, project_id=project.id)
+    try:
+        results = search_memories(
+            project_id=project.id,
+            query=query,
+            type_filter=type,
+            tags=tags,
+            limit=10000,
+        )
+    except EngramServiceError as err:
+        raise click.ClickException(err.message) from err
+
     if not results:
         cli_root.console.print("No results found.")
         return
@@ -129,8 +141,14 @@ def memory_search(query: str, type: str | None, tags: tuple[str, ...]) -> None:
     table.add_column("Title", style="white")
     table.add_column("Snippet", style="dim")
     for memory_item in results:
-        snippet = memory_item.content.replace("\n", " ")
-        table.add_row(memory_item.id, memory_item.title, snippet)
+        content = memory_item.get("content")
+        content_str = str(content) if content is not None else ""
+        snippet = content_str.replace("\n", " ")
+        table.add_row(
+            str(memory_item.get("id", "")),
+            str(memory_item.get("title", "")),
+            snippet,
+        )
     cli_root.console.print(table)
 
 

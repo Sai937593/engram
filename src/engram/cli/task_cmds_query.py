@@ -3,12 +3,10 @@
 import click
 
 import engram.cli as cli_root
-from engram.cli.phase_helpers import normalize_phase_title, resolve_phase_in_project
+from engram.cli.phase_helpers import resolve_phase_in_project
 from engram.cli.task_cmds import task
 from engram.cli.task_helpers import (
-    get_effective_status,
     parse_relevant_files_csv,
-    resolve_task_id_in_project,
 )
 from engram.cli.task_rendering import (
     print_all_tasks_complete_message,
@@ -18,6 +16,8 @@ from engram.cli.task_rendering import (
     status_counts,
 )
 from engram.models.task import Task
+from engram.services.errors import EngramServiceError
+from engram.services.task_service import get_task, list_tasks, resolve_task_ref
 
 
 @task.command(name="list")
@@ -37,25 +37,27 @@ from engram.models.task import Task
 def task_list(status: str, show_all: bool, phase: str | None) -> None:
     """List tasks for the current project."""
     project = cli_root.get_current_project()
-    tasks = Task.list_by_project(project.id)
+
+    phase_filter = None
     if phase is not None:
         resolved_phase = resolve_phase_in_project(phase, project.id)
-        resolved_phase_title = normalize_phase_title(resolved_phase.title)
-        tasks = [
-            task_item
-            for task_item in tasks
-            if (
-                (task_item.phase_id == resolved_phase.id)
-                if task_item.phase_id
-                else normalize_phase_title(task_item.phase) == resolved_phase_title
-            )
-        ]
-    if show_all:
-        status = "all"
-    if status.lower() != "all":
-        tasks = [
-            task_item for task_item in tasks if get_effective_status(task_item) == status.lower()
-        ]
+        phase_filter = resolved_phase.id
+
+    try:
+        task_payloads = list_tasks(
+            project.id,
+            status="all" if show_all else status,
+            phase=phase_filter,
+        )
+    except EngramServiceError as err:
+        raise click.ClickException(err.message) from err
+
+    # Reconstruct/fetch Task objects from the returned list of DTOs for rendering
+    tasks = []
+    for payload in task_payloads:
+        task_obj = Task.get(payload["id"])
+        if task_obj:
+            tasks.append(task_obj)
 
     if not tasks:
         all_tasks = Task.list_by_project(project.id)
@@ -76,7 +78,19 @@ def task_list(status: str, show_all: bool, phase: str | None) -> None:
 @click.argument("task_id")
 def task_get(task_id: str) -> None:
     """Show task details."""
-    task_item = Task.get(task_id)
+    project = cli_root.get_current_project()
+    try:
+        task_payload = get_task(project.id, task_id)
+    except EngramServiceError as err:
+        if err.code == "TASK_AMBIGUOUS":
+            matches = ", ".join(err.details.get("matches", []))
+            raise click.ClickException(
+                f"Ambiguous task '{task_id.strip()}'. Multiple matches found: {matches}"
+            ) from err
+        cli_root.console.print(f"[red]Error:[/red] Task '{task_id}' not found.")
+        return
+
+    task_item = Task.get(task_payload["id"])
     if not task_item:
         cli_root.console.print(f"[red]Error:[/red] Task '{task_id}' not found.")
         return
@@ -93,10 +107,19 @@ def task_files() -> None:
 def _resolve_task_for_files(task_id: str) -> Task:
     """Resolve a task for `task files` commands within the current project."""
     project = cli_root.get_current_project()
-    resolved_task_id = resolve_task_id_in_project(task_id, project.id)
+    try:
+        resolved_task_id = resolve_task_ref(project.id, task_id)
+    except EngramServiceError as err:
+        if err.code == "TASK_AMBIGUOUS":
+            matches = ", ".join(err.details.get("matches", []))
+            raise click.ClickException(
+                f"Ambiguous task '{task_id.strip()}'. Multiple matches found: {matches}"
+            ) from err
+        raise click.ClickException(f"Task '{task_id.strip()}' not found in this project.") from err
+
     task_item = Task.get(resolved_task_id)
     if task_item is None:
-        raise click.ClickException(f"Task '{task_id}' not found in this project.")
+        raise click.ClickException(f"Task '{task_id.strip()}' not found in this project.")
     return task_item
 
 

@@ -21,34 +21,6 @@ VALID_TASK_STATUSES = {"todo", "in-progress", "done", "blocked", "cancelled"}
 VALID_TASK_PRIORITIES = {"low", "medium", "high", "critical"}
 
 
-def resolve_task_id_in_project(value: str, project_id: str) -> str:
-    """Resolve a task ID or prefix to a single task ID in the current project."""
-    normalized_value = value.strip()
-    if not normalized_value:
-        raise click.ClickException("Task reference cannot be empty.")
-
-    conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT id FROM tasks WHERE project_id = ? AND (id = ? OR id LIKE ?)",
-        (project_id, normalized_value, normalized_value + "%"),
-    ).fetchall()
-    conn.close()
-
-    matching_ids = sorted(list(set(row["id"] for row in rows)))
-
-    if not matching_ids:
-        raise click.ClickException(f"Task '{normalized_value}' not found in this project.")
-
-    if len(matching_ids) > 1:
-        if normalized_value in matching_ids:
-            return normalized_value
-        raise click.ClickException(
-            f"Ambiguous task '{normalized_value}'. Multiple matches found: {', '.join(matching_ids)}"
-        )
-
-    return matching_ids[0]
-
-
 def resolve_task_dependency(value: str | None, project_id: str) -> str | None:
     """Resolve a partial or exact task ID to a full 8-character ID."""
     if not value or value.lower() in ("none", "null", "clear"):
