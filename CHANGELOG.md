@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(services): add read-only `context_service` project wrappers for startup/snapshot/handoff context that resolve cwd-bound projects via `project_service` and preserve structured `PROJECT_NOT_BOUND` failures with dedicated service coverage.
 - feat(services): add read-only `phase_service` APIs (`list_phases`, `get_active_phase`) with project-scoped JSON-safe DTO output, stable `INVALID_PHASE_STATUS` validation, and coverage for filtering, scoping, adapter-safe imports, and no-row-mutation behavior.
 - feat(services): add read-only `list_memories` service API with optional type filtering, shared positive-limit validation (`VALIDATION_ERROR`), project-scoped JSON-safe DTO output, and coverage for filters, limits, foreign-project exclusion, and no-row-mutation behavior.
 - feat(services): add read-only `search_memories` boundary with project-scoped DTO filtering, positive-limit validation (`VALIDATION_ERROR`), and coverage for filter pass-through, adapter-safe imports, empty results, and no memory-row mutation.
