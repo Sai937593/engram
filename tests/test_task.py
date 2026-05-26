@@ -52,6 +52,72 @@ def test_normalize_relevant_files_deduplicates_preserve_first_seen_order():
     ]
 
 
+def test_task_from_row_deserializes_invalid_json_relevant_files():
+    """Verify that _deserialize_relevant_files falls back to comma-split for non-JSON strings."""
+    row = {
+        "id": "t-1",
+        "project_id": "p-1",
+        "title": "Title",
+        "description": "Desc",
+        "status": "todo",
+        "priority": "medium",
+        "phase": None,
+        "phase_id": None,
+        "depends_on": None,
+        "acceptance": None,
+        "evidence": None,
+        "tags": "",
+        "relevant_files": "src/a.py, tests/b.py ,src/a.py",
+    }
+
+    t = Task.from_row(row)
+    assert t.relevant_files == ["src/a.py", "tests/b.py"]
+
+
+def test_task_from_row_deserializes_valid_json_relevant_files():
+    """Verify that _deserialize_relevant_files loads JSON arrays."""
+    row = {
+        "id": "t-1",
+        "project_id": "p-1",
+        "title": "Title",
+        "description": "Desc",
+        "status": "todo",
+        "priority": "medium",
+        "phase": None,
+        "phase_id": None,
+        "depends_on": None,
+        "acceptance": None,
+        "evidence": None,
+        "tags": "",
+        "relevant_files": '["src/a.py", "tests/b.py"]',
+    }
+
+    t = Task.from_row(row)
+    assert t.relevant_files == ["src/a.py", "tests/b.py"]
+
+
+def test_task_from_row_deserializes_none_relevant_files():
+    """Verify that _deserialize_relevant_files handles None correctly."""
+    row = {
+        "id": "t-1",
+        "project_id": "p-1",
+        "title": "Title",
+        "description": "Desc",
+        "status": "todo",
+        "priority": "medium",
+        "phase": None,
+        "phase_id": None,
+        "depends_on": None,
+        "acceptance": None,
+        "evidence": None,
+        "tags": "",
+        "relevant_files": None,
+    }
+
+    t = Task.from_row(row)
+    assert t.relevant_files == []
+
+
 def test_create_task_persists_phase_id_without_legacy_phase(project, tmp_db):
     t = Task.create(project_id=project.id, title="Task with phase id", phase_id="phase-123")
     assert t.phase is None
