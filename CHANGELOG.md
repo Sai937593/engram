@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- feat(mcp): register read-only task context MCP resource `engram://task/{task_id}/context` wired to `get_task_context_for_current_project` context service wrapper with full unit, bound/unbound project, and database read-only tests.
+- feat(mcp): implement project-level read-only MCP resources for startup, snapshot, and handoff in `engram.mcp.resources` wired to context_service wrappers with robust unit and database read-only tests.
+- feat(mcp): define FastMCP resource registration contract and placeholder handlers in `engram.mcp.resources` with registration call shape and package boundary tests.
 - feat(mcp): add `engram.mcp` package skeleton with adapter-safe bootstrap, optional SDK error messaging, STDIO startup wiring, and MCP boundary/startup regression tests.
 - feat(packaging): add optional `mcp>=1.0,<2` extra plus `engram-mcp` console script metadata with entrypoint/extra regression coverage.
 - fix(services): export `get_task_context_for_current_project` from `engram.services` and add context-service regressions for package exports plus adapter-safe, read-only wrapper behavior across project/task/phase/memory rows.
