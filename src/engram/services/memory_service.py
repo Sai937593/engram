@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.services.errors import EngramServiceError, JsonValue, ValidationError
 from engram.services.serializers import memory_to_dict
@@ -18,6 +19,31 @@ def _validate_limit(limit: int) -> int:
             details={"field": "limit", "value": limit},
         )
     return limit
+
+
+def get_recent_memories(limit: int = 50, project_id: str | None = None) -> list[Memory]:
+    """Return a list of recent memories. Limits up to 1000 items."""
+    validated_limit = _validate_limit(limit)
+    if validated_limit > 1000:
+        validated_limit = 1000
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if project_id:
+        cursor.execute(
+            "SELECT * FROM memories WHERE project_id = ? ORDER BY created_at DESC LIMIT ?",
+            (project_id, validated_limit),
+        )
+    else:
+        cursor.execute(
+            "SELECT * FROM memories ORDER BY created_at DESC LIMIT ?",
+            (validated_limit,),
+        )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [Memory.from_row(row) for row in rows]
 
 
 def search_memories(
