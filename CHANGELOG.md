@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(packaging): add optional `mcp>=1.0,<2` extra plus `engram-mcp` console script metadata with entrypoint/extra regression coverage.
 - fix(services): export `get_task_context_for_current_project` from `engram.services` and add context-service regressions for package exports plus adapter-safe, read-only wrapper behavior across project/task/phase/memory rows.
 - feat(services): add `get_task_context_for_current_project` wrapper that resolves cwd-bound projects and project-scoped task refs before building task context, preserving structured `TASK_NOT_FOUND`/`TASK_AMBIGUOUS` errors with full context-service coverage.
 - feat(services): add read-only `context_service` project wrappers for startup/snapshot/handoff context that resolve cwd-bound projects via `project_service` and preserve structured `PROJECT_NOT_BOUND` failures with dedicated service coverage.

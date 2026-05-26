@@ -1,6 +1,6 @@
-"""Regression tests for the packaged CLI entrypoint."""
+"""Regression tests for packaged console entrypoints and install metadata."""
 
-from importlib.metadata import entry_points
+from importlib.metadata import distribution, entry_points
 
 from click.testing import CliRunner
 
@@ -14,6 +14,27 @@ def test_console_entrypoint_resolves_to_package_main():
 
     assert engram_entrypoint.value == "engram.cli:main"
     assert engram_entrypoint.load() is main
+
+
+def test_mcp_console_entrypoint_declared():
+    """The MCP adapter entrypoint should be declared in package metadata."""
+    scripts = entry_points(group="console_scripts")
+    mcp_entrypoint = next(ep for ep in scripts if ep.name == "engram-mcp")
+
+    assert mcp_entrypoint.value == "engram.mcp.server:main"
+
+
+def test_mcp_optional_extra_declared():
+    """The package should publish a bounded MCP optional dependency extra."""
+    requires = distribution("engram").requires or []
+
+    assert any(
+        requirement.startswith("mcp")
+        and ">=1.0" in requirement
+        and "<2" in requirement
+        and 'extra == "mcp"' in requirement
+        for requirement in requires
+    )
 
 
 def test_console_entrypoint_command_surface_loads():
