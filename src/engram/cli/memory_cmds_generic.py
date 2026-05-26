@@ -114,7 +114,8 @@ def memory_list() -> None:
 @click.option("--tag", "tags", multiple=True, help="Filter by tag (can be used multiple times)")
 def memory_search(query: str, type: str | None, tags: tuple[str, ...]) -> None:
     """Search memories using FTS5."""
-    results = Memory.search(query, type_filter=type, tag_filters=tags)
+    project = cli_root.get_current_project()
+    results = Memory.search(query, type_filter=type, tag_filters=tags, project_id=project.id)
     if not results:
         cli_root.console.print("No results found.")
         return

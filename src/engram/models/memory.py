@@ -316,6 +316,7 @@ class Memory:
         query: str | None,
         type_filter: str | None = None,
         tag_filters: list[str] | None = None,
+        project_id: str | None = None,
     ) -> list["Memory"]:
         """Search memories using a normalized FTS-safe query string."""
         conn = get_db_connection()
@@ -327,6 +328,10 @@ class Memory:
             WHERE memories_fts MATCH ?
         """
         params = [safe_query]
+
+        if project_id:
+            sql += " AND m.project_id = ?"
+            params.append(project_id)
 
         if type_filter:
             sql += " AND m.type = ?"

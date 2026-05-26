@@ -11,6 +11,7 @@ from engram.db_helpers.migrations import (
 )
 from engram.db_helpers.schema import (
     create_audit_log_table,
+    create_indexes,
     create_memories_fts_and_triggers,
     create_memories_table,
     create_phases_table,
@@ -40,6 +41,7 @@ def init_db(db_path=None):
     create_memories_table(cursor)
     apply_memories_column_migrations(cursor)
     create_audit_log_table(cursor)
+    create_indexes(cursor)
 
     try:
         create_memories_fts_and_triggers(cursor)

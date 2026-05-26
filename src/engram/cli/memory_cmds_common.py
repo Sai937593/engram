@@ -337,7 +337,8 @@ def list_typed_memories(memory_type: str) -> None:
 
 def search_typed_memories(memory_type: str, query: str) -> None:
     """Search typed memories with full-text search."""
-    results = Memory.search(query, type_filter=memory_type)
+    project = cli_root.get_current_project()
+    results = Memory.search(query, type_filter=memory_type, project_id=project.id)
     if not results:
         cli_root.console.print(f"No {memory_type}s found matching '{query}'.")
         return
