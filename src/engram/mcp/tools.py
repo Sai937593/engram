@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from engram.services.project_service import resolve_current_project
-from engram.services.task_service import list_tasks
+from engram.services.task_service import get_task, list_tasks
 
 
 def register_tools(server: Any) -> None:
@@ -28,4 +28,14 @@ def register_tools(server: Any) -> None:
         return {
             "ok": True,
             "tasks": tasks,
+        }
+
+    @server.tool()
+    def engram_task_get(task_ref: str) -> dict[str, Any]:
+        """Get a task by ID or task reference for the currently bound engram project."""
+        project = resolve_current_project()
+        task = get_task(project_id=str(project["id"]), task_ref=task_ref)
+        return {
+            "ok": True,
+            "task": task,
         }

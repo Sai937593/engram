@@ -42,6 +42,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_project_current"].__name__ == "engram_project_current"
     assert "engram_task_list" in server.tools
     assert server.tools["engram_task_list"].__name__ == "engram_task_list"
+    assert "engram_task_get" in server.tools
+    assert server.tools["engram_task_get"].__name__ == "engram_task_get"
 
 
 def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
@@ -232,3 +234,82 @@ def test_mcp_tool_task_list_raises_project_not_bound(tmp_db, monkeypatch) -> Non
         handler()
 
     assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_mcp_tool_task_get_returns_task(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_get returns serialized task details for a bound repo."""
+    cwd = os.path.abspath("repo/bound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-tasks-get",
+        name="MCP Task Get Project",
+        summary="Service tool tasks get summary",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(
+        project_id=project.id,
+        id="phase-task-get",
+        title="Task Phase",
+        status="active",
+    )
+    Task.create(
+        project_id=project.id,
+        id="task-get-1",
+        title="Task to Get",
+        phase=phase.title,
+        phase_id=phase.id,
+        status="todo",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_task_get"]
+
+    res = handler(task_ref="task-get-1")
+    assert res["ok"] is True
+    assert res["task"]["id"] == "task-get-1"
+    assert res["task"]["title"] == "Task to Get"
+
+
+def test_mcp_tool_task_get_raises_project_not_bound(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_get raises PROJECT_NOT_BOUND for unbound cwd."""
+    cwd = os.path.abspath("repo/unbound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_task_get"]
+
+    with pytest.raises(EngramServiceError) as raised:
+        handler(task_ref="task-1")
+
+    assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_mcp_tool_task_get_raises_task_not_found(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_get raises TASK_NOT_FOUND when task does not exist."""
+    cwd = os.path.abspath("repo/bound-mcp-tool")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-tasks-get-missing",
+        name="MCP Task Get Project Missing",
+        summary="Service tool tasks get missing summary",
+        repo_paths=[cwd],
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_task_get"]
+
+    with pytest.raises(EngramServiceError) as raised:
+        handler(task_ref="missing-task")
+
+    assert raised.value.code == "TASK_NOT_FOUND"
