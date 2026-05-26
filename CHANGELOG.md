@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(services): implement workflow state transition services `start_phase`, `complete_phase`, `start_task`, and `complete_task` with robust input validations, dependency/unfinished task constraints, and full test coverage.
 - feat(mcp): implement safe write MCP tool `engram_memory_create` wired to the `create_memory` service API with input validations, error handling, and dedicated test coverage.
 - feat(mcp): implement safe write MCP tools `engram_task_create`, `engram_task_update`, and `engram_task_note_append` with input validations, graceful service error handling, and dedicated test coverage.
 - feat(services): add `create_memory` service API with input validations (type, scope, level), ValidationError handling, and Memory.create wiring.

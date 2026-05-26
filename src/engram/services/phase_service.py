@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from engram.models.phase import Phase
-from engram.services.errors import EngramServiceError, JsonValue
+from engram.services.errors import EngramServiceError, JsonValue, ValidationError
 from engram.services.serializers import phase_to_dict
 
 VALID_PHASE_STATUSES = {"planned", "active", "done", "blocked", "cancelled", "all"}
@@ -49,3 +49,90 @@ def get_active_phase(project_id: str) -> dict[str, JsonValue] | None:
     if active_phase is None:
         return None
     return phase_to_dict(active_phase)
+
+
+def resolve_phase_ref(project_id: str, phase_ref: str) -> Phase:
+    """Resolve a phase reference (ID or title) to a Phase model instance within the project."""
+    candidate = phase_ref.strip()
+    if not candidate:
+        raise ValidationError(
+            code="INVALID_PHASE_REFERENCE",
+            message="Phase reference cannot be empty.",
+            details={"phase_ref": phase_ref},
+        )
+
+    # Try ID lookup first
+    phase = Phase.get(candidate)
+    if phase and phase.project_id == project_id:
+        return phase
+
+    # Try title matching
+    normalized_candidate = " ".join(candidate.split()).casefold()
+    matching_phases = [
+        project_phase
+        for project_phase in Phase.list_by_project(project_id)
+        if " ".join(project_phase.title.split()).casefold() == normalized_candidate
+    ]
+
+    if len(matching_phases) == 1:
+        return matching_phases[0]
+    elif len(matching_phases) > 1:
+        matches = ", ".join(f"{match.id} ({match.title})" for match in matching_phases)
+        raise ValidationError(
+            code="AMBIGUOUS_PHASE",
+            message=f"Ambiguous phase '{candidate}'. Multiple phases match this title: {matches}",
+            details={
+                "phase_ref": candidate,
+                "matches": [m.id for m in matching_phases],
+            },
+        )
+    else:
+        raise ValidationError(
+            code="PHASE_NOT_FOUND",
+            message=f"Phase '{candidate}' not found in this project.",
+            details={"project_id": project_id, "phase_ref": candidate},
+        )
+
+
+def start_phase(project_id: str, phase_ref: str) -> dict[str, JsonValue]:
+    """Start a phase and return its updated JSON-safe DTO, demoting other active phases."""
+    phase = resolve_phase_ref(project_id, phase_ref)
+    refreshed, _ = Phase.start(phase.id)
+    return phase_to_dict(refreshed)
+
+
+def complete_phase(project_id: str, phase_ref: str) -> dict[str, JsonValue]:
+    """Complete a phase, validating that it has no unfinished tasks."""
+    phase = resolve_phase_ref(project_id, phase_ref)
+
+    from engram.models.task import Task
+
+    tasks = Task.list_by_project(project_id)
+    unfinished = []
+    normalized_phase_title = " ".join(phase.title.split()).casefold()
+
+    for t in tasks:
+        in_phase = False
+        if t.phase_id == phase.id:
+            in_phase = True
+        elif (
+            not t.phase_id
+            and " ".join((t.phase or "").split()).casefold() == normalized_phase_title
+        ):
+            in_phase = True
+
+        if in_phase and t.status not in ("done", "cancelled"):
+            unfinished.append(t)
+
+    if unfinished:
+        raise ValidationError(
+            code="UNFINISHED_TASKS",
+            message=f"Cannot complete phase '{phase.title}' because it has unfinished tasks.",
+            details={
+                "phase_id": phase.id,
+                "unfinished_tasks": sorted([t.id for t in unfinished]),
+            },
+        )
+
+    phase.update(status="done")
+    return phase_to_dict(phase)
