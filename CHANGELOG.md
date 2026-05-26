@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(mcp): wrap read-only MCP tool handlers in EngramServiceError handling blocks to catch service exceptions and return ok=False error envelopes.
 - feat(mcp): implement MCP workflow tools `engram_phase_start`, `engram_phase_complete`, `engram_task_start`, and `engram_task_done` delegating to state transition services with comprehensive test coverage.
 - feat(services): implement workflow state transition services `start_phase`, `complete_phase`, `start_task`, and `complete_task` with robust input validations, dependency/unfinished task constraints, and full test coverage.
 - feat(mcp): implement safe write MCP tool `engram_memory_create` wired to the `create_memory` service API with input validations, error handling, and dedicated test coverage.

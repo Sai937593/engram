@@ -5,14 +5,11 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import pytest
-
 from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task
-from engram.services.errors import EngramServiceError
 
 
 class MockServer:
@@ -100,7 +97,7 @@ def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
 
 
 def test_mcp_tool_raises_project_not_bound_for_unbound_repo(tmp_db, monkeypatch) -> None:
-    """Verify engram_project_current raises PROJECT_NOT_BOUND for unbound cwd."""
+    """Verify engram_project_current returns PROJECT_NOT_BOUND for unbound cwd."""
     cwd = os.path.abspath("repo/unbound-mcp-tool")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -110,10 +107,9 @@ def test_mcp_tool_raises_project_not_bound_for_unbound_repo(tmp_db, monkeypatch)
     register_tools(server)
     handler = server.tools["engram_project_current"]
 
-    with pytest.raises(EngramServiceError) as raised:
-        handler()
-
-    assert raised.value.code == "PROJECT_NOT_BOUND"
+    result = handler()
+    assert result["ok"] is False
+    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
@@ -178,7 +174,7 @@ def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
 
 
 def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) -> None:
-    """Verify engram_memory_search raises PROJECT_NOT_BOUND for unbound cwd."""
+    """Verify engram_memory_search returns PROJECT_NOT_BOUND for unbound cwd."""
     cwd = os.path.abspath("repo/unbound-mcp-tool")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -188,10 +184,9 @@ def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) ->
     register_tools(server)
     handler = server.tools["engram_memory_search"]
 
-    with pytest.raises(EngramServiceError) as raised:
-        handler()
-
-    assert raised.value.code == "PROJECT_NOT_BOUND"
+    result = handler()
+    assert result["ok"] is False
+    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_is_read_only_and_does_not_mutate_db(tmp_db, monkeypatch) -> None:
@@ -320,7 +315,7 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
 
 
 def test_mcp_tool_task_list_raises_project_not_bound(tmp_db, monkeypatch) -> None:
-    """Verify engram_task_list raises PROJECT_NOT_BOUND for unbound cwd."""
+    """Verify engram_task_list returns PROJECT_NOT_BOUND for unbound cwd."""
     cwd = os.path.abspath("repo/unbound-mcp-tool")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -330,10 +325,9 @@ def test_mcp_tool_task_list_raises_project_not_bound(tmp_db, monkeypatch) -> Non
     register_tools(server)
     handler = server.tools["engram_task_list"]
 
-    with pytest.raises(EngramServiceError) as raised:
-        handler()
-
-    assert raised.value.code == "PROJECT_NOT_BOUND"
+    result = handler()
+    assert result["ok"] is False
+    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_task_get_returns_task(tmp_db, monkeypatch) -> None:
@@ -375,7 +369,7 @@ def test_mcp_tool_task_get_returns_task(tmp_db, monkeypatch) -> None:
 
 
 def test_mcp_tool_task_get_raises_project_not_bound(tmp_db, monkeypatch) -> None:
-    """Verify engram_task_get raises PROJECT_NOT_BOUND for unbound cwd."""
+    """Verify engram_task_get returns PROJECT_NOT_BOUND for unbound cwd."""
     cwd = os.path.abspath("repo/unbound-mcp-tool")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -385,14 +379,13 @@ def test_mcp_tool_task_get_raises_project_not_bound(tmp_db, monkeypatch) -> None
     register_tools(server)
     handler = server.tools["engram_task_get"]
 
-    with pytest.raises(EngramServiceError) as raised:
-        handler(task_ref="task-1")
-
-    assert raised.value.code == "PROJECT_NOT_BOUND"
+    result = handler(task_ref="task-1")
+    assert result["ok"] is False
+    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_task_get_raises_task_not_found(tmp_db, monkeypatch) -> None:
-    """Verify engram_task_get raises TASK_NOT_FOUND when task does not exist."""
+    """Verify engram_task_get returns TASK_NOT_FOUND when task does not exist."""
     cwd = os.path.abspath("repo/bound-mcp-tool")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -409,10 +402,9 @@ def test_mcp_tool_task_get_raises_task_not_found(tmp_db, monkeypatch) -> None:
     register_tools(server)
     handler = server.tools["engram_task_get"]
 
-    with pytest.raises(EngramServiceError) as raised:
-        handler(task_ref="missing-task")
-
-    assert raised.value.code == "TASK_NOT_FOUND"
+    result = handler(task_ref="missing-task")
+    assert result["ok"] is False
+    assert result["error"]["code"] == "TASK_NOT_FOUND"
 
 
 def test_mcp_tool_task_next_returns_next_task(tmp_db, monkeypatch) -> None:
@@ -461,7 +453,7 @@ def test_mcp_tool_task_next_returns_next_task(tmp_db, monkeypatch) -> None:
 
 
 def test_mcp_tool_task_next_raises_project_not_bound(tmp_db, monkeypatch) -> None:
-    """Verify engram_task_next raises PROJECT_NOT_BOUND for unbound cwd."""
+    """Verify engram_task_next returns PROJECT_NOT_BOUND for unbound cwd."""
     cwd = os.path.abspath("repo/unbound-mcp-tool")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -471,10 +463,9 @@ def test_mcp_tool_task_next_raises_project_not_bound(tmp_db, monkeypatch) -> Non
     register_tools(server)
     handler = server.tools["engram_task_next"]
 
-    with pytest.raises(EngramServiceError) as raised:
-        handler()
-
-    assert raised.value.code == "PROJECT_NOT_BOUND"
+    result = handler()
+    assert result["ok"] is False
+    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
@@ -521,7 +512,7 @@ def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
 
 
 def test_mcp_tool_phase_list_raises_project_not_bound(tmp_db, monkeypatch) -> None:
-    """Verify engram_phase_list raises PROJECT_NOT_BOUND for unbound cwd."""
+    """Verify engram_phase_list returns PROJECT_NOT_BOUND for unbound cwd."""
     cwd = os.path.abspath("repo/unbound-mcp-tool")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -531,10 +522,9 @@ def test_mcp_tool_phase_list_raises_project_not_bound(tmp_db, monkeypatch) -> No
     register_tools(server)
     handler = server.tools["engram_phase_list"]
 
-    with pytest.raises(EngramServiceError) as raised:
-        handler()
-
-    assert raised.value.code == "PROJECT_NOT_BOUND"
+    result = handler()
+    assert result["ok"] is False
+    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_task_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
