@@ -10,6 +10,9 @@ from pathlib import Path
 import pytest
 
 import engram.services.context_service as context_service
+from engram.db import get_db_connection
+from engram.models.memory import Memory
+from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task
 from engram.services.context_service import (
@@ -19,6 +22,26 @@ from engram.services.context_service import (
     get_task_context_for_current_project,
 )
 from engram.services.errors import EngramServiceError
+
+
+def _table_rows(table_name: str) -> list[dict[str, object]]:
+    conn = get_db_connection()
+    rows = conn.execute(f"SELECT * FROM {table_name} ORDER BY rowid ASC").fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def test_services_package_exports_context_wrappers():
+    services = importlib.import_module("engram.services")
+    expected_exports = {
+        "get_startup_context_for_current_project",
+        "get_snapshot_context_for_current_project",
+        "get_handoff_context_for_current_project",
+        "get_task_context_for_current_project",
+    }
+
+    for export_name in expected_exports:
+        assert hasattr(services, export_name)
 
 
 @pytest.mark.parametrize(
@@ -205,3 +228,75 @@ def test_context_service_module_is_adapter_safe(tmp_db):
         elif isinstance(node, ast.ImportFrom):
             imported_module = node.module or ""
             assert not imported_module.startswith(banned_prefixes)
+
+
+def test_context_service_wrappers_are_read_only_on_project_task_phase_and_memory_rows(
+    tmp_db, monkeypatch
+):
+    cwd = os.path.abspath("repo/read-only")
+    project = Project.create(
+        id="proj-read-only",
+        name="Project read only",
+        summary="Context wrapper read-only coverage",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(
+        project_id=project.id, id="phase1001", title="Active phase", status="active"
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="task1001",
+        title="Read-only target task",
+        phase=phase.title,
+        phase_id=phase.id,
+    )
+    Memory.create(
+        project_id=project.id,
+        id="memo1001",
+        type="note",
+        title="Read-only memory",
+        content="Ensure wrappers do not write.",
+        tags=["read-only"],
+        level="L3",
+    )
+    before_rows = {
+        "projects": _table_rows("projects"),
+        "tasks": _table_rows("tasks"),
+        "phases": _table_rows("phases"),
+        "memories": _table_rows("memories"),
+    }
+
+    monkeypatch.setattr(
+        context_service.context,
+        "get_startup_context",
+        lambda project_id: f"startup:{project_id}",
+    )
+    monkeypatch.setattr(
+        context_service.context,
+        "get_snapshot_context",
+        lambda project_id: f"snapshot:{project_id}",
+    )
+    monkeypatch.setattr(
+        context_service.context,
+        "get_handoff_context",
+        lambda project_id: f"handoff:{project_id}",
+    )
+    monkeypatch.setattr(
+        context_service.context,
+        "get_task_context",
+        lambda task_id, hard_constraints_only=False: f"task:{task_id}",
+    )
+
+    assert get_startup_context_for_current_project(cwd=cwd) == f"startup:{project.id}"
+    assert get_snapshot_context_for_current_project(cwd=cwd) == f"snapshot:{project.id}"
+    assert get_handoff_context_for_current_project(cwd=cwd) == f"handoff:{project.id}"
+    assert get_task_context_for_current_project(task_ref=task.id, cwd=cwd) == f"task:{task.id}"
+
+    after_rows = {
+        "projects": _table_rows("projects"),
+        "tasks": _table_rows("tasks"),
+        "phases": _table_rows("phases"),
+        "memories": _table_rows("memories"),
+    }
+
+    assert after_rows == before_rows

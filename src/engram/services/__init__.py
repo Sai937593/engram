@@ -4,6 +4,7 @@ from engram.services.context_service import (
     get_handoff_context_for_current_project,
     get_snapshot_context_for_current_project,
     get_startup_context_for_current_project,
+    get_task_context_for_current_project,
 )
 from engram.services.errors import EngramServiceError
 from engram.services.memory_service import search_memories
@@ -18,6 +19,7 @@ __all__ = [
     "get_startup_context_for_current_project",
     "get_snapshot_context_for_current_project",
     "get_handoff_context_for_current_project",
+    "get_task_context_for_current_project",
     "search_memories",
     "resolve_task_ref",
     "list_tasks",
