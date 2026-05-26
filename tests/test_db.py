@@ -53,12 +53,18 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     monkeypatch.setattr("engram.db.create_projects_table", mock_create_projects_table)
     monkeypatch.setattr("engram.db.create_tasks_table", mock_create_tasks_table)
     monkeypatch.setattr("engram.db.create_phases_table", mock_create_phases_table)
-    monkeypatch.setattr("engram.db.apply_tasks_column_migrations", mock_apply_tasks_column_migrations)
+    monkeypatch.setattr(
+        "engram.db.apply_tasks_column_migrations", mock_apply_tasks_column_migrations
+    )
     monkeypatch.setattr("engram.db.create_memories_table", mock_create_memories_table)
-    monkeypatch.setattr("engram.db.apply_memories_column_migrations", mock_apply_memories_column_migrations)
+    monkeypatch.setattr(
+        "engram.db.apply_memories_column_migrations", mock_apply_memories_column_migrations
+    )
     monkeypatch.setattr("engram.db.create_audit_log_table", mock_create_audit_log_table)
     monkeypatch.setattr("engram.db.create_indexes", mock_create_indexes)
-    monkeypatch.setattr("engram.db.create_memories_fts_and_triggers", mock_create_memories_fts_and_triggers)
+    monkeypatch.setattr(
+        "engram.db.create_memories_fts_and_triggers", mock_create_memories_fts_and_triggers
+    )
     monkeypatch.setattr("engram.db.apply_task_status_migrations", mock_apply_task_status_migrations)
     monkeypatch.setattr("engram.db.backfill_legacy_phase_ids", mock_backfill_legacy_phase_ids)
 
