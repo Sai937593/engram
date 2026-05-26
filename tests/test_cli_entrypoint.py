@@ -22,6 +22,7 @@ def test_mcp_console_entrypoint_declared():
     mcp_entrypoint = next(ep for ep in scripts if ep.name == "engram-mcp")
 
     assert mcp_entrypoint.value == "engram.mcp.server:main"
+    assert callable(mcp_entrypoint.load())
 
 
 def test_mcp_optional_extra_declared():
