@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- feat(mcp): implement project-level read-only MCP resources for startup, snapshot, and handoff in `engram.mcp.resources` wired to context_service wrappers with robust unit and database read-only tests.
 - feat(mcp): define FastMCP resource registration contract and placeholder handlers in `engram.mcp.resources` with registration call shape and package boundary tests.
 - feat(mcp): add `engram.mcp` package skeleton with adapter-safe bootstrap, optional SDK error messaging, STDIO startup wiring, and MCP boundary/startup regression tests.
 - feat(packaging): add optional `mcp>=1.0,<2` extra plus `engram-mcp` console script metadata with entrypoint/extra regression coverage.

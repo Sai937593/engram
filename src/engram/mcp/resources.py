@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from engram.services.context_service import (
+    get_handoff_context_for_current_project,
+    get_snapshot_context_for_current_project,
+    get_startup_context_for_current_project,
+)
+
 
 def register_resources(server: Any) -> None:
     """Register MCP resources."""
@@ -11,7 +17,7 @@ def register_resources(server: Any) -> None:
     @server.resource("engram://startup")
     def get_startup() -> str:
         """Get engram startup context."""
-        return "placeholder"
+        return get_startup_context_for_current_project()
 
     @server.resource("engram://task/{task_id}/context")
     def get_task_context(task_id: str) -> str:
@@ -21,9 +27,9 @@ def register_resources(server: Any) -> None:
     @server.resource("engram://snapshot")
     def get_snapshot() -> str:
         """Get engram snapshot context."""
-        return "placeholder"
+        return get_snapshot_context_for_current_project()
 
     @server.resource("engram://handoff")
     def get_handoff() -> str:
         """Get engram handoff context."""
-        return "placeholder"
+        return get_handoff_context_for_current_project()
