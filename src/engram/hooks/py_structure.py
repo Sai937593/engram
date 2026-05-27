@@ -96,16 +96,16 @@ def run_check(repo_root: Path | None = None) -> int:
         files = get_staged_python_files(repo_root=repo_root)
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.strip() if exc.stderr else str(exc)
-        print(f"py-structure: failed to inspect staged files: {stderr}", file=sys.stderr)
+        print(f"py-structure: failed to inspect staged files: {stderr}", file=sys.stderr)  # noqa: T201
         return 1
 
     violations = check_files(files, repo_root=repo_root)
     if not violations:
         return 0
 
-    print("py-structure violations found:")
+    print("py-structure violations found:")  # noqa: T201
     for violation in violations:
-        print(violation)
+        print(violation)  # noqa: T201
     return 1
 
 
