@@ -59,3 +59,18 @@ def memory(project):
         tags=["storage"],
         level="L2",
     )
+
+
+@pytest.fixture
+def mock_startup_context(monkeypatch):
+    """Fixture to bypass startup context builder and memory retrieval."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.setattr(
+        "engram.services.workflow_service.orchestrate_startup_task_memory_retrieval",
+        lambda **kwargs: MagicMock(),
+    )
+    monkeypatch.setattr(
+        "engram.services.workflow_service.build_startup_context",
+        lambda **kwargs: "mock startup context string",
+    )

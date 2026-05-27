@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
-
-import pytest
 
 
 class MockCompletedProcess:
@@ -54,16 +51,3 @@ class GitMock:
         if len(args) >= 2 and args[1] == "push":
             return MockCompletedProcess(self.push_returncode, stderr=self.push_stderr)
         return MockCompletedProcess(0)
-
-
-@pytest.fixture
-def mock_startup_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fixture to bypass startup context builder and memory retrieval."""
-    monkeypatch.setattr(
-        "engram.services.workflow_service.orchestrate_startup_task_memory_retrieval",
-        lambda **kwargs: MagicMock(),
-    )
-    monkeypatch.setattr(
-        "engram.services.workflow_service.build_startup_context",
-        lambda **kwargs: "mock startup context string",
-    )
