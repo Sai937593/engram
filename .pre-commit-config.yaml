@@ -19,9 +19,9 @@ repos:
 
   - repo: local
     hooks:
-      - id: max-lines-new-py
-        name: max-lines-new-py
-        entry: uv run python -m engram.hooks.max_lines_new_py --max-lines 200
+      - id: py-structure
+        name: py-structure
+        entry: uv run python -m engram.hooks.py_structure
         language: system
         pass_filenames: false
         always_run: true
