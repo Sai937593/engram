@@ -12,6 +12,7 @@ from engram.services.phase_service import get_active_phase, list_phases
 from engram.services.project_service import resolve_current_project
 from engram.services.serializers import memory_to_dict, phase_to_dict, project_to_dict, task_to_dict
 from engram.services.task_service import get_task, list_tasks, resolve_task_ref
+from engram.services.workflow_service import finish_workflow, start_workflow
 
 __all__ = [
     "EngramServiceError",
@@ -30,4 +31,6 @@ __all__ = [
     "task_to_dict",
     "memory_to_dict",
     "phase_to_dict",
+    "start_workflow",
+    "finish_workflow",
 ]
