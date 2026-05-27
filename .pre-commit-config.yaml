@@ -1,33 +1,51 @@
 repos:
+  # ── Standard hygiene ─────────────────────────────────────────
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
       - id: check-toml
       - id: check-yaml
       - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
       - id: debug-statements
-      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master]
 
+  # ── Lint + format ─────────────────────────────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.9
+    rev: v0.11.9
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
+  # ── Secrets scanning ──────────────────────────────────────────
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+
+  # ── Structural Python checks ──────────────────────────────────
   - repo: local
     hooks:
-      - id: max-lines-new-py
-        name: max-lines-new-py
-        entry: uv run python -m engram.hooks.max_lines_new_py --max-lines 200
+      - id: py-structure
+        name: Python file structure
+        entry: uv run python -m engram.hooks.py_structure
         language: system
+        types: [python]
         pass_filenames: false
-        always_run: true
-      - id: pytest
-        name: pytest
-        entry: uv run pytest tests/ -v --tb=short
+        stages: [pre-commit]
+
+      - id: pytest-fast
+        name: pytest (fast unit tests)
+        entry: uv run pytest tests/ -m "not slow" -x --tb=short -q
         language: system
         pass_filenames: false
         stages: [pre-push]

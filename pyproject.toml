@@ -20,6 +20,7 @@ dev = [
     "ruff>=0.4.0",
     "pre-commit>=3.5,<4",
     "httpx>=0.28,<1",
+    "detect-secrets>=1.5,<2",
 ]
 mcp = [
     "mcp>=1.0,<2",
@@ -51,6 +52,7 @@ select = [
     "I",   # isort
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
+    "T201",  # print statement detection
 ]
 ignore = ["E501"]  # line too long — handled by formatter
 
@@ -62,3 +64,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = ["slow: marks tests as slow (deselect with '-m not slow')"]

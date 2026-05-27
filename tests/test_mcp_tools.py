@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any
 
@@ -907,8 +908,8 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     start_handler = server.tools["engram_workflow_start"]
     finish_handler = server.tools["engram_workflow_finish"]
 
-    # 1. Happy path: Start
-    res_start = start_handler()
+    # 1. Happy path: Start (handler is now async)
+    res_start = asyncio.run(start_handler())
     assert res_start["ok"] is True
     assert res_start["task"] == {"id": "t1", "title": "Test Task"}
     assert res_start["branch"] == "feat/test"
@@ -916,8 +917,8 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_start["context"] == "Context payload"
     assert start_called_args == [("proj-tool-workflow", cwd)]
 
-    # 2. Happy path: Finish
-    res_finish = finish_handler(commit_type="feat")
+    # 2. Happy path: Finish (handler is now async)
+    res_finish = asyncio.run(finish_handler(commit_type="feat"))
     assert res_finish["ok"] is True
     assert res_finish["task"] == {"id": "t1", "title": "Test Task", "status": "done"}
     assert res_finish["commit_msg"] == "feat: Test Task"
@@ -933,7 +934,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
     monkeypatch.setattr("engram.mcp.tools.start_workflow", raising_start)
 
-    res_err = start_handler()
+    res_err = asyncio.run(start_handler())
     assert res_err["ok"] is False
     assert res_err["error"]["code"] == "TEST_ERROR"
     assert res_err["error"]["message"] == "Mock error message"
@@ -943,6 +944,6 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         "engram.mcp.tools.resolve_current_project",
         lambda: {"id": "proj-tool-workflow", "repo_paths": []},
     )
-    res_no_repo = start_handler()
+    res_no_repo = asyncio.run(start_handler())
     assert res_no_repo["ok"] is False
     assert res_no_repo["error"]["code"] == "PROJECT_NO_REPOS"

@@ -36,7 +36,7 @@ CONVENTIONAL_COMMIT_TYPES: set[str] = {
 
 
 def _run(args: list[str], cwd: str) -> str:
-    res = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+    res = subprocess.run(args, capture_output=True, text=True, cwd=cwd, stdin=subprocess.DEVNULL)
     if res.returncode != 0:
         raise EngramServiceError(
             code="GIT_OPERATION_FAILED",
@@ -85,6 +85,8 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
 
     show = subprocess.run(
         ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{target_branch}"],
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
         cwd=repo_path,
     )
     cmd = (
@@ -146,7 +148,11 @@ def finish_workflow(
     commit_msg = f"{resolved}({slugify(phase_title) or 'misc'}): {task.title} [{task.id}]"
 
     commit_res = subprocess.run(
-        ["git", "commit", "-m", commit_msg], capture_output=True, text=True, cwd=repo_path
+        ["git", "commit", "-m", commit_msg],
+        capture_output=True,
+        text=True,
+        cwd=repo_path,
+        stdin=subprocess.DEVNULL,
     )
     if commit_res.returncode != 0:
         out = (commit_res.stdout + commit_res.stderr).lower()
