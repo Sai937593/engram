@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- feat: add `engram_workflow_start` and `engram_workflow_finish` MCP tools
+- feat(mcp): Add `engram_workflow_start` and `engram_workflow_finish` MCP tools inside tools.py with comprehensive unit test coverage.
+- feat(services): Add comprehensive unit tests for `workflow_service.py` covering happy/error workflow paths, git mocks, commit type resolutions, and phase complete detections.
+- feat(services): Implement workflow service functions `start_workflow` and `finish_workflow` in `workflow_service.py` to support agent git and database workflows through MCP.
 - fix(mcp): wrap read-only MCP tool handlers in EngramServiceError handling blocks to catch service exceptions and return ok=False error envelopes.
 - feat(mcp): implement MCP workflow tools `engram_phase_start`, `engram_phase_complete`, `engram_task_start`, and `engram_task_done` delegating to state transition services with comprehensive test coverage.
 - feat(services): implement workflow state transition services `start_phase`, `complete_phase`, `start_task`, and `complete_task` with robust input validations, dependency/unfinished task constraints, and full test coverage.

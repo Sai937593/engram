@@ -63,6 +63,10 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_start"].__name__ == "engram_task_start"
     assert "engram_task_done" in server.tools
     assert server.tools["engram_task_done"].__name__ == "engram_task_done"
+    assert "engram_workflow_start" in server.tools
+    assert server.tools["engram_workflow_start"].__name__ == "engram_workflow_start"
+    assert "engram_workflow_finish" in server.tools
+    assert server.tools["engram_workflow_finish"].__name__ == "engram_workflow_finish"
 
 
 def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
@@ -851,3 +855,94 @@ def test_mcp_task_done_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     res_err = handler(task_ref="missing-task")
     assert res_err["ok"] is False
     assert res_err["error"]["code"] == "TASK_NOT_FOUND"
+
+
+def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify that engram_workflow_start and engram_workflow_finish operate correctly under mock conditions."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-workflow")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-workflow",
+        name="MCP Tool Workflow Project",
+        summary="Service tool workflow summary",
+        repo_paths=[cwd],
+    )
+
+    # Setup mock returns
+    mock_start_res = {
+        "task": {"id": "t1", "title": "Test Task"},
+        "branch": "feat/test",
+        "is_resuming": False,
+        "context": "Context payload",
+    }
+
+    mock_finish_res = {
+        "task": {"id": "t1", "title": "Test Task", "status": "done"},
+        "commit_msg": "feat: Test Task",
+        "push_output": "Pushed successfully.",
+        "phase_complete": False,
+    }
+
+    start_called_args = []
+
+    def dummy_start_workflow(project_id: str, repo_path: str):
+        start_called_args.append((project_id, repo_path))
+        return mock_start_res
+
+    finish_called_args = []
+
+    def dummy_finish_workflow(project_id: str, repo_path: str, commit_type: str | None = None):
+        finish_called_args.append((project_id, repo_path, commit_type))
+        return mock_finish_res
+
+    monkeypatch.setattr("engram.mcp.tools.start_workflow", dummy_start_workflow)
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", dummy_finish_workflow)
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    start_handler = server.tools["engram_workflow_start"]
+    finish_handler = server.tools["engram_workflow_finish"]
+
+    # 1. Happy path: Start
+    res_start = start_handler()
+    assert res_start["ok"] is True
+    assert res_start["task"] == {"id": "t1", "title": "Test Task"}
+    assert res_start["branch"] == "feat/test"
+    assert res_start["is_resuming"] is False
+    assert res_start["context"] == "Context payload"
+    assert start_called_args == [("proj-tool-workflow", cwd)]
+
+    # 2. Happy path: Finish
+    res_finish = finish_handler(commit_type="feat")
+    assert res_finish["ok"] is True
+    assert res_finish["task"] == {"id": "t1", "title": "Test Task", "status": "done"}
+    assert res_finish["commit_msg"] == "feat: Test Task"
+    assert res_finish["push_output"] == "Pushed successfully."
+    assert res_finish["phase_complete"] is False
+    assert finish_called_args == [("proj-tool-workflow", cwd, "feat")]
+
+    # 3. Error path: start_workflow raising EngramServiceError
+    from engram.services.errors import EngramServiceError
+
+    def raising_start(project_id, repo_path):
+        raise EngramServiceError(code="TEST_ERROR", message="Mock error message")
+
+    monkeypatch.setattr("engram.mcp.tools.start_workflow", raising_start)
+
+    res_err = start_handler()
+    assert res_err["ok"] is False
+    assert res_err["error"]["code"] == "TEST_ERROR"
+    assert res_err["error"]["message"] == "Mock error message"
+
+    # 4. Error path: Project bound but has no repo_paths configured
+    monkeypatch.setattr(
+        "engram.mcp.tools.resolve_current_project",
+        lambda: {"id": "proj-tool-workflow", "repo_paths": []},
+    )
+    res_no_repo = start_handler()
+    assert res_no_repo["ok"] is False
+    assert res_no_repo["error"]["code"] == "PROJECT_NO_REPOS"
