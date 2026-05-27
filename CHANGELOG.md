@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- fix(mcp): resolve Windows ProactorEventLoop deadlock in `engram_workflow_start` and `engram_workflow_finish` by converting handlers to async and offloading git subprocess work via `anyio.to_thread.run_sync`; add `stdin=subprocess.DEVNULL` to all git subprocess calls in `workflow_service` to prevent STDIO pipe inheritance
 - feat: add `engram_workflow_start` and `engram_workflow_finish` MCP tools
 - feat(mcp): Add `engram_workflow_start` and `engram_workflow_finish` MCP tools inside tools.py with comprehensive unit test coverage.
 - feat(services): Add comprehensive unit tests for `workflow_service.py` covering happy/error workflow paths, git mocks, commit type resolutions, and phase complete detections.

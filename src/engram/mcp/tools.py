@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import functools
 from typing import Any
+
+import anyio.to_thread
 
 from engram.services.errors import EngramServiceError
 from engram.services.memory_service import create_memory, search_memories
@@ -330,7 +333,7 @@ def register_tools(server: Any) -> None:
             }
 
     @server.tool()
-    def engram_workflow_start() -> dict[str, Any]:
+    async def engram_workflow_start() -> dict[str, Any]:
         """Start or resume the next actionable task in the currently bound engram project.
 
         This tool resolves the project bound to the current directory, checks out or creates the
@@ -346,7 +349,13 @@ def register_tools(server: Any) -> None:
                     code="PROJECT_NO_REPOS",
                     message="No repository paths configured for this project.",
                 )
-            res = start_workflow(project_id=str(project["id"]), repo_path=repo_paths[0])
+            res = await anyio.to_thread.run_sync(
+                functools.partial(
+                    start_workflow,
+                    project_id=str(project["id"]),
+                    repo_path=repo_paths[0],
+                )
+            )
             return {
                 "ok": True,
                 **res,
@@ -358,7 +367,7 @@ def register_tools(server: Any) -> None:
             }
 
     @server.tool()
-    def engram_workflow_finish(commit_type: str | None = None) -> dict[str, Any]:
+    async def engram_workflow_finish(commit_type: str | None = None) -> dict[str, Any]:
         """Finish the active task: commit, push, and mark done.
 
         This tool stages all current changes, creates a conventional Git commit based on the active
@@ -373,10 +382,13 @@ def register_tools(server: Any) -> None:
                     code="PROJECT_NO_REPOS",
                     message="No repository paths configured for this project.",
                 )
-            res = finish_workflow(
-                project_id=str(project["id"]),
-                repo_path=repo_paths[0],
-                commit_type=commit_type,
+            res = await anyio.to_thread.run_sync(
+                functools.partial(
+                    finish_workflow,
+                    project_id=str(project["id"]),
+                    repo_path=repo_paths[0],
+                    commit_type=commit_type,
+                )
             )
             return {
                 "ok": True,
