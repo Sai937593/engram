@@ -52,6 +52,7 @@ select = [
     "I",   # isort
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
+    "T201",  # print statement detection
 ]
 ignore = ["E501"]  # line too long — handled by formatter
 
@@ -63,3 +64,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = ["slow: marks tests as slow (deselect with '-m not slow')"]
