@@ -26,24 +26,34 @@ class EngramServiceError(Exception):
     code: str
     message: str
     details: dict[str, JsonValue]
+    fix: str | None
 
     def __init__(
-        self, *, code: str, message: str, details: Mapping[str, Any] | None = None
+        self,
+        *,
+        code: str,
+        message: str,
+        details: Mapping[str, Any] | None = None,
+        fix: str | None = None,
     ) -> None:
         self.code = str(code)
         self.message = str(message)
         self.details = (
             {str(key): _to_json_value(item) for key, item in details.items()} if details else {}
         )
+        self.fix = fix
         super().__init__(self.message)
 
     def to_dict(self) -> dict[str, object]:
         """Serialize this error into a JSON-safe dictionary."""
-        return {
+        res = {
             "code": self.code,
             "message": self.message,
             "details": dict(self.details),
         }
+        if self.fix is not None:
+            res["fix"] = self.fix
+        return res
 
 
 class ValidationError(EngramServiceError):

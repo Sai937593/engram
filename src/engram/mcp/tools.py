@@ -54,6 +54,32 @@ def _respond(data: dict[str, Any], keep_empty_keys: set[str] | None = None) -> s
     return yaml.safe_dump(pruned_data, sort_keys=False)
 
 
+def _respond_error(exc: EngramServiceError) -> str:
+    """Format an EngramServiceError into a flat YAML error response."""
+    known_fixes = {
+        "DEPENDENCY_UNSATISFIED": "Complete all prerequisite tasks using engram_task_done before starting this task.",
+        "NO_TASK_IN_PROGRESS": "Start a task first using engram_task_start.",
+        "TASK_NOT_FOUND": "List tasks using engram_task_list to find the correct task ID or reference.",
+        "TASK_AMBIGUOUS": "Use the exact 8-character task ID instead of the title. Run engram_task_list to find the task ID.",
+        "DIRTY_WORKING_TREE": "Commit your changes using engram_workflow_finish or stash them before starting a new task.",
+        "INVALID_TASK_STATUS": "Use a valid task status (todo, in-progress, done, blocked, or cancelled) and update using engram_task_update.",
+        "PHASE_COMPLETION_BLOCKED": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
+        "UNFINISHED_TASKS": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
+    }
+
+    fix_val = getattr(exc, "fix", None) or known_fixes.get(exc.code)
+
+    resp_dict: dict[str, Any] = {
+        "ok": False,
+        "error": exc.code,
+        "message": exc.message,
+    }
+    if fix_val:
+        resp_dict["fix"] = fix_val
+
+    return _respond(resp_dict)
+
+
 def slim_task_dict(task: dict[str, Any]) -> dict[str, Any]:
     """Prune a full task dictionary to essential scan fields only."""
     return {
@@ -92,12 +118,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_task_list(status: str | None = None, phase: str | None = None) -> str:
@@ -123,12 +144,7 @@ def register_tools(server: Any) -> None:
                 keep_empty_keys={"tasks"},
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_task_get(task_ref: str) -> str:
@@ -143,12 +159,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_task_next() -> str:
@@ -163,12 +174,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_memory_search(
@@ -194,12 +200,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_phase_list(status: str | None = None) -> str:
@@ -215,12 +216,7 @@ def register_tools(server: Any) -> None:
                 keep_empty_keys={"phases"},
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_task_create(
@@ -272,12 +268,7 @@ def register_tools(server: Any) -> None:
 
             return _respond(resp)
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_task_update(
@@ -324,12 +315,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_task_note_append(
@@ -351,12 +337,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_memory_create(
@@ -392,12 +373,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_phase_start(phase_ref: str) -> str:
@@ -415,12 +391,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_phase_complete(phase_ref: str) -> str:
@@ -438,12 +409,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_task_start(task_ref: str) -> str:
@@ -463,12 +429,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     def engram_task_done(task_ref: str, evidence: str | None = None) -> str:
@@ -509,12 +470,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     async def engram_workflow_start() -> str:
@@ -547,12 +503,7 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
 
     @server.tool()
     async def engram_workflow_finish(commit_type: str | None = None) -> str:
@@ -585,9 +536,4 @@ def register_tools(server: Any) -> None:
                 }
             )
         except EngramServiceError as exc:
-            return _respond(
-                {
-                    "ok": False,
-                    "error": exc.to_dict(),
-                }
-            )
+            return _respond_error(exc)
