@@ -35,7 +35,7 @@ Tasks are units of work within a project.
 Memories are durable facts that should survive a single coding session.
 
 - Types: `note`, `decision`, `lesson`, `constraint`, `snippet`
-- Searchable through SQLite FTS5.
+- Searchable through SQLite FTS5 and optional local semantic vector embeddings.
 - Memories marked `--always-include` appear in startup context.
 - Constraints, decisions, and lessons are always included by their typed helper commands.
 
@@ -148,9 +148,12 @@ engram memory list
 engram memory get <memory_id>
 engram memory update <memory_id> --field <field> --value <value>
 engram memory delete <memory_id> [-y]
+engram memory reindex --semantic
 ```
 
 Search, list, inspect, update, or delete project memories.
+
+If installed with `uv pip install "engram[semantic]"`, `engram memory reindex --semantic` triggers a local rebuild of semantic memory embeddings for the current project.
 
 ### Guardrail Controls
 
@@ -258,9 +261,19 @@ engram <command> --help
 
 Show the packaged manual or command-specific help.
 
-## 3. Recommended Agent Workflow
+## 3. Agent Integration and Workflows
 
-### Step 1: Startup
+### 3.1 Model Context Protocol (MCP)
+
+Engram includes a fully featured MCP server to seamlessly connect your preferred AI agent. By exposing context boundaries (like startup context), memories, and workflow actions as direct tooling, Engram natively integrates directly into tools like Codex, Cursor, or Claude Desktop.
+
+For full installation and setup instructions, refer to the [MCP Setup Guide](mcp-codex-setup.md).
+
+### 3.2 Recommended Agent CLI Workflow
+
+If you are not using the MCP integration or your agent relies strictly on shell commands, follow this step-by-step approach.
+
+#### Step 1: Startup
 
 ```bash
 engram context startup
