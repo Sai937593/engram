@@ -1005,12 +1005,8 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     finish_handler = server.tools["engram_workflow_finish"]
 
     # 1. Happy path: Start (handler is now async)
-    res_start = yaml.safe_load(asyncio.run(start_handler()))
-    assert res_start["ok"] is True
-    assert res_start["task"] == {"id": "t1", "title": "Test Task"}
-    assert res_start["branch"] == "feat/test"
-    assert res_start["is_resuming"] is False
-    assert res_start["context"] == "Context payload"
+    res_start = asyncio.run(start_handler())
+    assert res_start == "Context payload"
     assert start_called_args == [("proj-tool-workflow", cwd)]
 
     # 2. Happy path: Finish (handler is now async)

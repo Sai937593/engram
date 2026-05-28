@@ -496,12 +496,7 @@ def register_tools(server: Any) -> None:
                     repo_path=repo_paths[0],
                 )
             )
-            return _respond(
-                {
-                    "ok": True,
-                    **res,
-                }
-            )
+            return res["context"]
         except EngramServiceError as exc:
             return _respond_error(exc)
 

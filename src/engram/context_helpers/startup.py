@@ -101,17 +101,27 @@ def _build_phase_frame(active_phase: Phase | None, options: StartupContextOption
     return _render_section("CURRENT PHASE FRAME", lines)
 
 
-def _build_task_frame(selected_task: Task | None, options: StartupContextOptions) -> str:
+def _build_task_frame(
+    selected_task: Task | None,
+    options: StartupContextOptions,
+    branch: str | None = None,
+    is_resuming: bool | None = None,
+) -> str:
     if not selected_task:
         return _render_section("CURRENT/NEXT TASK FRAME", ["No current or next task selected."])
 
     task_slot = "current" if selected_task.status == "in-progress" else "next"
+    selected_val = (
+        "resuming" if is_resuming else "starting" if is_resuming is not None else task_slot
+    )
     lines = [
-        f"Selected: {task_slot}",
+        f"Selected: {selected_val}",
         f"Task: {selected_task.title} ({selected_task.id})",
         f"Status: {selected_task.status}",
         f"Priority: {selected_task.priority}",
     ]
+    if branch:
+        lines.append(f"Branch: {branch}")
     effective_phase_title = get_effective_phase_title(selected_task)
     if effective_phase_title:
         lines.append(f"Phase: {effective_phase_title}")
@@ -219,7 +229,8 @@ def _build_next_action(project: Project, selected_task: Task | None) -> str:
             "NEXT ACTION",
             [
                 f"Use this startup context to implement: {selected_task.title} ({selected_task.id}).",
-                f"If deeper context is needed: engram context task {selected_task.id}",
+                f"If deeper context is needed: engram_task_get {selected_task.id}",
+                "Before coding: run engram_memory_search with keywords from the task. Create implementation_plan.md and await user approval before writing code.",
             ],
         )
 
@@ -232,7 +243,7 @@ def _build_next_action(project: Project, selected_task: Task | None) -> str:
             "NEXT ACTION",
             [
                 "No tasks are defined yet.",
-                'Ask the user for the next phase and add work: engram task add "<task title>" --phase "Phase N" --priority high',
+                "Ask the user for the next phase and start it using engram_phase_start, then create a task using engram_task_create.",
             ],
         )
 
@@ -241,8 +252,7 @@ def _build_next_action(project: Project, selected_task: Task | None) -> str:
             "NEXT ACTION",
             [
                 f"All {total} tasks are done or cancelled.",
-                'Confirm whether to continue planning: engram task add "<next task>"',
-                "Or close the project: engram project update --status archived",
+                "Confirm whether to continue planning: create a new task using engram_task_create.",
             ],
         )
 
@@ -252,7 +262,7 @@ def _build_next_action(project: Project, selected_task: Task | None) -> str:
             "NEXT ACTION",
             [
                 f"All remaining tasks are blocked ({blocked}).",
-                "Resolve blockers or re-plan task ordering before running engram start again.",
+                "Resolve blockers or re-plan task ordering using engram_task_update.",
             ],
         )
 
@@ -260,7 +270,7 @@ def _build_next_action(project: Project, selected_task: Task | None) -> str:
         "NEXT ACTION",
         [
             "No startup task selection was provided.",
-            "Run engram start to select the next actionable task.",
+            "Run engram_workflow_start or engram_task_start to select and start the next actionable task.",
         ],
     )
 
@@ -312,6 +322,8 @@ def build_startup_context(
     selected_task: Task | None = None,
     options: StartupContextOptions | None = None,
     startup_task_memory_result: StartupTaskMemoryRetrievalResult | None = None,
+    branch: str | None = None,
+    is_resuming: bool | None = None,
 ) -> str:
     """Generate the unified startup context from explicit startup inputs."""
     resolved_options = options or StartupContextOptions()
@@ -326,7 +338,7 @@ def build_startup_context(
         "# STARTUP CONTEXT",
         _build_project_frame(resolved_project, resolved_options),
         _build_phase_frame(active_phase, resolved_options),
-        _build_task_frame(selected_task, resolved_options),
+        _build_task_frame(selected_task, resolved_options, branch=branch, is_resuming=is_resuming),
         _build_guardrail_frame(resolved_project.id, resolved_options),
         _build_task_memory_candidates_frame(
             resolved_project,
