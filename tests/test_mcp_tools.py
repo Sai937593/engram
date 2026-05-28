@@ -6,6 +6,8 @@ import asyncio
 import os
 from typing import Any
 
+import yaml
+
 from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.models.phase import Phase
@@ -88,15 +90,13 @@ def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
     register_tools(server)
     handler = server.tools["engram_project_current"]
 
-    result = handler()
+    result = yaml.safe_load(handler())
     assert result == {
         "ok": True,
         "project": {
             "id": "proj-tool-1",
             "name": "MCP Tool Project",
-            "summary": "Service tool project summary",
             "status": "active",
-            "repo_paths": [cwd],
         },
     }
 
@@ -112,9 +112,9 @@ def test_mcp_tool_raises_project_not_bound_for_unbound_repo(tmp_db, monkeypatch)
     register_tools(server)
     handler = server.tools["engram_project_current"]
 
-    result = handler()
+    result = yaml.safe_load(handler())
     assert result["ok"] is False
-    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
+    assert result["error"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
@@ -154,28 +154,41 @@ def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_memory_search"]
 
     # All memories
-    res_all = handler()
+    res_all = yaml.safe_load(handler())
     assert res_all["ok"] is True
     assert len(res_all["memories"]) == 2
     assert {m["id"] for m in res_all["memories"]} == {"mem-1", "mem-2"}
+    assert res_all["hint"] == "Apply these issues/notes before drafting your implementation plan."
 
     # Filtered by type
-    res_note = handler(type="note")
+    res_note = yaml.safe_load(handler(type="note"))
     assert res_note["ok"] is True
     assert len(res_note["memories"]) == 1
     assert res_note["memories"][0]["id"] == "mem-1"
+    assert res_note["hint"] == "Apply these notes before drafting your implementation plan."
 
     # Search with a query
-    res_query = handler(query="second")
+    res_query = yaml.safe_load(handler(query="second"))
     assert res_query["ok"] is True
     assert len(res_query["memories"]) == 1
     assert res_query["memories"][0]["id"] == "mem-2"
+    assert res_query["hint"] == "Apply these issues before drafting your implementation plan."
 
     # Search with tags
-    res_tags = handler(tags=["important"])
+    res_tags = yaml.safe_load(handler(tags=["important"]))
     assert res_tags["ok"] is True
     assert len(res_tags["memories"]) == 1
     assert res_tags["memories"][0]["id"] == "mem-1"
+    assert res_tags["hint"] == "Apply these notes before drafting your implementation plan."
+
+    # Search with query that returns no results (miss case)
+    res_miss = yaml.safe_load(handler(query="nonexistent"))
+    assert res_miss["ok"] is True
+    assert res_miss["memories"] == []
+    assert (
+        res_miss["hint"]
+        == "No results. Try broader terms. Log key discoveries with engram_memory_create."
+    )
 
 
 def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) -> None:
@@ -189,9 +202,9 @@ def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) ->
     register_tools(server)
     handler = server.tools["engram_memory_search"]
 
-    result = handler()
+    result = yaml.safe_load(handler())
     assert result["ok"] is False
-    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
+    assert result["error"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_is_read_only_and_does_not_mutate_db(tmp_db, monkeypatch) -> None:
@@ -300,23 +313,52 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_task_list"]
 
     # All tasks
-    res_all = handler(status="all")
+    res_all = yaml.safe_load(handler(status="all"))
     assert res_all["ok"] is True
     assert len(res_all["tasks"]) == 2
     assert {t["id"] for t in res_all["tasks"]} == {"task-1", "task-2"}
+    assert res_all["hint"] == "Use engram_task_get <id> for full task details"
+    for t in res_all["tasks"]:
+        assert set(t.keys()) == {"id", "title", "status"}
 
     # Filtered by status
-    res_todo = handler(status="todo")
+    res_todo = yaml.safe_load(handler(status="todo"))
     assert res_todo["ok"] is True
     assert len(res_todo["tasks"]) == 1
     assert res_todo["tasks"][0]["id"] == "task-1"
 
     # Filtered by phase
-    res_phase = handler(phase="Task Phase")
+    res_phase = yaml.safe_load(handler(phase="Task Phase"))
     assert res_phase["ok"] is True
     # By default, status is None, which filters by "todo"
     assert len(res_phase["tasks"]) == 1
     assert res_phase["tasks"][0]["id"] == "task-1"
+
+
+def test_mcp_tool_task_list_empty(tmp_db, monkeypatch) -> None:
+    """Verify task list empty behavior and status filter hint."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-empty")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-empty",
+        name="MCP Empty Project",
+        summary="Empty",
+        repo_paths=[cwd],
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_task_list"]
+
+    res = yaml.safe_load(handler(status="todo"))
+    assert res == {
+        "ok": True,
+        "tasks": [],
+        "hint": "No todo tasks. Try status=all to see all tasks.",
+    }
 
 
 def test_mcp_tool_task_list_raises_project_not_bound(tmp_db, monkeypatch) -> None:
@@ -330,9 +372,9 @@ def test_mcp_tool_task_list_raises_project_not_bound(tmp_db, monkeypatch) -> Non
     register_tools(server)
     handler = server.tools["engram_task_list"]
 
-    result = handler()
+    result = yaml.safe_load(handler())
     assert result["ok"] is False
-    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
+    assert result["error"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_task_get_returns_task(tmp_db, monkeypatch) -> None:
@@ -367,7 +409,7 @@ def test_mcp_tool_task_get_returns_task(tmp_db, monkeypatch) -> None:
     register_tools(server)
     handler = server.tools["engram_task_get"]
 
-    res = handler(task_ref="task-get-1")
+    res = yaml.safe_load(handler(task_ref="task-get-1"))
     assert res["ok"] is True
     assert res["task"]["id"] == "task-get-1"
     assert res["task"]["title"] == "Task to Get"
@@ -384,9 +426,9 @@ def test_mcp_tool_task_get_raises_project_not_bound(tmp_db, monkeypatch) -> None
     register_tools(server)
     handler = server.tools["engram_task_get"]
 
-    result = handler(task_ref="task-1")
+    result = yaml.safe_load(handler(task_ref="task-1"))
     assert result["ok"] is False
-    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
+    assert result["error"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_task_get_raises_task_not_found(tmp_db, monkeypatch) -> None:
@@ -407,9 +449,9 @@ def test_mcp_tool_task_get_raises_task_not_found(tmp_db, monkeypatch) -> None:
     register_tools(server)
     handler = server.tools["engram_task_get"]
 
-    result = handler(task_ref="missing-task")
+    result = yaml.safe_load(handler(task_ref="missing-task"))
     assert result["ok"] is False
-    assert result["error"]["code"] == "TASK_NOT_FOUND"
+    assert result["error"] == "TASK_NOT_FOUND"
 
 
 def test_mcp_tool_task_next_returns_next_task(tmp_db, monkeypatch) -> None:
@@ -437,9 +479,9 @@ def test_mcp_tool_task_next_returns_next_task(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_task_next"]
 
     # When no tasks exist, returns None
-    res_none = handler()
+    res_none = yaml.safe_load(handler())
     assert res_none["ok"] is True
-    assert res_none["task"] is None
+    assert res_none.get("task") is None
 
     # Create an active task
     Task.create(
@@ -451,7 +493,7 @@ def test_mcp_tool_task_next_returns_next_task(tmp_db, monkeypatch) -> None:
         status="todo",
     )
 
-    res_task = handler()
+    res_task = yaml.safe_load(handler())
     assert res_task["ok"] is True
     assert res_task["task"]["id"] == "task-next-1"
     assert res_task["task"]["title"] == "Next Actionable Task"
@@ -468,9 +510,9 @@ def test_mcp_tool_task_next_raises_project_not_bound(tmp_db, monkeypatch) -> Non
     register_tools(server)
     handler = server.tools["engram_task_next"]
 
-    result = handler()
+    result = yaml.safe_load(handler())
     assert result["ok"] is False
-    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
+    assert result["error"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
@@ -504,13 +546,15 @@ def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_phase_list"]
 
     # All phases
-    res_all = handler(status="all")
+    res_all = yaml.safe_load(handler(status="all"))
     assert res_all["ok"] is True
     assert len(res_all["phases"]) == 2
     assert {p["id"] for p in res_all["phases"]} == {"phase-1", "phase-2"}
+    for p in res_all["phases"]:
+        assert set(p.keys()) == {"id", "title", "status"}
 
     # Filtered by status
-    res_active = handler(status="active")
+    res_active = yaml.safe_load(handler(status="active"))
     assert res_active["ok"] is True
     assert len(res_active["phases"]) == 1
     assert res_active["phases"][0]["id"] == "phase-2"
@@ -527,9 +571,9 @@ def test_mcp_tool_phase_list_raises_project_not_bound(tmp_db, monkeypatch) -> No
     register_tools(server)
     handler = server.tools["engram_phase_list"]
 
-    result = handler()
+    result = yaml.safe_load(handler())
     assert result["ok"] is False
-    assert result["error"]["code"] == "PROJECT_NOT_BOUND"
+    assert result["error"] == "PROJECT_NOT_BOUND"
 
 
 def test_mcp_task_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
@@ -537,7 +581,7 @@ def test_mcp_task_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     cwd = os.path.abspath("repo/bound-mcp-tool-writes")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
-    Project.create(
+    project = Project.create(
         id="proj-tool-writes",
         name="MCP Tool Writes Project",
         summary="Service tool writes summary",
@@ -551,27 +595,48 @@ def test_mcp_task_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
     create_handler = server.tools["engram_task_create"]
 
-    # 1. Happy path
-    res = create_handler(
-        title="Test Task Title",
-        description="Test description",
-        priority="high",
-        tags=["mcp", "test"],
+    # 1. Happy path (no in-progress task)
+    res = yaml.safe_load(
+        create_handler(
+            title="Test Task Title",
+            description="Test description",
+            priority="high",
+            tags=["mcp", "test"],
+        )
     )
     assert res["ok"] is True
-    assert "task" in res
-    assert res["task"]["title"] == "Test Task Title"
-    assert res["task"]["priority"] == "high"
-    assert res["task"]["tags"] == ["mcp", "test"]
+    assert "id" in res
+    assert res["title"] == "Test Task Title"
+    assert "task" not in res
+    assert "warn" not in res
+
+    # 1b. Happy path with in-progress task already existing (returns warn)
+    Task.create(
+        project_id=project.id,
+        id="ip-task",
+        title="Existing Task",
+        status="in-progress",
+    )
+    res_warn = yaml.safe_load(
+        create_handler(
+            title="Another Task",
+        )
+    )
+    assert res_warn["ok"] is True
+    assert "id" in res_warn
+    assert res_warn["title"] == "Another Task"
+    assert "warn" in res_warn
 
     # 2. Validation error path (invalid priority)
-    res_err = create_handler(
-        title="Invalid priority task",
-        priority="ultra-high",
+    res_err = yaml.safe_load(
+        create_handler(
+            title="Invalid priority task",
+            priority="ultra-high",
+        )
     )
     assert res_err["ok"] is False
     assert "error" in res_err
-    assert res_err["error"]["code"] == "INVALID_TASK_PRIORITY"
+    assert res_err["error"] == "INVALID_TASK_PRIORITY"
 
 
 def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
@@ -602,21 +667,27 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     update_handler = server.tools["engram_task_update"]
 
     # 1. Happy path
-    res = update_handler(
-        task_ref="task-to-update",
-        updates={"title": "Updated Title", "status": "in-progress"},
+    res = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={"title": "Updated Title", "status": "in-progress"},
+        )
     )
     assert res["ok"] is True
-    assert res["task"]["title"] == "Updated Title"
-    assert res["task"]["status"] == "in-progress"
+    assert res["id"] == "task-to-update"
+    assert res["updated_fields"] == ["status", "title"]
+    assert "task" not in res
 
     # 2. Validation error path (invalid status)
-    res_err = update_handler(
-        task_ref="task-to-update",
-        updates={"status": "not-a-valid-status"},
+    res_err = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={"status": "not-a-valid-status"},
+        )
     )
     assert res_err["ok"] is False
-    assert res_err["error"]["code"] == "INVALID_TASK_STATUS"
+    assert "error" in res_err
+    assert res_err["error"] == "INVALID_TASK_STATUS"
 
 
 def test_mcp_task_note_append_happy_and_error_paths(tmp_db, monkeypatch) -> None:
@@ -646,20 +717,30 @@ def test_mcp_task_note_append_happy_and_error_paths(tmp_db, monkeypatch) -> None
     note_handler = server.tools["engram_task_note_append"]
 
     # 1. Happy path
-    res = note_handler(
-        task_ref="task-for-note",
-        note="First important comment",
+    res = yaml.safe_load(
+        note_handler(
+            task_ref="task-for-note",
+            note="First important comment",
+        )
     )
     assert res["ok"] is True
-    assert "First important comment" in res["task"]["evidence"]
+    assert res["id"] == "task-for-note"
+    assert "task" not in res
+
+    # Assert note actually saved to the model
+    updated_task = Task.get("task-for-note")
+    assert updated_task is not None
+    assert "First important comment" in updated_task.evidence
 
     # 2. Validation error path (empty note)
-    res_err = note_handler(
-        task_ref="task-for-note",
-        note="  ",
+    res_err = yaml.safe_load(
+        note_handler(
+            task_ref="task-for-note",
+            note="  ",
+        )
     )
     assert res_err["ok"] is False
-    assert res_err["error"]["code"] == "INVALID_NOTE"
+    assert res_err["error"] == "INVALID_NOTE"
 
 
 def test_mcp_memory_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
@@ -682,31 +763,43 @@ def test_mcp_memory_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     create_handler = server.tools["engram_memory_create"]
 
     # 1. Happy path
-    res = create_handler(
-        type="lesson",
-        title="Test Lesson Memory",
-        content="Test content for lesson",
-        scope="project",
-        level="L1",
-        tags=["mcp", "test"],
+    res = yaml.safe_load(
+        create_handler(
+            type="lesson",
+            title="Test Lesson Memory",
+            content="Test content for lesson",
+            scope="project",
+            level="L1",
+            tags=["mcp", "test"],
+        )
     )
     assert res["ok"] is True
-    assert "memory" in res
-    assert res["memory"]["title"] == "Test Lesson Memory"
-    assert res["memory"]["content"] == "Test content for lesson"
-    assert res["memory"]["level"] == "L1"
-    assert res["memory"]["tags"] == ["mcp", "test"]
+    assert "id" in res
+    assert res["type"] == "lesson"
+    assert "memory" not in res
+
+    # Verify memory was actually saved to database
+    from engram.models.memory import Memory
+
+    saved_memory = Memory.get(res["id"])
+    assert saved_memory is not None
+    assert saved_memory.title == "Test Lesson Memory"
+    assert saved_memory.content == "Test content for lesson"
+    assert saved_memory.level == "L1"
+    assert saved_memory.tags == ["mcp", "test"]
 
     # 2. Validation error path (missing level for project-scoped memory)
-    res_err = create_handler(
-        type="lesson",
-        title="Invalid Lesson Memory",
-        content="Missing level",
-        scope="project",
+    res_err = yaml.safe_load(
+        create_handler(
+            type="lesson",
+            title="Invalid Lesson Memory",
+            content="Missing level",
+            scope="project",
+        )
     )
     assert res_err["ok"] is False
     assert "error" in res_err
-    assert res_err["error"]["code"] == "INVALID_MEMORY_LEVEL"
+    assert res_err["error"] == "INVALID_MEMORY_LEVEL"
 
 
 def test_mcp_phase_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
@@ -730,14 +823,14 @@ def test_mcp_phase_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_phase_start"]
 
     # 1. Happy path
-    res = handler(phase_ref="Phase 1")
+    res = yaml.safe_load(handler(phase_ref="Phase 1"))
     assert res["ok"] is True
     assert res["phase"]["status"] == "active"
 
     # 2. Error path (invalid phase_ref)
-    res_err = handler(phase_ref="Non-existent Phase")
+    res_err = yaml.safe_load(handler(phase_ref="Non-existent Phase"))
     assert res_err["ok"] is False
-    assert res_err["error"]["code"] == "PHASE_NOT_FOUND"
+    assert res_err["error"] == "PHASE_NOT_FOUND"
 
 
 def test_mcp_phase_complete_happy_and_error_paths(tmp_db, monkeypatch) -> None:
@@ -770,16 +863,16 @@ def test_mcp_phase_complete_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_phase_complete"]
 
     # 1. Error path (unfinished tasks exist)
-    res_err = handler(phase_ref="Phase 1")
+    res_err = yaml.safe_load(handler(phase_ref="Phase 1"))
     assert res_err["ok"] is False
-    assert res_err["error"]["code"] == "UNFINISHED_TASKS"
+    assert res_err["error"] == "UNFINISHED_TASKS"
 
     # Complete the task first
     task = Task.get("task-unfinished")
     task.update(status="done")
 
     # 2. Happy path
-    res = handler(phase_ref="Phase 1")
+    res = yaml.safe_load(handler(phase_ref="Phase 1"))
     assert res["ok"] is True
     assert res["phase"]["status"] == "done"
 
@@ -813,17 +906,23 @@ def test_mcp_task_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_task_start"]
 
     # 1. Error path (dependency not satisfied)
-    res_err = handler(task_ref="task-start-1")
+    res_err = yaml.safe_load(handler(task_ref="task-start-1"))
     assert res_err["ok"] is False
-    assert res_err["error"]["code"] == "DEPENDENCY_UNSATISFIED"
+    assert res_err["error"] == "DEPENDENCY_UNSATISFIED"
 
     # Complete dependency
     dep.update(status="done")
 
     # 2. Happy path
-    res = handler(task_ref="task-start-1")
+    res = yaml.safe_load(handler(task_ref="task-start-1"))
     assert res["ok"] is True
-    assert res["task"]["status"] == "in-progress"
+    assert res["id"] == "task-start-1"
+    assert res["status"] == "in-progress"
+    assert (
+        res["next"]
+        == "Run engram_memory_search with task keywords, then draft implementation_plan.md"
+    )
+    assert "task" not in res
 
 
 def test_mcp_task_done_happy_and_error_paths(tmp_db, monkeypatch) -> None:
@@ -846,16 +945,34 @@ def test_mcp_task_done_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
     handler = server.tools["engram_task_done"]
 
-    # 1. Happy path (with evidence)
-    res = handler(task_ref="task-done-1", evidence="Finished successfully!")
+    # 1. Happy path (with evidence, phase is complete because no other tasks exist)
+    res = yaml.safe_load(handler(task_ref="task-done-1", evidence="Finished successfully!"))
     assert res["ok"] is True
-    assert res["task"]["status"] == "done"
-    assert "Finished successfully!" in res["task"]["evidence"]
+    assert res["id"] == "task-done-1"
+    assert res["status"] == "done"
+    assert res["phase_complete"] is True
+    assert res["next"] == "Log lessons with engram_memory_create, then call engram_workflow_finish"
+    assert "task" not in res
+
+    # Assert evidence is saved to model
+    updated_task = Task.get("task-done-1")
+    assert updated_task is not None
+    assert "Finished successfully!" in updated_task.evidence
+
+    # 1b. Happy path (with other unfinished task in same phase -> phase_complete = False)
+    Task.create(
+        project_id=project.id, id="task-done-2", title="Another Active Task", status="in-progress"
+    )
+    Task.get("task-done-1").update(status="in-progress")
+
+    res_not_complete = yaml.safe_load(handler(task_ref="task-done-1"))
+    assert res_not_complete["ok"] is True
+    assert res_not_complete["phase_complete"] is False
 
     # 2. Error path (non-existent task)
-    res_err = handler(task_ref="missing-task")
+    res_err = yaml.safe_load(handler(task_ref="missing-task"))
     assert res_err["ok"] is False
-    assert res_err["error"]["code"] == "TASK_NOT_FOUND"
+    assert res_err["error"] == "TASK_NOT_FOUND"
 
 
 def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
@@ -879,9 +996,8 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     }
 
     mock_finish_res = {
-        "task": {"id": "t1", "title": "Test Task", "status": "done"},
-        "commit_msg": "feat: Test Task",
-        "push_output": "Pushed successfully.",
+        "id": "t1",
+        "commit": "feat: Test Task",
         "phase_complete": False,
     }
 
@@ -910,20 +1026,18 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
     # 1. Happy path: Start (handler is now async)
     res_start = asyncio.run(start_handler())
-    assert res_start["ok"] is True
-    assert res_start["task"] == {"id": "t1", "title": "Test Task"}
-    assert res_start["branch"] == "feat/test"
-    assert res_start["is_resuming"] is False
-    assert res_start["context"] == "Context payload"
+    assert res_start == "Context payload"
     assert start_called_args == [("proj-tool-workflow", cwd)]
 
     # 2. Happy path: Finish (handler is now async)
-    res_finish = asyncio.run(finish_handler(commit_type="feat"))
+    res_finish = yaml.safe_load(asyncio.run(finish_handler(commit_type="feat")))
     assert res_finish["ok"] is True
-    assert res_finish["task"] == {"id": "t1", "title": "Test Task", "status": "done"}
-    assert res_finish["commit_msg"] == "feat: Test Task"
-    assert res_finish["push_output"] == "Pushed successfully."
+    assert res_finish["id"] == "t1"
+    assert res_finish["commit"] == "feat: Test Task"
     assert res_finish["phase_complete"] is False
+    assert res_finish["next"] == "Run engram_workflow_start to claim the next task."
+    assert "task" not in res_finish
+    assert "push_output" not in res_finish
     assert finish_called_args == [("proj-tool-workflow", cwd, "feat")]
 
     # 3. Error path: start_workflow raising EngramServiceError
@@ -934,16 +1048,51 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
     monkeypatch.setattr("engram.mcp.tools.start_workflow", raising_start)
 
-    res_err = asyncio.run(start_handler())
+    res_err = yaml.safe_load(asyncio.run(start_handler()))
     assert res_err["ok"] is False
-    assert res_err["error"]["code"] == "TEST_ERROR"
-    assert res_err["error"]["message"] == "Mock error message"
+    assert res_err["error"] == "TEST_ERROR"
+    assert res_err["message"] == "Mock error message"
 
     # 4. Error path: Project bound but has no repo_paths configured
     monkeypatch.setattr(
         "engram.mcp.tools.resolve_current_project",
         lambda: {"id": "proj-tool-workflow", "repo_paths": []},
     )
-    res_no_repo = asyncio.run(start_handler())
+    res_no_repo = yaml.safe_load(asyncio.run(start_handler()))
     assert res_no_repo["ok"] is False
-    assert res_no_repo["error"]["code"] == "PROJECT_NO_REPOS"
+    assert res_no_repo["error"] == "PROJECT_NO_REPOS"
+
+
+def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
+    """Verify that flat YAML error responses include the correct fix field for all known error codes."""
+    import yaml
+
+    from engram.mcp.tools import _respond_error
+    from engram.services.errors import EngramServiceError
+
+    known_codes = [
+        "DEPENDENCY_UNSATISFIED",
+        "NO_TASK_IN_PROGRESS",
+        "TASK_NOT_FOUND",
+        "TASK_AMBIGUOUS",
+        "DIRTY_WORKING_TREE",
+        "INVALID_TASK_STATUS",
+        "PHASE_COMPLETION_BLOCKED",
+        "UNFINISHED_TASKS",
+    ]
+
+    for code in known_codes:
+        exc = EngramServiceError(code=code, message=f"Test error {code}")
+        res = yaml.safe_load(_respond_error(exc))
+        assert res["ok"] is False
+        assert res["error"] == code
+        assert res["message"] == f"Test error {code}"
+        assert "fix" in res
+        assert "engram_" in res["fix"]  # references MCP tool names
+
+    # Unknown/unexpected error should not have fix field
+    exc_unknown = EngramServiceError(code="SOME_UNKNOWN_ERROR", message="An unknown error")
+    res_unknown = yaml.safe_load(_respond_error(exc_unknown))
+    assert res_unknown["ok"] is False
+    assert res_unknown["error"] == "SOME_UNKNOWN_ERROR"
+    assert "fix" not in res_unknown

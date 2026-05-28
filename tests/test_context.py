@@ -91,6 +91,47 @@ def test_startup_builder_accepts_project_phase_and_task(project):
     assert "Local-first only" in ctx
 
 
+def test_startup_builder_renders_branch_and_is_resuming(project):
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Refactor",
+        status="active",
+    )
+    task = Task.create(
+        project_id=project.id,
+        title="Implement refactoring",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+
+    ctx = build_startup_context(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+        branch="feat/refactor-branch",
+        is_resuming=True,
+    )
+
+    assert "Selected: resuming" in ctx
+    assert "Branch: feat/refactor-branch" in ctx
+    assert (
+        "Before coding: run engram_memory_search with keywords from the task. Create implementation_plan.md and await user approval before writing code."
+        in ctx
+    )
+    assert "engram_task_get" in ctx
+    assert "engram context task" not in ctx
+
+    # Test when is_resuming is False
+    ctx_starting = build_startup_context(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+        branch="feat/refactor-branch",
+        is_resuming=False,
+    )
+    assert "Selected: starting" in ctx_starting
+
+
 def test_startup_builder_handles_no_task_input(project):
     phase = Phase.create(project_id=project.id, title="Phase Empty", status="active")
 

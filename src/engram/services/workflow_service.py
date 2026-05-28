@@ -67,6 +67,8 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
             active_phase=active_phase,
             selected_task=None,
             startup_task_memory_result=startup_res,
+            branch=None,
+            is_resuming=False,
         )
         return {"task": None, "branch": None, "is_resuming": False, "context": context_str}
 
@@ -104,6 +106,8 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
         active_phase=active_phase,
         selected_task=task,
         startup_task_memory_result=startup_res,
+        branch=target_branch,
+        is_resuming=is_resuming,
     )
 
     return {
@@ -173,8 +177,7 @@ def finish_workflow(
             phase_complete = True
 
     return {
-        "task": task_to_dict(task),
-        "commit_msg": commit_msg,
-        "push_output": "Pushed successfully to origin HEAD.",
+        "id": task.id,
+        "commit": commit_msg,
         "phase_complete": phase_complete,
     }

@@ -35,9 +35,8 @@ def test_finish_workflow_happy_path(tmp_db: Any) -> None:
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res = finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
 
-    assert res["task"]["id"] == "t-1"
-    assert res["commit_msg"] == "feat(phase-one): Refactor auth [t-1]"
-    assert "Pushed successfully" in res["push_output"]
+    assert res["id"] == "t-1"
+    assert res["commit"] == "feat(phase-one): Refactor auth [t-1]"
 
     # Task should be marked done
     refreshed = Task.get(task.id)
@@ -127,7 +126,7 @@ def test_finish_workflow_nothing_to_commit(tmp_db: Any) -> None:
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res = finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
 
-    assert res["task"]["id"] == "t-1"
+    assert res["id"] == "t-1"
     # Task should be marked done
     refreshed = Task.get(task.id)
     assert refreshed is not None
