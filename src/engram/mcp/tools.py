@@ -10,7 +10,12 @@ import yaml
 
 from engram.services.errors import EngramServiceError
 from engram.services.memory_service import create_memory, search_memories
-from engram.services.phase_service import complete_phase, list_phases, start_phase
+from engram.services.phase_service import (
+    complete_phase,
+    create_phase,
+    list_phases,
+    start_phase,
+)
 from engram.services.project_service import resolve_current_project
 from engram.services.task_service import (
     append_task_note,
@@ -246,6 +251,33 @@ def register_tools(server: Any) -> None:
                     "phases": [slim_phase_dict(p) for p in phases],
                 },
                 keep_empty_keys={"phases"},
+            )
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+    @server.tool()
+    def engram_phase_create(
+        title: str,
+        description: str | None = None,
+        status: str = "planned",
+        acceptance: str | None = None,
+    ) -> str:
+        """Create a new phase in the currently bound engram project."""
+        try:
+            project = resolve_current_project()
+            phase = create_phase(
+                project_id=str(project["id"]),
+                title=title,
+                description=description,
+                status=status,
+                acceptance=acceptance,
+            )
+            return _respond(
+                {
+                    "ok": True,
+                    "id": phase["id"],
+                    "title": phase["title"],
+                }
             )
         except EngramServiceError as exc:
             return _respond_error(exc)
