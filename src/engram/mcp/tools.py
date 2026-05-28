@@ -193,10 +193,42 @@ def register_tools(server: Any) -> None:
                 tags=tags,
                 limit=limit,
             )
+            if not memories:
+                return _respond(
+                    {
+                        "ok": True,
+                        "memories": [],
+                        "hint": "No results. Try broader terms. Log key discoveries with engram_memory_create.",
+                    },
+                    keep_empty_keys={"memories"},
+                )
+
+            unique_types = sorted(list({m.get("type") for m in memories if m.get("type")}))
+            type_plurals = []
+            for t in unique_types:
+                if t == "constraint":
+                    type_plurals.append("constraints")
+                elif t == "decision":
+                    type_plurals.append("decisions")
+                elif t == "snippet":
+                    type_plurals.append("snippets")
+                elif t == "lesson":
+                    type_plurals.append("lessons")
+                elif t == "note":
+                    type_plurals.append("notes")
+                elif t == "issue":
+                    type_plurals.append("issues")
+                else:
+                    type_plurals.append(f"{t}s")
+
+            type_wording = "/".join(type_plurals) if type_plurals else "constraints/decisions"
+            hint = f"Apply these {type_wording} before drafting your implementation plan."
+
             return _respond(
                 {
                     "ok": True,
                     "memories": memories,
+                    "hint": hint,
                 }
             )
         except EngramServiceError as exc:
@@ -369,7 +401,8 @@ def register_tools(server: Any) -> None:
             return _respond(
                 {
                     "ok": True,
-                    "memory": memory,
+                    "id": memory["id"],
+                    "type": memory["type"],
                 }
             )
         except EngramServiceError as exc:

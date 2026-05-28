@@ -158,24 +158,37 @@ def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
     assert res_all["ok"] is True
     assert len(res_all["memories"]) == 2
     assert {m["id"] for m in res_all["memories"]} == {"mem-1", "mem-2"}
+    assert res_all["hint"] == "Apply these issues/notes before drafting your implementation plan."
 
     # Filtered by type
     res_note = yaml.safe_load(handler(type="note"))
     assert res_note["ok"] is True
     assert len(res_note["memories"]) == 1
     assert res_note["memories"][0]["id"] == "mem-1"
+    assert res_note["hint"] == "Apply these notes before drafting your implementation plan."
 
     # Search with a query
     res_query = yaml.safe_load(handler(query="second"))
     assert res_query["ok"] is True
     assert len(res_query["memories"]) == 1
     assert res_query["memories"][0]["id"] == "mem-2"
+    assert res_query["hint"] == "Apply these issues before drafting your implementation plan."
 
     # Search with tags
     res_tags = yaml.safe_load(handler(tags=["important"]))
     assert res_tags["ok"] is True
     assert len(res_tags["memories"]) == 1
     assert res_tags["memories"][0]["id"] == "mem-1"
+    assert res_tags["hint"] == "Apply these notes before drafting your implementation plan."
+
+    # Search with query that returns no results (miss case)
+    res_miss = yaml.safe_load(handler(query="nonexistent"))
+    assert res_miss["ok"] is True
+    assert res_miss["memories"] == []
+    assert (
+        res_miss["hint"]
+        == "No results. Try broader terms. Log key discoveries with engram_memory_create."
+    )
 
 
 def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) -> None:
@@ -761,11 +774,19 @@ def test_mcp_memory_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         )
     )
     assert res["ok"] is True
-    assert "memory" in res
-    assert res["memory"]["title"] == "Test Lesson Memory"
-    assert res["memory"]["content"] == "Test content for lesson"
-    assert res["memory"]["level"] == "L1"
-    assert res["memory"]["tags"] == ["mcp", "test"]
+    assert "id" in res
+    assert res["type"] == "lesson"
+    assert "memory" not in res
+
+    # Verify memory was actually saved to database
+    from engram.models.memory import Memory
+
+    saved_memory = Memory.get(res["id"])
+    assert saved_memory is not None
+    assert saved_memory.title == "Test Lesson Memory"
+    assert saved_memory.content == "Test content for lesson"
+    assert saved_memory.level == "L1"
+    assert saved_memory.tags == ["mcp", "test"]
 
     # 2. Validation error path (missing level for project-scoped memory)
     res_err = yaml.safe_load(
