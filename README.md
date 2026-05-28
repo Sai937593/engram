@@ -43,16 +43,14 @@ graph TD
 
 ## Features
 
-- Project-aware task tracking with `todo`, `in-progress`, `done`, `blocked`, and `cancelled` states.
-- Task-scoped relevant file path hints for faster startup navigation.
-- Persistent memories for notes, decisions, lessons, constraints, and snippets.
-- Full-text search over memories using SQLite FTS5.
-- Guardrail level controls with explicit `engram guardrail demote ... --reason ...`.
-- Typed helper commands: `engram decision`, `engram lesson`, `engram constraint`, and `engram snippet`.
-- Agent startup context via `engram context startup`.
-- Task-specific context via `engram context task <id>`.
-- Workflow commands: `engram start` and `engram finish`.
-- Markdown exports for snapshots and handoffs.
+- **Project-aware task tracking:** Full task lifecycle (`todo`, `in-progress`, `done`, `blocked`, `cancelled`), including first-class project milestones (`phases`) and task dependencies.
+- **Local MCP Server:** Exposes memory, tasks, and context boundaries directly to compatible AI clients (Codex, Cursor, Claude Desktop) over a fast STDIO transport.
+- **Hybrid Search:** Combines SQLite FTS5 full-text search with optional local semantic vector embeddings (`fastembed`) for robust memory recall.
+- **Persistent memories:** Dedicated types for notes, decisions, lessons, constraints, and snippets.
+- **Context packs:** Compact, token-optimized agent startup context (`engram context startup`) and task-specific context (`engram context task <id>`).
+- **Guardrail controls:** Enforce project rules with explicit `engram guardrail demote ... --reason ...` capabilities.
+- **Workflow automation:** `engram start` and `engram finish` guide agents through standard git and task state transitions.
+- **Markdown exports:** Generate deterministic project snapshots and handoffs.
 
 ## Installation
 
@@ -64,10 +62,22 @@ cd engram
 uv pip install -e .
 ```
 
-For development:
+To enable the Model Context Protocol (MCP) server for deep agent integration:
 
 ```bash
-uv sync --extra dev
+uv pip install -e ".[mcp]"
+```
+
+To enable local semantic vector search:
+
+```bash
+uv pip install -e ".[semantic]"
+```
+
+For full development setup (including all extras):
+
+```bash
+uv sync --all-extras
 uv run pytest tests/ -v
 ```
 
@@ -132,7 +142,6 @@ engram guide                         # Show the packaged manual
 ## Tradeoffs
 
 - Engram does not sync automatically across machines.
-- The current public package is CLI-only.
 - The database is intentionally local and user-scoped, so teams need an explicit export or sync process if they want shared state.
 
 ## License
