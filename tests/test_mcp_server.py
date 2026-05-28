@@ -15,10 +15,15 @@ MCP_MODULES = (
     "engram.mcp",
     "engram.mcp.server",
     "engram.mcp.tools",
+    "engram.mcp.tools.helpers",
+    "engram.mcp.tools.task_tools",
+    "engram.mcp.tools.memory_tools",
+    "engram.mcp.tools.phase_tools",
+    "engram.mcp.tools.workflow_tools",
     "engram.mcp.resources",
     "engram.mcp.schemas",
 )
-MCP_FILES = ("__init__.py", "server.py", "tools.py", "resources.py", "schemas.py")
+MCP_FILES = ("__init__.py", "server.py", "resources.py", "schemas.py")
 BANNED_IMPORT_PREFIXES = ("click", "rich", "engram.cli", "engram.commands", "subprocess")
 
 
@@ -26,6 +31,7 @@ def test_mcp_package_skeleton_files_exist():
     package_dir = Path(importlib.import_module("engram").__file__).resolve().parent / "mcp"
     for filename in MCP_FILES:
         assert (package_dir / filename).is_file()
+    assert (package_dir / "tools" / "__init__.py").is_file()
 
 
 def test_mcp_modules_do_not_import_cli_or_shell_dependencies():
