@@ -75,7 +75,7 @@ def check_files(files: list[Path], repo_root: Path | None = None) -> list[str]:
                 tier = "top-level" if limit == MAX_LINES_TOPLEVEL else "subpackage"
                 violations.append(
                     f"  {posix_path}: {n_lines} lines (limit: {limit} for {tier} files)\n"
-                    f"  → Split into a subpackage or extract helpers to a sibling module."
+                    f"  \u2192 Split into a subpackage or extract helpers to a sibling module."
                 )
 
         # Check symbol count (skip test files)
@@ -84,7 +84,7 @@ def check_files(files: list[Path], repo_root: Path | None = None) -> list[str]:
             if n_symbols > MAX_PUBLIC_SYMBOLS:
                 violations.append(
                     f"  {posix_path}: {n_symbols} public symbols (limit: {MAX_PUBLIC_SYMBOLS})\n"
-                    f"  → Extract related functions/classes into a sibling module."
+                    f"  \u2192 Extract related functions/classes into a sibling module."
                 )
 
     return violations
@@ -92,6 +92,12 @@ def check_files(files: list[Path], repo_root: Path | None = None) -> list[str]:
 
 def run_check(repo_root: Path | None = None) -> int:
     """Run structure check and return exit code (0=pass, 1=fail)."""
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
     try:
         files = get_staged_python_files(repo_root=repo_root)
     except subprocess.CalledProcessError as exc:

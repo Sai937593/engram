@@ -5,15 +5,6 @@ from typing import Any
 from engram.db import get_db_connection
 from engram.models.audit import AuditLog
 
-PRIORITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-
-
-def _normalize_phase_title(phase: str | None) -> str:
-    """Return a whitespace-normalized phase key for compatibility matching."""
-    if phase is None:
-        return ""
-    return " ".join(phase.split()).casefold()
-
 
 def _normalize_relevant_files(relevant_files: Any) -> list[str]:
     """Normalize relevant file paths by trimming entries, dropping empties, and deduplicating."""
@@ -147,130 +138,6 @@ class Task:
         )
 
     @classmethod
-    def list_by_project(cls, project_id):
-        conn = get_db_connection()
-        rows = conn.execute("SELECT * FROM tasks WHERE project_id = ?", (project_id,)).fetchall()
-        conn.close()
-        return [cls.from_row(row) for row in rows]
-
-    @classmethod
-    def get(cls, id):
-        conn = get_db_connection()
-        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
-        conn.close()
-        if row:
-            return cls.from_row(row)
-        return None
-
-    @classmethod
-    def get_next(cls, project_id: str, active_phase_id: str | None = None) -> "Task | None":
-        """Return the highest-priority todo task, respecting dependencies."""
-        priority_order = "CASE t1.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
-        conn = get_db_connection()
-        # Find a task that is 'todo', and either has no dependency, OR its dependency is 'done'
-        if active_phase_id:
-            query = f"""
-                SELECT t1.* FROM tasks t1
-                LEFT JOIN tasks t2 ON t1.depends_on = t2.id
-                WHERE t1.project_id = ?
-                  AND t1.phase_id = ?
-                  AND t1.status = 'todo'
-                  AND (t1.depends_on IS NULL OR t2.status = 'done')
-                ORDER BY {priority_order}, t1.created_at ASC
-                LIMIT 1
-            """
-            row = conn.execute(query, (project_id, active_phase_id)).fetchone()
-            if row:
-                conn.close()
-                return cls.from_row(row)
-
-        query = f"""
-            SELECT t1.* FROM tasks t1
-            LEFT JOIN tasks t2 ON t1.depends_on = t2.id
-            WHERE t1.project_id = ?
-              AND t1.status = 'todo'
-              AND (t1.depends_on IS NULL OR t2.status = 'done')
-            ORDER BY {priority_order}, t1.created_at ASC
-            LIMIT 1
-        """
-        row = conn.execute(query, (project_id,)).fetchone()
-        conn.close()
-        if row:
-            return cls.from_row(row)
-        return None
-
-    @classmethod
-    def _list_actionable_todo_rows(cls, project_id: str) -> list[Any]:
-        """Return todo task rows whose dependencies are satisfied."""
-        conn = get_db_connection()
-        rows = conn.execute(
-            """
-            SELECT t1.*, t2.status AS dependency_status
-            FROM tasks t1
-            LEFT JOIN tasks t2 ON t1.depends_on = t2.id
-            WHERE t1.project_id = ?
-              AND t1.status = 'todo'
-              AND (t1.depends_on IS NULL OR t2.status = 'done')
-            """,
-            (project_id,),
-        ).fetchall()
-        conn.close()
-        return rows
-
-    @classmethod
-    def _select_next_from_rows(cls, rows: list[Any]) -> "Task | None":
-        """Select the highest-priority row using the same ordering as get_next."""
-        if not rows:
-            return None
-
-        ordered_rows = sorted(
-            rows,
-            key=lambda row: (
-                PRIORITY_RANK.get(row["priority"], 4),
-                row["created_at"] or "",
-            ),
-        )
-        return cls.from_row(ordered_rows[0])
-
-    @classmethod
-    def get_next_for_phase(
-        cls,
-        project_id: str,
-        phase_id: str,
-        phase_title: str,
-    ) -> "Task | None":
-        """Return the next actionable task linked to a phase by phase_id or legacy title."""
-        normalized_title = _normalize_phase_title(phase_title)
-        rows = [
-            row
-            for row in cls._list_actionable_todo_rows(project_id)
-            if row["phase_id"] == phase_id
-            or (not row["phase_id"] and _normalize_phase_title(row["phase"]) == normalized_title)
-        ]
-        return cls._select_next_from_rows(rows)
-
-    @classmethod
-    def get_next_unphased(cls, project_id: str) -> "Task | None":
-        """Return the next actionable task with no first-class or legacy phase."""
-        rows = [
-            row
-            for row in cls._list_actionable_todo_rows(project_id)
-            if not row["phase_id"] and not _normalize_phase_title(row["phase"])
-        ]
-        return cls._select_next_from_rows(rows)
-
-    @classmethod
-    def count_by_status(cls, project_id: str) -> dict:
-        """Return a dict of status → count for all tasks in the project."""
-        conn = get_db_connection()
-        rows = conn.execute(
-            "SELECT status, COUNT(*) as cnt FROM tasks WHERE project_id = ? GROUP BY status",
-            (project_id,),
-        ).fetchall()
-        conn.close()
-        return {row["status"]: row["cnt"] for row in rows}
-
-    @classmethod
     def from_row(cls, row):
         relevant_files = []
         if "relevant_files" in row.keys():
@@ -337,17 +204,38 @@ class Task:
         conn.close()
         AuditLog.log("tasks", self.id, "delete")
 
+    @classmethod
+    def list_by_project(cls, project_id: str) -> list["Task"]:
+        from engram.models.task.queries import list_by_project
 
-def get_effective_phase_title(task: Task) -> str | None:
-    """Return the workflow/display phase title for a task across legacy and first-class phases."""
-    if task.phase_id:
-        from engram.models.phase import Phase
+        return list_by_project(project_id)
 
-        phase = Phase.get(task.phase_id)
-        if phase:
-            return phase.title
+    @classmethod
+    def get(cls, id: str) -> "Task | None":
+        from engram.models.task.queries import get
 
-    if isinstance(task.phase, str) and task.phase.strip():
-        return task.phase
+        return get(id)
 
-    return None
+    @classmethod
+    def get_next(cls, project_id: str, active_phase_id: str | None = None) -> "Task | None":
+        from engram.models.task.queries import get_next
+
+        return get_next(project_id, active_phase_id)
+
+    @classmethod
+    def get_next_for_phase(cls, project_id: str, phase_id: str, phase_title: str) -> "Task | None":
+        from engram.models.task.queries import get_next_for_phase
+
+        return get_next_for_phase(project_id, phase_id, phase_title)
+
+    @classmethod
+    def get_next_unphased(cls, project_id: str) -> "Task | None":
+        from engram.models.task.queries import get_next_unphased
+
+        return get_next_unphased(project_id)
+
+    @classmethod
+    def count_by_status(cls, project_id: str) -> dict[str, int]:
+        from engram.models.task.queries import count_by_status
+
+        return count_by_status(project_id)

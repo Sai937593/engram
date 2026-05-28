@@ -2,7 +2,6 @@ import uuid
 from typing import Any
 
 from engram.db import get_db_connection
-from engram.memory_retrieval.fts_query import normalize_fts_query_text
 from engram.models.audit import AuditLog
 
 VALID_MEMORY_SCOPES = {"project", "task"}
@@ -91,79 +90,6 @@ class Memory:
             always_include,
             normalized_level,
         )
-
-    @classmethod
-    def list_by_project(cls, project_id: str) -> list["Memory"]:
-        """Return all memories for a project ordered by creation date."""
-        conn = get_db_connection()
-        rows = conn.execute(
-            "SELECT * FROM memories WHERE project_id = ? ORDER BY created_at ASC", (project_id,)
-        ).fetchall()
-        conn.close()
-        return [cls.from_row(row) for row in rows]
-
-    @classmethod
-    def list_by_type(cls, project_id: str, memory_type: str) -> list["Memory"]:
-        """Return memories of a specific type for a project, ordered by creation date."""
-        conn = get_db_connection()
-        rows = conn.execute(
-            "SELECT * FROM memories WHERE project_id = ? AND type = ? ORDER BY created_at ASC",
-            (project_id, memory_type),
-        ).fetchall()
-        conn.close()
-        return [cls.from_row(row) for row in rows]
-
-    @classmethod
-    def list_project_guardrail_candidates(cls, project_id: str) -> list["Memory"]:
-        """Return project-scope L0/L1 memories ordered for deterministic guardrail retrieval."""
-        conn = get_db_connection()
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM memories
-            WHERE project_id = ? AND scope = 'project' AND level IN ('L0', 'L1')
-            ORDER BY
-                CASE level WHEN 'L0' THEN 0 WHEN 'L1' THEN 1 ELSE 2 END,
-                id ASC
-            """,
-            (project_id,),
-        ).fetchall()
-        conn.close()
-        return [cls.from_row(row) for row in rows]
-
-    @classmethod
-    def list_task_scope_for_project(cls, project_id: str) -> list["Memory"]:
-        """Return task-scope memories for a project in deterministic order."""
-        conn = get_db_connection()
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM memories
-            WHERE project_id = ? AND scope = 'task'
-            ORDER BY created_at ASC, id ASC
-            """,
-            (project_id,),
-        ).fetchall()
-        conn.close()
-        return [cls.from_row(row) for row in rows]
-
-    @classmethod
-    def list_always_include(cls, project_id):
-        conn = get_db_connection()
-        rows = conn.execute(
-            "SELECT * FROM memories WHERE project_id = ? AND always_include = 1", (project_id,)
-        ).fetchall()
-        conn.close()
-        return [cls.from_row(row) for row in rows]
-
-    @classmethod
-    def get(cls, id):
-        conn = get_db_connection()
-        row = conn.execute("SELECT * FROM memories WHERE id = ?", (id,)).fetchone()
-        conn.close()
-        if row:
-            return cls.from_row(row)
-        return None
 
     @classmethod
     def from_row(cls, row: Any) -> "Memory":
@@ -311,6 +237,42 @@ class Memory:
         AuditLog.log("memories", self.id, "delete")
 
     @classmethod
+    def list_by_project(cls, project_id: str) -> list["Memory"]:
+        from engram.models.memory.queries import list_by_project
+
+        return list_by_project(project_id)
+
+    @classmethod
+    def list_by_type(cls, project_id: str, memory_type: str) -> list["Memory"]:
+        from engram.models.memory.queries import list_by_type
+
+        return list_by_type(project_id, memory_type)
+
+    @classmethod
+    def list_project_guardrail_candidates(cls, project_id: str) -> list["Memory"]:
+        from engram.models.memory.queries import list_project_guardrail_candidates
+
+        return list_project_guardrail_candidates(project_id)
+
+    @classmethod
+    def list_task_scope_for_project(cls, project_id: str) -> list["Memory"]:
+        from engram.models.memory.queries import list_task_scope_for_project
+
+        return list_task_scope_for_project(project_id)
+
+    @classmethod
+    def list_always_include(cls, project_id: str) -> list["Memory"]:
+        from engram.models.memory.queries import list_always_include
+
+        return list_always_include(project_id)
+
+    @classmethod
+    def get(cls, id: str) -> "Memory | None":
+        from engram.models.memory.queries import get
+
+        return get(id)
+
+    @classmethod
     def search(
         cls,
         query: str | None,
@@ -318,33 +280,6 @@ class Memory:
         tag_filters: list[str] | None = None,
         project_id: str | None = None,
     ) -> list["Memory"]:
-        """Search memories using a normalized FTS-safe query string."""
-        conn = get_db_connection()
+        from engram.models.memory.queries import search
 
-        safe_query = normalize_fts_query_text(query)
-        sql = """
-            SELECT m.* FROM memories m
-            JOIN memories_fts f ON m.rowid = f.rowid
-            WHERE memories_fts MATCH ?
-        """
-        params = [safe_query]
-
-        if project_id:
-            sql += " AND m.project_id = ?"
-            params.append(project_id)
-
-        if type_filter:
-            sql += " AND m.type = ?"
-            params.append(type_filter)
-
-        if tag_filters:
-            for tag in tag_filters:
-                # Simple LIKE search for tags in MVP
-                sql += " AND m.tags LIKE ?"
-                params.append(f"%{tag}%")
-
-        sql += " ORDER BY rank"
-
-        rows = conn.execute(sql, params).fetchall()
-        conn.close()
-        return [cls.from_row(row) for row in rows]
+        return search(query, type_filter, tag_filters, project_id)
