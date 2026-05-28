@@ -1,6 +1,6 @@
 """Task context rendering."""
 
-from engram.context_helpers.common import compact_text
+from engram.context.common import compact_text
 from engram.models.memory import Memory
 from engram.models.task import Task
 

@@ -5,10 +5,10 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from engram.context_helpers.startup import (
+from engram.context.startup import (
     build_startup_context,
-    orchestrate_startup_task_memory_retrieval,
 )
+from engram.memory_retrieval import orchestrate_startup_task_memory_retrieval
 from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title

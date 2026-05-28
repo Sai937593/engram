@@ -181,7 +181,7 @@ def test_retriever_falls_back_when_fts_query_execution_fails(project, monkeypatc
         raise sqlite3.OperationalError("malformed MATCH expression")
 
     monkeypatch.setattr(
-        "engram.memory_retrieval.fts_retriever._fetch_task_memory_fts_rows",
+        "engram.memory_retrieval.fts_retriever.retriever._fetch_task_memory_fts_rows",
         _raise_fts_error,
     )
 

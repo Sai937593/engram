@@ -1,8 +1,10 @@
-from engram.context_helpers.common import compact_text
-from engram.context_helpers.handoff import build_handoff_context
-from engram.context_helpers.snapshot import build_snapshot_context
-from engram.context_helpers.startup import build_startup_context
-from engram.context_helpers.task import build_task_context
+"""Unified agent and task context generation."""
+
+from engram.context.common import compact_text
+from engram.context.handoff import build_handoff_context
+from engram.context.snapshot import build_snapshot_context
+from engram.context.startup.orchestrator import build_startup_context
+from engram.context.task import build_task_context
 
 
 def _compact_text(text: str | None) -> str:

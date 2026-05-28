@@ -288,7 +288,7 @@ def test_semantic_retriever_returns_similarity_ranked_eligible_candidates(
         embedding_rows=[[0.95, 0.05, 0.0], [0.85, 0.15, 0.0], [1.0, 0.0, 0.0]],
     )
     monkeypatch.setattr(
-        "engram.memory_retrieval.fts_retriever.load_semantic_embedding_dependencies",
+        "engram.memory_retrieval.fts_retriever.semantic.load_semantic_embedding_dependencies",
         lambda: (_FakeNumpy, _FakeTextEmbedding),
     )
 
@@ -318,7 +318,7 @@ def test_semantic_retriever_empty_ready_index_returns_no_candidates(project, tmp
         embedding_rows=[],
     )
     monkeypatch.setattr(
-        "engram.memory_retrieval.fts_retriever.load_semantic_embedding_dependencies",
+        "engram.memory_retrieval.fts_retriever.semantic.load_semantic_embedding_dependencies",
         lambda: (_FakeNumpy, _FakeTextEmbedding),
     )
 

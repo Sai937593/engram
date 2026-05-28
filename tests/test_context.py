@@ -1,7 +1,7 @@
 """Tests for context generation (startup and task context)."""
 
 from engram.context import get_startup_context, get_task_context
-from engram.context_helpers.startup import (
+from engram.context.startup import (
     CONTEXT_TRUNCATION_MARKER,
     STARTUP_HARD_CHAR_BUDGET,
     STARTUP_HARD_TOKEN_BUDGET,
@@ -429,7 +429,7 @@ def test_startup_builder_renders_selected_task_memories_separate_from_guardrails
         pack_result=pack_result,
     )
     monkeypatch.setattr(
-        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        "engram.context.startup.builders.orchestrate_startup_task_memory_retrieval",
         lambda **kwargs: startup_result,
     )
 

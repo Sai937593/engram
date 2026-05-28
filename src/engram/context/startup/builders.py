@@ -1,10 +1,12 @@
-"""Startup context rendering."""
+"""Section frame builders for engram startup context."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from engram.context_helpers.common import compact_text
+from engram.context.startup.options import (
+    StartupContextOptions,
+    _compact_with_limit,
+    _render_section,
+)
 from engram.memory_retrieval import (
     StartupTaskMemoryRetrievalResult,
     orchestrate_startup_task_memory_retrieval,
@@ -14,69 +16,9 @@ from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title
 
-TOKEN_TO_CHAR_APPROX = 4
-STARTUP_TARGET_TOKEN_BUDGET_MIN = 1500
-STARTUP_TARGET_TOKEN_BUDGET_MAX = 2000
-STARTUP_HARD_TOKEN_BUDGET = 3000
-STARTUP_TARGET_CHAR_BUDGET_MIN = STARTUP_TARGET_TOKEN_BUDGET_MIN * TOKEN_TO_CHAR_APPROX
-STARTUP_TARGET_CHAR_BUDGET_MAX = STARTUP_TARGET_TOKEN_BUDGET_MAX * TOKEN_TO_CHAR_APPROX
-STARTUP_HARD_CHAR_BUDGET = STARTUP_HARD_TOKEN_BUDGET * TOKEN_TO_CHAR_APPROX
-CONTEXT_TRUNCATION_MARKER = "\n\n[Context truncated to fit budget.]"
-
-
-@dataclass(frozen=True)
-class StartupContextOptions:
-    """Configuration for deterministic startup context rendering."""
-
-    target_char_budget: int = STARTUP_TARGET_CHAR_BUDGET_MAX
-    hard_char_budget: int = STARTUP_HARD_CHAR_BUDGET
-    project_summary_char_limit: int = 400
-    phase_text_char_limit: int = 400
-    task_text_char_limit: int = 500
-    guardrail_text_char_limit: int = 220
-    task_memory_empty_state_text: str = "No relevant task memories selected."
-    task_memory_empty_state_char_limit: int = 220
-    task_memory_item_title_char_limit: int = 100
-    task_memory_item_content_char_limit: int = 260
-    l1_guardrail_limit: int = 6
-    relevant_file_limit: int = 5
-    relevant_file_path_char_limit: int = 120
-
-
-def _compact_with_limit(text: str | None, char_limit: int) -> str:
-    """Convert text to ASCII and truncate deterministically when needed."""
-    compacted = compact_text(text)
-    if not compacted or char_limit <= 0:
-        return ""
-    if len(compacted) <= char_limit:
-        return compacted
-    if char_limit <= 3:
-        return compacted[:char_limit]
-    return compacted[: char_limit - 3].rstrip() + "..."
-
-
-def _enforce_hard_budget(rendered: str, hard_char_budget: int) -> str:
-    """Cap output length with a deterministic truncation marker."""
-    if hard_char_budget <= 0:
-        return ""
-    if len(rendered) <= hard_char_budget:
-        return rendered
-
-    if hard_char_budget <= len(CONTEXT_TRUNCATION_MARKER):
-        return CONTEXT_TRUNCATION_MARKER[:hard_char_budget]
-
-    visible = rendered[: hard_char_budget - len(CONTEXT_TRUNCATION_MARKER)].rstrip()
-    return f"{visible}{CONTEXT_TRUNCATION_MARKER}"
-
-
-def _render_section(title: str, lines: list[str]) -> str:
-    """Render one startup section block."""
-    rendered_lines = [f"## {title}"]
-    rendered_lines.extend(line for line in lines if line)
-    return "\n".join(rendered_lines)
-
 
 def _build_project_frame(project: Project, options: StartupContextOptions) -> str:
+    """Build the project frame section."""
     lines = [f"Name: {project.name}"]
     summary = _compact_with_limit(project.summary, options.project_summary_char_limit)
     if summary:
@@ -85,6 +27,7 @@ def _build_project_frame(project: Project, options: StartupContextOptions) -> st
 
 
 def _build_phase_frame(active_phase: Phase | None, options: StartupContextOptions) -> str:
+    """Build the current phase frame section."""
     if not active_phase:
         return _render_section("CURRENT PHASE FRAME", ["No active phase selected."])
 
@@ -107,6 +50,7 @@ def _build_task_frame(
     branch: str | None = None,
     is_resuming: bool | None = None,
 ) -> str:
+    """Build the current or next task frame section."""
     if not selected_task:
         return _render_section("CURRENT/NEXT TASK FRAME", ["No current or next task selected."])
 
@@ -150,6 +94,7 @@ def _build_task_frame(
 
 
 def _build_guardrail_frame(project_id: str, options: StartupContextOptions) -> str:
+    """Build the project guardrails section."""
     guardrails = Memory.list_project_guardrail_candidates(project_id)
     l0_guardrails = [memory for memory in guardrails if memory.level == "L0"]
     l1_guardrails = [memory for memory in guardrails if memory.level == "L1"]
@@ -186,6 +131,7 @@ def _build_task_memory_candidates_frame(
     options: StartupContextOptions,
     retrieval_result: StartupTaskMemoryRetrievalResult | None = None,
 ) -> str:
+    """Build the task memory candidates section."""
     result = retrieval_result or orchestrate_startup_task_memory_retrieval(
         project=project,
         active_phase=active_phase,
@@ -224,6 +170,7 @@ def _build_task_memory_candidates_frame(
 
 
 def _build_next_action(project: Project, selected_task: Task | None) -> str:
+    """Build the next action instruction section."""
     if selected_task:
         return _render_section(
             "NEXT ACTION",
@@ -273,82 +220,3 @@ def _build_next_action(project: Project, selected_task: Task | None) -> str:
             "Run engram_workflow_start or engram_task_start to select and start the next actionable task.",
         ],
     )
-
-
-def _task_matches_phase(task: Task, phase: Phase) -> bool:
-    """Return True when task belongs to the phase via phase_id or legacy phase title."""
-    if task.phase_id == phase.id:
-        return True
-    if task.phase_id:
-        return False
-    return (
-        compact_text(task.phase).strip().casefold() == compact_text(phase.title).strip().casefold()
-    )
-
-
-def _resolve_default_startup_inputs(project_id: str) -> tuple[Phase | None, Task | None]:
-    """Resolve active phase and selected task for legacy project-id callers."""
-    phases = Phase.list_by_project(project_id)
-    active_phase = next((phase for phase in phases if phase.status == "active"), None)
-    tasks = Task.list_by_project(project_id)
-
-    if active_phase:
-        in_progress_active = [
-            task
-            for task in tasks
-            if task.status == "in-progress" and _task_matches_phase(task, active_phase)
-        ]
-        if in_progress_active:
-            return active_phase, in_progress_active[0]
-
-        next_active = Task.get_next_for_phase(project_id, active_phase.id, active_phase.title)
-        if next_active:
-            return active_phase, next_active
-
-        next_unphased = Task.get_next_unphased(project_id)
-        if next_unphased:
-            return active_phase, next_unphased
-
-    in_progress_any = [task for task in tasks if task.status == "in-progress"]
-    if in_progress_any:
-        return active_phase, in_progress_any[0]
-
-    return active_phase, Task.get_next(project_id)
-
-
-def build_startup_context(
-    project: Project | str,
-    active_phase: Phase | None = None,
-    selected_task: Task | None = None,
-    options: StartupContextOptions | None = None,
-    startup_task_memory_result: StartupTaskMemoryRetrievalResult | None = None,
-    branch: str | None = None,
-    is_resuming: bool | None = None,
-) -> str:
-    """Generate the unified startup context from explicit startup inputs."""
-    resolved_options = options or StartupContextOptions()
-    resolved_project = project if isinstance(project, Project) else Project.get(project)
-    if not resolved_project:
-        return "Project not found."
-
-    if isinstance(project, str) and active_phase is None and selected_task is None:
-        active_phase, selected_task = _resolve_default_startup_inputs(resolved_project.id)
-
-    sections = [
-        "# STARTUP CONTEXT",
-        _build_project_frame(resolved_project, resolved_options),
-        _build_phase_frame(active_phase, resolved_options),
-        _build_task_frame(selected_task, resolved_options, branch=branch, is_resuming=is_resuming),
-        _build_guardrail_frame(resolved_project.id, resolved_options),
-        _build_task_memory_candidates_frame(
-            resolved_project,
-            active_phase,
-            selected_task,
-            resolved_options,
-            startup_task_memory_result,
-        ),
-        _build_next_action(resolved_project, selected_task),
-    ]
-
-    rendered = "\n\n".join(sections)
-    return _enforce_hard_budget(rendered, resolved_options.hard_char_budget)
