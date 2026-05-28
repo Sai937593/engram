@@ -6,6 +6,7 @@ import functools
 from typing import Any
 
 import anyio.to_thread
+import yaml
 
 from engram.services.errors import EngramServiceError
 from engram.services.memory_service import create_memory, search_memories
@@ -24,71 +25,111 @@ from engram.services.task_service import (
 from engram.services.workflow_service import finish_workflow, start_workflow
 
 
+def _respond(data: dict[str, Any]) -> str:
+    """Recursively strip None values and empty lists/dicts, then serialize to YAML."""
+
+    def prune(val: Any) -> Any:
+        if isinstance(val, dict):
+            pruned_dict = {}
+            for k, v in val.items():
+                pruned_v = prune(v)
+                if pruned_v is not None and pruned_v != [] and pruned_v != {}:
+                    pruned_dict[k] = pruned_v
+            return pruned_dict
+        elif isinstance(val, list):
+            pruned_list = []
+            for item in val:
+                pruned_item = prune(item)
+                if pruned_item is not None and pruned_item != [] and pruned_item != {}:
+                    pruned_list.append(pruned_item)
+            return pruned_list
+        return val
+
+    pruned_data = prune(data)
+    return yaml.safe_dump(pruned_data, sort_keys=False)
+
+
 def register_tools(server: Any) -> None:
     """Register MCP tools."""
 
     @server.tool()
-    def engram_project_current() -> dict[str, Any]:
+    def engram_project_current() -> str:
         """Get details of the currently bound engram project."""
         try:
             project = resolve_current_project()
-            return {
-                "ok": True,
-                "project": project,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "project": project,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    def engram_task_list(status: str | None = None, phase: str | None = None) -> dict[str, Any]:
+    def engram_task_list(status: str | None = None, phase: str | None = None) -> str:
         """List tasks for the currently bound engram project, optionally filtering by status or phase."""
         try:
             project = resolve_current_project()
             tasks = list_tasks(project_id=str(project["id"]), status=status, phase=phase)
-            return {
-                "ok": True,
-                "tasks": tasks,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "tasks": tasks,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    def engram_task_get(task_ref: str) -> dict[str, Any]:
+    def engram_task_get(task_ref: str) -> str:
         """Get a task by ID or task reference for the currently bound engram project."""
         try:
             project = resolve_current_project()
             task = get_task(project_id=str(project["id"]), task_ref=task_ref)
-            return {
-                "ok": True,
-                "task": task,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "task": task,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    def engram_task_next() -> dict[str, Any]:
+    def engram_task_next() -> str:
         """Get the next actionable task for the currently bound engram project."""
         try:
             project = resolve_current_project()
             task = get_next_task(project_id=str(project["id"]))
-            return {
-                "ok": True,
-                "task": task,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "task": task,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
     def engram_memory_search(
@@ -96,7 +137,7 @@ def register_tools(server: Any) -> None:
         type: str | None = None,
         tags: list[str] | None = None,
         limit: int = 10,
-    ) -> dict[str, Any]:
+    ) -> str:
         """Search memories in the currently bound engram project."""
         try:
             project = resolve_current_project()
@@ -107,31 +148,39 @@ def register_tools(server: Any) -> None:
                 tags=tags,
                 limit=limit,
             )
-            return {
-                "ok": True,
-                "memories": memories,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "memories": memories,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    def engram_phase_list(status: str | None = None) -> dict[str, Any]:
+    def engram_phase_list(status: str | None = None) -> str:
         """List phases for the currently bound engram project, optionally filtering by status."""
         try:
             project = resolve_current_project()
             phases = list_phases(project_id=str(project["id"]), status=status)
-            return {
-                "ok": True,
-                "phases": phases,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "phases": phases,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
     def engram_task_create(
@@ -145,7 +194,7 @@ def register_tools(server: Any) -> None:
         acceptance: str | None = None,
         tags: list[str] | None = None,
         relevant_files: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> str:
         """Create a new task in the currently bound engram project."""
         try:
             project = resolve_current_project()
@@ -162,21 +211,25 @@ def register_tools(server: Any) -> None:
                 tags=tags,
                 relevant_files=relevant_files,
             )
-            return {
-                "ok": True,
-                "task": task,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "task": task,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
     def engram_task_update(
         task_ref: str,
         updates: dict[str, Any],
-    ) -> dict[str, Any]:
+    ) -> str:
         """Update an existing task in the currently bound engram project."""
         try:
             project = resolve_current_project()
@@ -185,21 +238,25 @@ def register_tools(server: Any) -> None:
                 task_ref=task_ref,
                 **updates,
             )
-            return {
-                "ok": True,
-                "task": task,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "task": task,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
     def engram_task_note_append(
         task_ref: str,
         note: str,
-    ) -> dict[str, Any]:
+    ) -> str:
         """Append a note to a task's evidence log in the currently bound engram project."""
         try:
             project = resolve_current_project()
@@ -208,15 +265,19 @@ def register_tools(server: Any) -> None:
                 task_ref=task_ref,
                 note=note,
             )
-            return {
-                "ok": True,
-                "task": task,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "task": task,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
     def engram_memory_create(
@@ -229,7 +290,7 @@ def register_tools(server: Any) -> None:
         always_include: bool = False,
         level: str | None = None,
         id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> str:
         """Create a new memory in the currently bound engram project."""
         try:
             project = resolve_current_project()
@@ -245,18 +306,22 @@ def register_tools(server: Any) -> None:
                 level=level,
                 id=id,
             )
-            return {
-                "ok": True,
-                "memory": memory,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "memory": memory,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    def engram_phase_start(phase_ref: str) -> dict[str, Any]:
+    def engram_phase_start(phase_ref: str) -> str:
         """Start a phase in the currently bound engram project, demoting other active phases."""
         try:
             project = resolve_current_project()
@@ -264,18 +329,22 @@ def register_tools(server: Any) -> None:
                 project_id=str(project["id"]),
                 phase_ref=phase_ref,
             )
-            return {
-                "ok": True,
-                "phase": phase,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "phase": phase,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    def engram_phase_complete(phase_ref: str) -> dict[str, Any]:
+    def engram_phase_complete(phase_ref: str) -> str:
         """Complete a phase in the currently bound engram project, validating no unfinished tasks remain."""
         try:
             project = resolve_current_project()
@@ -283,18 +352,22 @@ def register_tools(server: Any) -> None:
                 project_id=str(project["id"]),
                 phase_ref=phase_ref,
             )
-            return {
-                "ok": True,
-                "phase": phase,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "phase": phase,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    def engram_task_start(task_ref: str) -> dict[str, Any]:
+    def engram_task_start(task_ref: str) -> str:
         """Start a task in the currently bound engram project, validating its dependencies."""
         try:
             project = resolve_current_project()
@@ -302,18 +375,22 @@ def register_tools(server: Any) -> None:
                 project_id=str(project["id"]),
                 task_ref=task_ref,
             )
-            return {
-                "ok": True,
-                "task": task,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "task": task,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    def engram_task_done(task_ref: str, evidence: str | None = None) -> dict[str, Any]:
+    def engram_task_done(task_ref: str, evidence: str | None = None) -> str:
         """Complete a task in the currently bound engram project, optionally appending evidence."""
         try:
             project = resolve_current_project()
@@ -322,18 +399,22 @@ def register_tools(server: Any) -> None:
                 task_ref=task_ref,
                 evidence=evidence,
             )
-            return {
-                "ok": True,
-                "task": task,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    "task": task,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    async def engram_workflow_start() -> dict[str, Any]:
+    async def engram_workflow_start() -> str:
         """Start or resume the next actionable task in the currently bound engram project.
 
         This tool resolves the project bound to the current directory, checks out or creates the
@@ -356,18 +437,22 @@ def register_tools(server: Any) -> None:
                     repo_path=repo_paths[0],
                 )
             )
-            return {
-                "ok": True,
-                **res,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    **res,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )
 
     @server.tool()
-    async def engram_workflow_finish(commit_type: str | None = None) -> dict[str, Any]:
+    async def engram_workflow_finish(commit_type: str | None = None) -> str:
         """Finish the active task: commit, push, and mark done.
 
         This tool stages all current changes, creates a conventional Git commit based on the active
@@ -390,12 +475,16 @@ def register_tools(server: Any) -> None:
                     commit_type=commit_type,
                 )
             )
-            return {
-                "ok": True,
-                **res,
-            }
+            return _respond(
+                {
+                    "ok": True,
+                    **res,
+                }
+            )
         except EngramServiceError as exc:
-            return {
-                "ok": False,
-                "error": exc.to_dict(),
-            }
+            return _respond(
+                {
+                    "ok": False,
+                    "error": exc.to_dict(),
+                }
+            )

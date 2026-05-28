@@ -7,6 +7,8 @@ import importlib
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 MCP_MODULES = (
     "engram.mcp",
     "engram.mcp.server",
@@ -468,29 +470,29 @@ def test_mcp_memory_search_tool(tmp_db, monkeypatch) -> None:
     tool = server.tools["engram_memory_search"]
 
     # 1. Search without filters
-    res = tool()
+    res = yaml.safe_load(tool())
     assert res["ok"] is True
     assert len(res["memories"]) == 2
 
     # 2. Search with query filter
-    res = tool(query="FastMCP")
+    res = yaml.safe_load(tool(query="FastMCP"))
     assert res["ok"] is True
     assert len(res["memories"]) == 1
     assert res["memories"][0]["id"] == "memo-search-1"
 
     # 3. Search with type filter
-    res = tool(type="lesson")
+    res = yaml.safe_load(tool(type="lesson"))
     assert res["ok"] is True
     assert len(res["memories"]) == 1
     assert res["memories"][0]["id"] == "memo-search-2"
 
     # 4. Search with tags filter
-    res = tool(tags=["mcp"])
+    res = yaml.safe_load(tool(tags=["mcp"]))
     assert res["ok"] is True
     assert len(res["memories"]) == 1
     assert res["memories"][0]["id"] == "memo-search-1"
 
     # 5. Search with limit
-    res = tool(limit=1)
+    res = yaml.safe_load(tool(limit=1))
     assert res["ok"] is True
     assert len(res["memories"]) == 1
