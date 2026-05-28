@@ -332,7 +332,7 @@ def memory_related_to_task(task_id: str, debug: bool) -> None:
     task_item = resolve_task_by_id_or_prefix(project.id, task_id)
 
     # Try resolving active phase if it matches the task's phase context
-    from engram.cli.work_cmds_helpers import format_retrieval_debug_output, get_active_phase
+    from engram.cli.work_helpers import format_retrieval_debug_output, get_active_phase
 
     active_phase = get_active_phase(project.id)
     if active_phase:

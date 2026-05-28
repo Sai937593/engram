@@ -5,13 +5,6 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from engram.cli.work_cmds_helpers import (
-    get_target_branch,
-    is_same_phase,
-    resolve_commit_type,
-    select_task_to_start,
-    slugify,
-)
 from engram.context_helpers.startup import (
     build_startup_context,
     orchestrate_startup_task_memory_retrieval,
@@ -21,6 +14,13 @@ from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title
 from engram.services.errors import EngramServiceError
 from engram.services.serializers import task_to_dict
+from engram.services.workflow_helpers import (
+    get_target_branch,
+    is_same_phase,
+    resolve_commit_type,
+    select_task_to_start,
+    slugify,
+)
 
 CONVENTIONAL_COMMIT_TYPES: set[str] = {
     "feat",

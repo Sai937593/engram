@@ -6,19 +6,21 @@ import click
 
 import engram.cli as cli_root
 import engram.context_helpers.startup as startup_context
-from engram.cli.work_cmds_helpers import (
+from engram.cli.work_helpers import (
     format_retrieval_debug_output,
     get_active_phase,
     get_current_branch,
-    get_target_branch,
     git_checkout_phase_branch,
-    is_same_phase,
     is_working_tree_dirty,
+)
+from engram.models.task import Task, get_effective_phase_title
+from engram.services.workflow_helpers import (
+    get_target_branch,
+    is_same_phase,
     resolve_commit_type,
     select_task_to_start,
     slugify,
 )
-from engram.models.task import Task, get_effective_phase_title
 
 
 def _filter_git_output(output: str | None) -> str:
