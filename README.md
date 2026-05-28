@@ -5,6 +5,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-black.svg)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/Sai937593/engram/actions/workflows/ci.yml/badge.svg)](https://github.com/Sai937593/engram/actions/workflows/ci.yml)
 
 Engram is a small CLI that gives coding agents a durable local memory layer. It keeps project state, tasks, decisions, lessons, constraints, and reusable snippets in a central SQLite database at `~/.engram/memory.db`, while your repositories stay clean.
 
