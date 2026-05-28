@@ -25,21 +25,26 @@ from engram.services.task_service import (
 from engram.services.workflow_service import finish_workflow, start_workflow
 
 
-def _respond(data: dict[str, Any]) -> str:
+def _respond(data: dict[str, Any], keep_empty_keys: set[str] | None = None) -> str:
     """Recursively strip None values and empty lists/dicts, then serialize to YAML."""
+    keys_to_keep = keep_empty_keys or set()
 
-    def prune(val: Any) -> Any:
+    def prune(val: Any, key: str | None = None) -> Any:
         if isinstance(val, dict):
             pruned_dict = {}
             for k, v in val.items():
-                pruned_v = prune(v)
-                if pruned_v is not None and pruned_v != [] and pruned_v != {}:
+                pruned_v = prune(v, k)
+                if (
+                    pruned_v is not None
+                    and (pruned_v != [] or k in keys_to_keep)
+                    and (pruned_v != {} or k in keys_to_keep)
+                ):
                     pruned_dict[k] = pruned_v
             return pruned_dict
         elif isinstance(val, list):
             pruned_list = []
             for item in val:
-                pruned_item = prune(item)
+                pruned_item = prune(item, None)
                 if pruned_item is not None and pruned_item != [] and pruned_item != {}:
                     pruned_list.append(pruned_item)
             return pruned_list
@@ -47,6 +52,24 @@ def _respond(data: dict[str, Any]) -> str:
 
     pruned_data = prune(data)
     return yaml.safe_dump(pruned_data, sort_keys=False)
+
+
+def slim_task_dict(task: dict[str, Any]) -> dict[str, Any]:
+    """Prune a full task dictionary to essential scan fields only."""
+    return {
+        "id": task["id"],
+        "title": task["title"],
+        "status": task["status"],
+    }
+
+
+def slim_phase_dict(phase: dict[str, Any]) -> dict[str, Any]:
+    """Prune a full phase dictionary to essential scan fields only."""
+    return {
+        "id": phase["id"],
+        "title": phase["title"],
+        "status": phase["status"],
+    }
 
 
 def register_tools(server: Any) -> None:
@@ -57,10 +80,15 @@ def register_tools(server: Any) -> None:
         """Get details of the currently bound engram project."""
         try:
             project = resolve_current_project()
+            slim_project = {
+                "id": str(project["id"]),
+                "name": str(project["name"]),
+                "status": str(project["status"]),
+            }
             return _respond(
                 {
                     "ok": True,
-                    "project": project,
+                    "project": slim_project,
                 }
             )
         except EngramServiceError as exc:
@@ -77,11 +105,22 @@ def register_tools(server: Any) -> None:
         try:
             project = resolve_current_project()
             tasks = list_tasks(project_id=str(project["id"]), status=status, phase=phase)
+            if not tasks:
+                return _respond(
+                    {
+                        "ok": True,
+                        "tasks": [],
+                        "hint": f"No {status or 'todo'} tasks. Try status=all to see all tasks.",
+                    },
+                    keep_empty_keys={"tasks"},
+                )
             return _respond(
                 {
                     "ok": True,
-                    "tasks": tasks,
-                }
+                    "tasks": [slim_task_dict(t) for t in tasks],
+                    "hint": "Use engram_task_get <id> for full task details",
+                },
+                keep_empty_keys={"tasks"},
             )
         except EngramServiceError as exc:
             return _respond(
@@ -171,8 +210,9 @@ def register_tools(server: Any) -> None:
             return _respond(
                 {
                     "ok": True,
-                    "phases": phases,
-                }
+                    "phases": [slim_phase_dict(p) for p in phases],
+                },
+                keep_empty_keys={"phases"},
             )
         except EngramServiceError as exc:
             return _respond(

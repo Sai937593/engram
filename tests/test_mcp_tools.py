@@ -96,9 +96,7 @@ def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
         "project": {
             "id": "proj-tool-1",
             "name": "MCP Tool Project",
-            "summary": "Service tool project summary",
             "status": "active",
-            "repo_paths": [cwd],
         },
     }
 
@@ -306,6 +304,9 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
     assert res_all["ok"] is True
     assert len(res_all["tasks"]) == 2
     assert {t["id"] for t in res_all["tasks"]} == {"task-1", "task-2"}
+    assert res_all["hint"] == "Use engram_task_get <id> for full task details"
+    for t in res_all["tasks"]:
+        assert set(t.keys()) == {"id", "title", "status"}
 
     # Filtered by status
     res_todo = yaml.safe_load(handler(status="todo"))
@@ -319,6 +320,32 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
     # By default, status is None, which filters by "todo"
     assert len(res_phase["tasks"]) == 1
     assert res_phase["tasks"][0]["id"] == "task-1"
+
+
+def test_mcp_tool_task_list_empty(tmp_db, monkeypatch) -> None:
+    """Verify task list empty behavior and status filter hint."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-empty")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-empty",
+        name="MCP Empty Project",
+        summary="Empty",
+        repo_paths=[cwd],
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_task_list"]
+
+    res = yaml.safe_load(handler(status="todo"))
+    assert res == {
+        "ok": True,
+        "tasks": [],
+        "hint": "No todo tasks. Try status=all to see all tasks.",
+    }
 
 
 def test_mcp_tool_task_list_raises_project_not_bound(tmp_db, monkeypatch) -> None:
@@ -510,6 +537,8 @@ def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
     assert res_all["ok"] is True
     assert len(res_all["phases"]) == 2
     assert {p["id"] for p in res_all["phases"]} == {"phase-1", "phase-2"}
+    for p in res_all["phases"]:
+        assert set(p.keys()) == {"id", "title", "status"}
 
     # Filtered by status
     res_active = yaml.safe_load(handler(status="active"))
