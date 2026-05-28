@@ -110,7 +110,7 @@ def register_task_tools(server: Any) -> None:
             project = engram.mcp.tools.resolve_current_project()
             project_id = str(project["id"])
             from engram.models.task import Task
-            from engram.services.task_service import VALID_TASK_UPDATE_FIELDS, resolve_task_ref
+            from engram.services.task import VALID_TASK_UPDATE_FIELDS, resolve_task_ref
 
             task_id = resolve_task_ref(project_id, task_ref)
             task_before = Task.get(task_id)

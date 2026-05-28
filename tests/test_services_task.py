@@ -14,7 +14,7 @@ from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task
 from engram.services.errors import EngramServiceError, ValidationError
-from engram.services.task_service import (
+from engram.services.task import (
     append_task_note,
     complete_task,
     create_task,
@@ -304,18 +304,25 @@ def test_get_next_task_returns_none_when_no_actionable_tasks_exist(tmp_db):
 
 
 def test_task_service_module_is_adapter_safe(tmp_db):
-    module = importlib.import_module("engram.services.task_service")
-    source = Path(module.__file__).read_text(encoding="utf-8")
-    parsed = ast.parse(source)
-    banned_prefixes = ("click", "rich", "engram.commands", "engram.mcp", "subprocess")
+    modules_to_check = [
+        "engram.services.task",
+        "engram.services.task.crud",
+        "engram.services.task.lifecycle",
+        "engram.services.task.validation",
+    ]
+    for mod_name in modules_to_check:
+        module = importlib.import_module(mod_name)
+        source = Path(module.__file__).read_text(encoding="utf-8")
+        parsed = ast.parse(source)
+        banned_prefixes = ("click", "rich", "engram.commands", "engram.mcp", "subprocess")
 
-    for node in ast.walk(parsed):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                assert not alias.name.startswith(banned_prefixes)
-        elif isinstance(node, ast.ImportFrom):
-            imported_module = node.module or ""
-            assert not imported_module.startswith(banned_prefixes)
+        for node in ast.walk(parsed):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert not alias.name.startswith(banned_prefixes)
+            elif isinstance(node, ast.ImportFrom):
+                imported_module = node.module or ""
+                assert not imported_module.startswith(banned_prefixes)
 
 
 def test_task_service_calls_are_read_only_on_task_rows(tmp_db):

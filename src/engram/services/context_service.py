@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import engram.context as context
-from engram.services import project_service, task_service
+import engram.services.project_service as project_service
+import engram.services.task as task_service
 
 
 def _resolve_project_id_for_cwd(cwd: str | None = None) -> str:

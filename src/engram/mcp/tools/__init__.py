@@ -22,7 +22,7 @@ from engram.services.phase_service import (
     start_phase,
 )
 from engram.services.project_service import resolve_current_project
-from engram.services.task_service import (
+from engram.services.task import (
     append_task_note,
     complete_task,
     create_task,
