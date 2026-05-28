@@ -524,10 +524,19 @@ def register_tools(server: Any) -> None:
                     commit_type=commit_type,
                 )
             )
+            phase_complete = res["phase_complete"]
+            next_guidance = (
+                "Phase complete. Ask the user for permission to run the engram-phase-transition skill."
+                if phase_complete
+                else "Run engram_workflow_start to claim the next task."
+            )
             return _respond(
                 {
                     "ok": True,
-                    **res,
+                    "id": res["id"],
+                    "commit": res["commit"],
+                    "phase_complete": phase_complete,
+                    "next": next_guidance,
                 }
             )
         except EngramServiceError as exc:

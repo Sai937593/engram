@@ -975,9 +975,8 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     }
 
     mock_finish_res = {
-        "task": {"id": "t1", "title": "Test Task", "status": "done"},
-        "commit_msg": "feat: Test Task",
-        "push_output": "Pushed successfully.",
+        "id": "t1",
+        "commit": "feat: Test Task",
         "phase_complete": False,
     }
 
@@ -1012,10 +1011,12 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     # 2. Happy path: Finish (handler is now async)
     res_finish = yaml.safe_load(asyncio.run(finish_handler(commit_type="feat")))
     assert res_finish["ok"] is True
-    assert res_finish["task"] == {"id": "t1", "title": "Test Task", "status": "done"}
-    assert res_finish["commit_msg"] == "feat: Test Task"
-    assert res_finish["push_output"] == "Pushed successfully."
+    assert res_finish["id"] == "t1"
+    assert res_finish["commit"] == "feat: Test Task"
     assert res_finish["phase_complete"] is False
+    assert res_finish["next"] == "Run engram_workflow_start to claim the next task."
+    assert "task" not in res_finish
+    assert "push_output" not in res_finish
     assert finish_called_args == [("proj-tool-workflow", cwd, "feat")]
 
     # 3. Error path: start_workflow raising EngramServiceError

@@ -32,7 +32,7 @@ def test_finish_workflow_commit_type_resolution(tmp_db: Any) -> None:
     )
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res_a = finish_workflow("proj-1", "/tmp/proj-1", commit_type="chore")
-    assert res_a["commit_msg"].startswith("chore(phase-one):")
+    assert res_a["commit"].startswith("chore(phase-one):")
 
     # Case B: Resolution from tags (bug tag -> fix)
     git_mock.calls.clear()
@@ -46,7 +46,7 @@ def test_finish_workflow_commit_type_resolution(tmp_db: Any) -> None:
     )
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res_b = finish_workflow("proj-1", "/tmp/proj-1")
-    assert res_b["commit_msg"].startswith("fix(phase-one):")
+    assert res_b["commit"].startswith("fix(phase-one):")
 
     # Case C: Fallback to feat when no explicit type or tags match
     git_mock.calls.clear()
@@ -59,7 +59,7 @@ def test_finish_workflow_commit_type_resolution(tmp_db: Any) -> None:
     )
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res_c = finish_workflow("proj-1", "/tmp/proj-1")
-    assert res_c["commit_msg"].startswith("feat(phase-one):")
+    assert res_c["commit"].startswith("feat(phase-one):")
 
 
 def test_finish_workflow_phase_complete_detection(tmp_db: Any) -> None:

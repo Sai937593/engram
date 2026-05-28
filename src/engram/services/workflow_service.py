@@ -177,8 +177,7 @@ def finish_workflow(
             phase_complete = True
 
     return {
-        "task": task_to_dict(task),
-        "commit_msg": commit_msg,
-        "push_output": "Pushed successfully to origin HEAD.",
+        "id": task.id,
+        "commit": commit_msg,
         "phase_complete": phase_complete,
     }
