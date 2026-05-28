@@ -198,8 +198,16 @@ def register_tools(server: Any) -> None:
         """Create a new task in the currently bound engram project."""
         try:
             project = resolve_current_project()
+            project_id = str(project["id"])
+
+            from engram.models.task import Task
+
+            has_in_progress = any(
+                t.status == "in-progress" for t in Task.list_by_project(project_id)
+            )
+
             task = create_task(
-                project_id=str(project["id"]),
+                project_id=project_id,
                 title=title,
                 description=description,
                 status=status,
@@ -211,12 +219,18 @@ def register_tools(server: Any) -> None:
                 tags=tags,
                 relevant_files=relevant_files,
             )
-            return _respond(
-                {
-                    "ok": True,
-                    "task": task,
-                }
-            )
+
+            resp = {
+                "ok": True,
+                "id": task["id"],
+                "title": task["title"],
+            }
+            if has_in_progress:
+                resp["warn"] = (
+                    "An in-progress task already exists in this project. Finish it before starting a new one."
+                )
+
+            return _respond(resp)
         except EngramServiceError as exc:
             return _respond(
                 {
@@ -233,15 +247,40 @@ def register_tools(server: Any) -> None:
         """Update an existing task in the currently bound engram project."""
         try:
             project = resolve_current_project()
+            project_id = str(project["id"])
+
+            from engram.models.task import Task
+            from engram.services.task_service import VALID_TASK_UPDATE_FIELDS, resolve_task_ref
+
+            task_id = resolve_task_ref(project_id, task_ref)
+            task_before = Task.get(task_id)
+            before_values = {}
+            if task_before:
+                for field in VALID_TASK_UPDATE_FIELDS:
+                    val = getattr(task_before, field, None)
+                    if isinstance(val, list):
+                        before_values[field] = list(val)
+                    else:
+                        before_values[field] = val
+
             task = update_task(
-                project_id=str(project["id"]),
+                project_id=project_id,
                 task_ref=task_ref,
                 **updates,
             )
+
+            updated_fields = []
+            for field in VALID_TASK_UPDATE_FIELDS:
+                after_val = task.get(field)
+                before_val = before_values.get(field)
+                if before_val != after_val:
+                    updated_fields.append(field)
+
             return _respond(
                 {
                     "ok": True,
-                    "task": task,
+                    "id": task["id"],
+                    "updated_fields": sorted(updated_fields),
                 }
             )
         except EngramServiceError as exc:
@@ -268,7 +307,7 @@ def register_tools(server: Any) -> None:
             return _respond(
                 {
                     "ok": True,
-                    "task": task,
+                    "id": task["id"],
                 }
             )
         except EngramServiceError as exc:
@@ -378,7 +417,9 @@ def register_tools(server: Any) -> None:
             return _respond(
                 {
                     "ok": True,
-                    "task": task,
+                    "id": task["id"],
+                    "status": task["status"],
+                    "next": "Run engram_memory_search with task keywords, then draft implementation_plan.md",
                 }
             )
         except EngramServiceError as exc:
@@ -399,10 +440,32 @@ def register_tools(server: Any) -> None:
                 task_ref=task_ref,
                 evidence=evidence,
             )
+            # Determine phase_complete
+            from engram.models.task import Task, get_effective_phase_title
+
+            def local_is_same_phase(task_1: Task, task_2: Task) -> bool:
+                if task_1.phase_id and task_2.phase_id:
+                    return task_1.phase_id == task_2.phase_id
+                return get_effective_phase_title(task_1) == get_effective_phase_title(task_2)
+
+            task_model = Task.get(task["id"])
+            phase_complete = False
+            if task_model:
+                project_id = str(project["id"])
+                tasks = Task.list_by_project(project_id)
+                next_task = Task.get_next(project_id)
+                if not next_task or not local_is_same_phase(next_task, task_model):
+                    phase_tasks = [pt for pt in tasks if local_is_same_phase(pt, task_model)]
+                    if all(pt.status in ("done", "cancelled") for pt in phase_tasks):
+                        phase_complete = True
+
             return _respond(
                 {
                     "ok": True,
-                    "task": task,
+                    "id": task["id"],
+                    "status": task["status"],
+                    "phase_complete": phase_complete,
+                    "next": "Log lessons with engram_memory_create, then call engram_workflow_finish",
                 }
             )
         except EngramServiceError as exc:
