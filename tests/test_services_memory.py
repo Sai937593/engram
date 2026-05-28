@@ -446,6 +446,7 @@ def test_create_memory_task_scope_with_level_raises_validation_error(tmp_db):
     assert exc.value.code == "INVALID_MEMORY_LEVEL"
 
 
+@pytest.mark.slow
 def test_get_recent_memories_returns_correct_order(tmp_db):
     project = _create_project("proj-recent-a", "/tmp/proj-recent-a")
     Memory.create(

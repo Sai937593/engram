@@ -2,6 +2,7 @@
 
 import re
 
+import pytest
 from click.testing import CliRunner
 
 from engram.cli import cli
@@ -14,6 +15,7 @@ def make_runner_with_project(monkeypatch, project) -> CliRunner:
     return CliRunner()
 
 
+@pytest.mark.slow
 def test_task_phase_integration_e2e(tmp_db, project, monkeypatch) -> None:
     """Validate full end-to-end integration flow between tasks and phases via CLI."""
     runner = make_runner_with_project(monkeypatch, project)
