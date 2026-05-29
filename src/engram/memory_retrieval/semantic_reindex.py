@@ -130,18 +130,34 @@ def reindex_semantic_memory_index(
     vectors: list[Any] = []
     indexed_ids: list[str] = []
     failed_count = 0
-    for memory in memories:
-        try:
-            raw_vectors = list(embedder.embed([_embedding_text(memory)]))
-            if not raw_vectors:
-                raise SemanticReindexError("embedder returned no vectors")
-            vector = np_module.asarray(raw_vectors[0], dtype=np_module.float32)
+
+    try:
+        texts = [_embedding_text(memory) for memory in memories]
+        raw_vectors_batch = list(embedder.embed(texts))
+        if len(raw_vectors_batch) != len(memories):
+            raise SemanticReindexError("embedder returned incorrect number of vectors")
+        for memory, raw_vector in zip(memories, raw_vectors_batch, strict=True):
+            vector = np_module.asarray(raw_vector, dtype=np_module.float32)
             if getattr(vector, "ndim", 1) != 1:
                 raise SemanticReindexError("embedder returned a non-1D vector")
             vectors.append(vector)
             indexed_ids.append(memory.id)
-        except Exception:
-            failed_count += 1
+    except Exception:
+        vectors.clear()
+        indexed_ids.clear()
+        failed_count = 0
+        for memory in memories:
+            try:
+                raw_vectors = list(embedder.embed([_embedding_text(memory)]))
+                if not raw_vectors:
+                    raise SemanticReindexError("embedder returned no vectors")
+                vector = np_module.asarray(raw_vectors[0], dtype=np_module.float32)
+                if getattr(vector, "ndim", 1) != 1:
+                    raise SemanticReindexError("embedder returned a non-1D vector")
+                vectors.append(vector)
+                indexed_ids.append(memory.id)
+            except Exception:
+                failed_count += 1
     if vectors:
         matrix = np_module.stack(vectors).astype(np_module.float32)
         model_dim = resolve_semantic_model_dim(
