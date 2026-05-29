@@ -89,15 +89,11 @@ def resolve_task_memory_pack_options(
     return options or TaskMemoryPackOptions()
 
 
-def pack_task_memories(
+def _sort_candidates(
     candidates: tuple[TaskMemoryCandidate, ...],
-    retrieval_metadata: TaskMemoryRetrievalMetadata,
-    options: TaskMemoryPackOptions | None = None,
-) -> TaskMemoryPackResult:
-    """Deterministic selection and budgeted packing of retrieved task memories."""
-    opts = resolve_task_memory_pack_options(options)
-
-    # 1. Index and sort candidates using stable sorting with fallback to original index
+    ordering_fields: tuple[str, ...],
+) -> list[tuple[TaskMemoryCandidate, int]]:
+    """Stable sort candidates based on ordering fields with fallback to original index."""
     import functools
 
     indexed_candidates = [(cand, idx) for idx, cand in enumerate(candidates)]
@@ -108,7 +104,7 @@ def pack_task_memories(
     ) -> int:
         cand1, idx1 = item1
         cand2, idx2 = item2
-        for field in opts.ordering_fields:
+        for field in ordering_fields:
             reverse = field.startswith("-")
             attr = field[1:] if reverse else field
             val1 = getattr(cand1, attr)
@@ -121,20 +117,49 @@ def pack_task_memories(
         # Fallback to stable input order (original index)
         return 1 if idx1 > idx2 else -1
 
-    sorted_indexed_candidates = sorted(
+    return sorted(
         indexed_candidates,
         key=functools.cmp_to_key(compare_items),
     )
 
-    # 2. Deduplicate candidates by dedupe_key (e.g. memory_id)
+
+def _deduplicate_candidates(
+    sorted_indexed_candidates: list[tuple[TaskMemoryCandidate, int]],
+    dedupe_key: str,
+) -> list[tuple[TaskMemoryCandidate, int]]:
+    """Deduplicate candidates while maintaining order."""
     seen_keys = set()
     unique_sorted_candidates: list[tuple[TaskMemoryCandidate, int]] = []
     for cand, idx in sorted_indexed_candidates:
-        key_val = getattr(cand, opts.dedupe_key)
+        key_val = getattr(cand, dedupe_key)
         if key_val not in seen_keys:
             seen_keys.add(key_val)
             unique_sorted_candidates.append((cand, idx))
+    return unique_sorted_candidates
 
+
+def _truncate_with_ellipsis(text: str, max_chars: int) -> str:
+    """Truncate text to max_chars, appending ellipsis if truncated and room allows."""
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= 3:
+        return text[:max_chars]
+    return text[: max_chars - 3].rstrip() + "..."
+
+
+def pack_task_memories(
+    candidates: tuple[TaskMemoryCandidate, ...],
+    retrieval_metadata: TaskMemoryRetrievalMetadata,
+    options: TaskMemoryPackOptions | None = None,
+) -> TaskMemoryPackResult:
+    """Deterministic selection and budgeted packing of retrieved task memories."""
+    opts = resolve_task_memory_pack_options(options)
+
+    # 1. Index and sort candidates
+    sorted_indexed_candidates = _sort_candidates(candidates, opts.ordering_fields)
+
+    # 2. Deduplicate candidates
+    unique_sorted_candidates = _deduplicate_candidates(sorted_indexed_candidates, opts.dedupe_key)
     unique_candidate_count = len(unique_sorted_candidates)
 
     # 3. Budgeted packing loop
@@ -154,45 +179,23 @@ def pack_task_memories(
             # Excluded by K limit, do not add
             continue
 
-        # Title compaction
+        # Compaction
+        packed_title = _truncate_with_ellipsis(cand.title or "", opts.max_title_chars)
         title_truncated = len(cand.title or "") > opts.max_title_chars
-        if title_truncated:
-            if opts.max_title_chars <= 3:
-                packed_title = (cand.title or "")[: opts.max_title_chars]
-            else:
-                packed_title = (cand.title or "")[: opts.max_title_chars - 3].rstrip() + "..."
-        else:
-            packed_title = cand.title or ""
 
-        # Tags compaction
-        tags_truncated = False
-        packed_tags_list = []
         original_tags = cand.tags or ()
-        if len(original_tags) > opts.max_tags_count:
-            tags_truncated = True
-            tags_to_process = original_tags[: opts.max_tags_count]
-        else:
-            tags_to_process = original_tags
+        tags_truncated = len(original_tags) > opts.max_tags_count
+        tags_to_process = original_tags[: opts.max_tags_count]
 
+        packed_tags_list = []
         for tag in tags_to_process:
             if len(tag) > opts.max_tag_chars:
                 tags_truncated = True
-                if opts.max_tag_chars <= 3:
-                    packed_tag = tag[: opts.max_tag_chars]
-                else:
-                    packed_tag = tag[: opts.max_tag_chars - 3].rstrip() + "..."
-            else:
-                packed_tag = tag
-            packed_tags_list.append(packed_tag)
+            packed_tags_list.append(_truncate_with_ellipsis(tag, opts.max_tag_chars))
         packed_tags = tuple(packed_tags_list)
 
-        # Content compaction
         content_truncated = len(cand.content or "") > opts.max_item_chars
-        packed_content = (
-            (cand.content or "")[: opts.max_item_chars]
-            if content_truncated
-            else (cand.content or "")
-        )
+        packed_content = (cand.content or "")[: opts.max_item_chars]
         item_char_count = len(packed_content)
 
         item_was_truncated = title_truncated or tags_truncated or content_truncated
