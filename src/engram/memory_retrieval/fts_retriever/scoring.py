@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import re
-from math import sqrt
-from typing import Any
+import re as _re
+from math import sqrt as _sqrt
+from typing import Any as _Any
 
 from engram.memory_retrieval.retrieval_contract import (
-    TaskMemoryRetrievalMetadata,
+    TaskMemoryRetrievalMetadata as _TaskMemoryRetrievalMetadata,
 )
 
-PROJECT_SCOPE_ELIGIBLE_LEVELS = ("L2", "L3")
-PROJECT_SCOPE_ELIGIBLE_TYPES = ("lesson", "decision")
-_TOKEN_PATTERN = re.compile(r"\w+", flags=re.UNICODE)
+_PROJECT_SCOPE_ELIGIBLE_LEVELS = ("L2", "L3")
+_PROJECT_SCOPE_ELIGIBLE_TYPES = ("lesson", "decision")
+_TOKEN_PATTERN = _re.compile(r"\w+", flags=_re.UNICODE)
 
 
 def _extract_token_set(text: str | None) -> set[str]:
@@ -38,15 +38,17 @@ def _passes_lexical_threshold(
     return len(content_hits) >= min_content_term_hits_without_title_or_tag
 
 
-def _is_semantic_eligible(memory: Any) -> bool:
+def _is_semantic_eligible(memory: _Any) -> bool:
     """Return whether memory is eligible for semantic retrieval candidates."""
+    if getattr(memory, "superseded_by", None) is not None:
+        return False
     if memory.scope == "task":
         return True
     if memory.scope != "project":
         return False
     return bool(
-        memory.level in PROJECT_SCOPE_ELIGIBLE_LEVELS
-        and memory.type in PROJECT_SCOPE_ELIGIBLE_TYPES
+        memory.level in _PROJECT_SCOPE_ELIGIBLE_LEVELS
+        and memory.type in _PROJECT_SCOPE_ELIGIBLE_TYPES
     )
 
 
@@ -54,8 +56,8 @@ def _cosine_similarity(left: tuple[float, ...], right: tuple[float, ...]) -> flo
     """Compute cosine similarity for vectors with equal dimensionality."""
     if not left or not right or len(left) != len(right):
         return 0.0
-    left_norm = sqrt(sum(value * value for value in left))
-    right_norm = sqrt(sum(value * value for value in right))
+    left_norm = _sqrt(sum(value * value for value in left))
+    right_norm = _sqrt(sum(value * value for value in right))
     if left_norm == 0.0 or right_norm == 0.0:
         return 0.0
     dot = sum(left[index] * right[index] for index in range(len(left)))
@@ -66,7 +68,7 @@ def compute_boost_score(
     has_task_id_match: bool,
     title_hits: tuple[str, ...],
     tag_hits: tuple[str, ...],
-    options: Any,
+    options: _Any,
 ) -> float:
     """Compute the boost score for a candidate based on search term hits."""
     return (
@@ -77,10 +79,10 @@ def compute_boost_score(
 
 
 def build_retrieval_metadata(
-    **kwargs: Any,
-) -> TaskMemoryRetrievalMetadata:
+    **kwargs: _Any,
+) -> _TaskMemoryRetrievalMetadata:
     """Build TaskMemoryRetrievalMetadata using kwargs helper."""
-    return TaskMemoryRetrievalMetadata(**kwargs)
+    return _TaskMemoryRetrievalMetadata(**kwargs)
 
 
 def build_fts_meta(
@@ -89,15 +91,15 @@ def build_fts_meta(
     query_text: str,
     safe_fts_query: str,
     query_terms: tuple[str, ...],
-    resolved_options: Any,
-    fts_rows: list[Any],
-    ordered_candidates: tuple[Any, ...],
+    resolved_options: _Any,
+    fts_rows: list[_Any],
+    ordered_candidates: tuple[_Any, ...],
     filtered: int,
     scanned_task: int,
     scanned_project: int,
     filtered_task: int,
     filtered_project: int,
-) -> TaskMemoryRetrievalMetadata:
+) -> _TaskMemoryRetrievalMetadata:
     """Build FTS retrieval metadata by calculating stats."""
     return build_retrieval_metadata(
         project_id=project_id,
@@ -133,11 +135,11 @@ def build_empty_fts_meta(
     query_text: str,
     safe_fts_query: str,
     query_terms: tuple[str, ...],
-    resolved_options: Any,
+    resolved_options: _Any,
     query_was_empty: bool = False,
     fallback_used: bool = False,
     fallback_reason: str | None = None,
-) -> TaskMemoryRetrievalMetadata:
+) -> _TaskMemoryRetrievalMetadata:
     """Build empty FTS retrieval metadata with defaults."""
     return build_retrieval_metadata(
         project_id=project_id,

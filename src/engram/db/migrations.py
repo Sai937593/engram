@@ -31,6 +31,8 @@ def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:
     """Add missing legacy memories columns for compatibility."""
     if not column_exists(cursor, "memories", "level"):
         cursor.execute("ALTER TABLE memories ADD COLUMN level TEXT")
+    if not column_exists(cursor, "memories", "superseded_by"):
+        cursor.execute("ALTER TABLE memories ADD COLUMN superseded_by TEXT REFERENCES memories(id)")
     backfill_legacy_memory_scope_and_level(cursor)
 
 

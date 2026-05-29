@@ -16,6 +16,10 @@ from engram.memory_retrieval.fts_retriever.scoring import (
     build_fts_meta,
     compute_boost_score,
 )
+from engram.memory_retrieval.fts_retriever.utils import (
+    _extract_terms_from_safe_query,
+    _split_csv_tags,
+)
 from engram.memory_retrieval.query_builder import TaskRetrievalQuery
 from engram.memory_retrieval.retrieval_contract import (
     RawMemoryRow,
@@ -26,24 +30,6 @@ from engram.memory_retrieval.retrieval_contract import (
 
 PROJECT_SCOPE_ELIGIBLE_LEVELS = ("L2", "L3")
 PROJECT_SCOPE_ELIGIBLE_TYPES = ("lesson", "decision")
-
-
-def _split_csv_tags(raw_tags: str | None) -> tuple[str, ...]:
-    """Convert CSV tag storage to deterministic trimmed tuple order."""
-    if not raw_tags:
-        return ()
-    return tuple(tag.strip() for tag in raw_tags.split(",") if tag.strip())
-
-
-def _extract_terms_from_safe_query(safe_query: str) -> tuple[str, ...]:
-    """Extract quoted terms from a normalized FTS query string."""
-    if safe_query == EMPTY_FTS_QUERY:
-        return ()
-    return tuple(
-        token[1:-1].casefold()
-        for token in safe_query.split(" OR ")
-        if len(token) >= 2 and token.startswith('"') and token.endswith('"')
-    )
 
 
 def _fetch_task_memory_fts_rows(
@@ -62,6 +48,7 @@ def _fetch_task_memory_fts_rows(
             FROM memories AS m
             JOIN memories_fts ON m.rowid = memories_fts.rowid
             WHERE memories_fts MATCH ? AND m.project_id = ?
+              AND m.superseded_by IS NULL
               AND (m.scope = 'task' OR (m.scope = 'project' AND m.level IN (?, ?) AND m.type IN (?, ?)))
             ORDER BY fts_rank ASC, m.id ASC LIMIT ?
             """,

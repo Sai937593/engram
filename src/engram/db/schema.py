@@ -73,6 +73,7 @@ def create_memories_table(cursor: sqlite3.Cursor) -> None:
         task_id        TEXT REFERENCES tasks(id),
         tags           TEXT,
         always_include BOOLEAN DEFAULT 0,
+        superseded_by  TEXT REFERENCES memories(id),
         created_at     TEXT DEFAULT (datetime('now')),
         updated_at     TEXT DEFAULT (datetime('now'))
     )

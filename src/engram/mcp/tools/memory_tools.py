@@ -82,6 +82,7 @@ def register_memory_tools(server: Any) -> None:
         always_include: bool = False,
         level: str | None = None,
         id: str | None = None,
+        supersedes: str | None = None,
     ) -> str:
         """Create a new memory in the currently bound engram project."""
         try:
@@ -97,6 +98,7 @@ def register_memory_tools(server: Any) -> None:
                 always_include=always_include,
                 level=level,
                 id=id,
+                supersedes=supersedes,
             )
             return _respond(
                 {

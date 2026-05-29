@@ -3,66 +3,81 @@ from engram.memory_retrieval.fts_query import normalize_fts_query_text
 from engram.models.memory.model import Memory
 
 
-def list_by_project(project_id: str) -> list[Memory]:
+def list_by_project(project_id: str, include_superseded: bool = False) -> list[Memory]:
     """Return all memories for a project ordered by creation date."""
     conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT * FROM memories WHERE project_id = ? ORDER BY created_at ASC", (project_id,)
-    ).fetchall()
+    sql = "SELECT * FROM memories WHERE project_id = ?"
+    params = [project_id]
+    if not include_superseded:
+        sql += " AND superseded_by IS NULL"
+    sql += " ORDER BY created_at ASC"
+    rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [Memory.from_row(row) for row in rows]
 
 
-def list_by_type(project_id: str, memory_type: str) -> list[Memory]:
+def list_by_type(
+    project_id: str, memory_type: str, include_superseded: bool = False
+) -> list[Memory]:
     """Return memories of a specific type for a project, ordered by creation date."""
     conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT * FROM memories WHERE project_id = ? AND type = ? ORDER BY created_at ASC",
-        (project_id, memory_type),
-    ).fetchall()
+    sql = "SELECT * FROM memories WHERE project_id = ? AND type = ?"
+    params = [project_id, memory_type]
+    if not include_superseded:
+        sql += " AND superseded_by IS NULL"
+    sql += " ORDER BY created_at ASC"
+    rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [Memory.from_row(row) for row in rows]
 
 
-def list_project_guardrail_candidates(project_id: str) -> list[Memory]:
+def list_project_guardrail_candidates(
+    project_id: str, include_superseded: bool = False
+) -> list[Memory]:
     """Return project-scope L0/L1 memories ordered for deterministic guardrail retrieval."""
     conn = get_db_connection()
-    rows = conn.execute(
-        """
+    sql = """
         SELECT *
         FROM memories
         WHERE project_id = ? AND scope = 'project' AND level IN ('L0', 'L1')
+    """
+    params = [project_id]
+    if not include_superseded:
+        sql += " AND superseded_by IS NULL"
+    sql += """
         ORDER BY
             CASE level WHEN 'L0' THEN 0 WHEN 'L1' THEN 1 ELSE 2 END,
             id ASC
-        """,
-        (project_id,),
-    ).fetchall()
+    """
+    rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [Memory.from_row(row) for row in rows]
 
 
-def list_task_scope_for_project(project_id: str) -> list[Memory]:
+def list_task_scope_for_project(project_id: str, include_superseded: bool = False) -> list[Memory]:
     """Return task-scope memories for a project in deterministic order."""
     conn = get_db_connection()
-    rows = conn.execute(
-        """
+    sql = """
         SELECT *
         FROM memories
         WHERE project_id = ? AND scope = 'task'
-        ORDER BY created_at ASC, id ASC
-        """,
-        (project_id,),
-    ).fetchall()
+    """
+    params = [project_id]
+    if not include_superseded:
+        sql += " AND superseded_by IS NULL"
+    sql += " ORDER BY created_at ASC, id ASC"
+    rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [Memory.from_row(row) for row in rows]
 
 
-def list_always_include(project_id: str) -> list[Memory]:
+def list_always_include(project_id: str, include_superseded: bool = False) -> list[Memory]:
     conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT * FROM memories WHERE project_id = ? AND always_include = 1", (project_id,)
-    ).fetchall()
+    sql = "SELECT * FROM memories WHERE project_id = ? AND always_include = 1"
+    params = [project_id]
+    if not include_superseded:
+        sql += " AND superseded_by IS NULL"
+    rows = conn.execute(sql, params).fetchall()
     conn.close()
     return [Memory.from_row(row) for row in rows]
 
@@ -81,6 +96,7 @@ def search(
     type_filter: str | None = None,
     tag_filters: list[str] | None = None,
     project_id: str | None = None,
+    include_superseded: bool = False,
 ) -> list[Memory]:
     """Search memories using a normalized FTS-safe query string."""
     conn = get_db_connection()
@@ -106,6 +122,9 @@ def search(
             # Simple LIKE search for tags in MVP
             sql += " AND m.tags LIKE ?"
             params.append(f"%{tag}%")
+
+    if not include_superseded:
+        sql += " AND m.superseded_by IS NULL"
 
     sql += " ORDER BY rank"
 

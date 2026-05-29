@@ -116,6 +116,7 @@ def memory_to_dict(memory: Memory) -> dict[str, JsonValue]:
         "tags": _string_list(memory.tags),
         "always_include": bool(memory.always_include),
         "level": _none_if_blank(memory.level),
+        "superseded_by": _none_if_blank(getattr(memory, "superseded_by", None)),
     }
 
 
