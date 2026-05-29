@@ -30,9 +30,8 @@ class Project:
         row = conn.execute("SELECT * FROM projects WHERE id = ?", (id,)).fetchone()
         conn.close()
         if row:
-            return cls(
-                row["id"], row["name"], row["summary"], row["status"], json.loads(row["repo_paths"])
-            )
+            repo_paths = json.loads(row["repo_paths"]) if row["repo_paths"] else []
+            return cls(row["id"], row["name"], row["summary"], row["status"], repo_paths)
         return None
 
     @classmethod
@@ -43,7 +42,7 @@ class Project:
         conn.close()
 
         for row in rows:
-            paths = json.loads(row["repo_paths"])
+            paths = json.loads(row["repo_paths"]) if row["repo_paths"] else []
             if path in paths:
                 return cls(row["id"], row["name"], row["summary"], row["status"], paths)
         return None
@@ -55,7 +54,11 @@ class Project:
         conn.close()
         return [
             cls(
-                row["id"], row["name"], row["summary"], row["status"], json.loads(row["repo_paths"])
+                row["id"],
+                row["name"],
+                row["summary"],
+                row["status"],
+                json.loads(row["repo_paths"]) if row["repo_paths"] else [],
             )
             for row in rows
         ]

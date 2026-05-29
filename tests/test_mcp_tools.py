@@ -1013,8 +1013,8 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         finish_called_args.append((project_id, repo_path, commit_type))
         return mock_finish_res
 
-    monkeypatch.setattr("engram.mcp.tools.start_workflow", dummy_start_workflow)
-    monkeypatch.setattr("engram.mcp.tools.finish_workflow", dummy_finish_workflow)
+    monkeypatch.setattr("engram.mcp.tools.workflow.start_workflow", dummy_start_workflow)
+    monkeypatch.setattr("engram.mcp.tools.workflow.finish_workflow", dummy_finish_workflow)
 
     server = MockServer()
     from engram.mcp.tools import register_tools
@@ -1046,7 +1046,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     def raising_start(project_id, repo_path):
         raise EngramServiceError(code="TEST_ERROR", message="Mock error message")
 
-    monkeypatch.setattr("engram.mcp.tools.start_workflow", raising_start)
+    monkeypatch.setattr("engram.mcp.tools.workflow.start_workflow", raising_start)
 
     res_err = yaml.safe_load(asyncio.run(start_handler()))
     assert res_err["ok"] is False
@@ -1055,7 +1055,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
     # 4. Error path: Project bound but has no repo_paths configured
     monkeypatch.setattr(
-        "engram.mcp.tools.resolve_current_project",
+        "engram.services.project_service.resolve_active_project",
         lambda: {"id": "proj-tool-workflow", "repo_paths": []},
     )
     res_no_repo = yaml.safe_load(asyncio.run(start_handler()))

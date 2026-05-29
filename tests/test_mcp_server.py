@@ -23,7 +23,10 @@ BANNED_IMPORT_PREFIXES = ("click", "rich", "engram.cli", "engram.commands", "sub
 def test_mcp_package_skeleton_files_exist():
     package_dir = Path(importlib.import_module("engram").__file__).resolve().parent / "mcp"
     for filename in MCP_FILES:
-        assert (package_dir / filename).is_file()
+        if filename == "tools.py":
+            assert (package_dir / "tools").is_dir()
+        else:
+            assert (package_dir / filename).is_file()
 
 
 def test_mcp_modules_do_not_import_cli_or_shell_dependencies():
@@ -118,19 +121,19 @@ def test_register_resources_registers_expected_fastmcp_resources(monkeypatch) ->
 
     # Mock the context services to return stable dummy strings for simple registration check
     monkeypatch.setattr(
-        "engram.mcp.resources.get_startup_context_for_current_project",
+        "engram.services.context_service.get_startup_context_for_active_project",
         lambda: "startup_payload",
     )
     monkeypatch.setattr(
-        "engram.mcp.resources.get_snapshot_context_for_current_project",
+        "engram.services.context_service.get_snapshot_context_for_active_project",
         lambda: "snapshot_payload",
     )
     monkeypatch.setattr(
-        "engram.mcp.resources.get_handoff_context_for_current_project",
+        "engram.services.context_service.get_handoff_context_for_active_project",
         lambda: "handoff_payload",
     )
     monkeypatch.setattr(
-        "engram.mcp.resources.get_task_context_for_current_project",
+        "engram.services.context_service.get_task_context_for_active_project",
         lambda task_id: f"task_payload:{task_id}",
     )
 

@@ -105,7 +105,7 @@ def test_check_files_line_limit_violation(tmp_path):
     violations = check_files([Path("src/engram/main.py")], repo_root=tmp_path)
     assert len(violations) == 1
     assert "src/engram/main.py: 151 lines (limit: 150 for top-level files)" in violations[0]
-    assert "→ Split into a subpackage or extract helpers to a sibling module." in violations[0]
+    assert "-> Split into a subpackage or extract helpers to a sibling module." in violations[0]
 
 
 def test_check_files_symbol_limit_violation(tmp_path):
@@ -119,7 +119,7 @@ def test_check_files_symbol_limit_violation(tmp_path):
     violations = check_files([Path("src/engram/main.py")], repo_root=tmp_path)
     assert len(violations) == 1
     assert "src/engram/main.py: 9 public symbols (limit: 8)" in violations[0]
-    assert "→ Extract related functions/classes into a sibling module." in violations[0]
+    assert "-> Extract related functions/classes into a sibling module." in violations[0]
 
 
 def test_run_check_scenarios(monkeypatch, tmp_path):
