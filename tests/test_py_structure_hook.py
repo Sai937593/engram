@@ -49,11 +49,11 @@ def test_get_line_limit():
     assert get_line_limit(Path("src/engram/main.py")) == 150
 
     # Subpackage (4+ parts) starting with src/
-    assert get_line_limit(Path("src/engram/hooks/py_structure.py")) == 250
-    assert get_line_limit(Path("src/engram/sub/sub2/file.py")) == 250
+    assert get_line_limit(Path("src/engram/hooks/py_structure.py")) == 200
+    assert get_line_limit(Path("src/engram/sub/sub2/file.py")) == 200
 
     # Default limit
-    assert get_line_limit(Path("other_folder/file.py")) == 250
+    assert get_line_limit(Path("other_folder/file.py")) == 200
 
 
 def test_count_lines(tmp_path):
@@ -141,7 +141,7 @@ def test_run_check_scenarios(monkeypatch, tmp_path):
     # Scenario 3: Test file over line and symbol limits -> exempt, exit 0
     test_file = tmp_path / "tests" / "test_over.py"
     test_file.parent.mkdir(parents=True, exist_ok=True)
-    # 300 lines (exceeds subpackage limit 250) & 10 public symbols (exceeds 8)
+    # 300 lines (exceeds subpackage limit 200) & 10 public symbols (exceeds 8)
     content = "\n".join(f"def test_func_{i}(): pass" for i in range(10)) + "\n" * 300
     test_file.write_text(content, encoding="utf-8")
 

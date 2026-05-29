@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 MAX_LINES_TOPLEVEL = 150  # src/<pkg>/file.py (depth-3 paths)
-MAX_LINES_SUBPACKAGE = 250  # src/<pkg>/<sub>/file.py (depth-4+ paths)
+MAX_LINES_SUBPACKAGE = 200  # src/<pkg>/<sub>/file.py (depth-4+ paths)
 MAX_PUBLIC_SYMBOLS = 8
 
 

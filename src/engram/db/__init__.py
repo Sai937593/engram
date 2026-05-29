@@ -2,14 +2,14 @@ import sqlite3
 import warnings
 from pathlib import Path
 
-from engram.db_helpers.connection import create_db_connection
-from engram.db_helpers.migrations import (
+from .connection import create_db_connection
+from .migrations import (
     apply_memories_column_migrations,
     apply_task_status_migrations,
     apply_tasks_column_migrations,
     backfill_legacy_phase_ids,
 )
-from engram.db_helpers.schema import (
+from .schema import (
     create_audit_log_table,
     create_indexes,
     create_memories_fts_and_triggers,
