@@ -1,15 +1,39 @@
 """Unified agent and task context generation."""
 
 from engram.context.common import compact_text
-from engram.context.handoff import build_handoff_context
-from engram.context.snapshot import build_snapshot_context
-from engram.context.startup.orchestrator import build_startup_context
-from engram.context.task import build_task_context
 
 
 def _compact_text(text: str | None) -> str:
     """Safely convert text to ASCII without truncation."""
     return compact_text(text)
+
+
+def build_startup_context(*args, **kwargs):
+    """Lazily build startup context without importing retrieval during package init."""
+    from engram.context.startup.orchestrator import build_startup_context as _build_startup_context
+
+    return _build_startup_context(*args, **kwargs)
+
+
+def build_task_context(*args, **kwargs):
+    """Lazily build task context."""
+    from engram.context.task import build_task_context as _build_task_context
+
+    return _build_task_context(*args, **kwargs)
+
+
+def build_snapshot_context(*args, **kwargs):
+    """Lazily build snapshot context."""
+    from engram.context.snapshot import build_snapshot_context as _build_snapshot_context
+
+    return _build_snapshot_context(*args, **kwargs)
+
+
+def build_handoff_context(*args, **kwargs):
+    """Lazily build handoff context."""
+    from engram.context.handoff import build_handoff_context as _build_handoff_context
+
+    return _build_handoff_context(*args, **kwargs)
 
 
 def get_startup_context(project_id: str) -> str:

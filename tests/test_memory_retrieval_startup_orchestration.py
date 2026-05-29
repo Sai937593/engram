@@ -704,3 +704,27 @@ def test_startup_orchestration_surfaces_semantic_error_status(project, monkeypat
     assert result.retrieval_metadata.semantic_fallback_used is True
     assert result.retrieval_metadata.semantic_reason is not None
     assert "missing optional semantic dependencies" in result.retrieval_metadata.semantic_reason
+
+
+def test_startup_orchestration_safety_net_returns_fallback(project, monkeypatch) -> None:
+    """Unexpected startup retrieval failures should degrade to fallback metadata."""
+    import engram.memory_retrieval.startup_orchestration as orchestration
+
+    task = Task.create(project_id=project.id, title="Safety net task")
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("query builder exploded")
+
+    monkeypatch.setattr(orchestration, "build_task_retrieval_query", explode)
+
+    result = orchestration.orchestrate_startup_task_memory_retrieval(
+        project=project,
+        active_phase=None,
+        selected_task=task,
+    )
+
+    assert result.query is None
+    assert result.retrieval_candidates == ()
+    assert result.retrieval_metadata.fallback_used is True
+    assert result.retrieval_metadata.fallback_reason == "query builder exploded"
+    assert result.pack_result.items == ()

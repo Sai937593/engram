@@ -834,3 +834,78 @@ def test_task_context_includes_project_knowledge(tmp_db, project, task):
     assert "PROJECT KNOWLEDGE" in ctx
     assert "No secrets" in ctx
     assert "Use WAL" in ctx
+
+
+def test_compact_text_handles_none_empty_and_non_ascii() -> None:
+    from engram.context.common import compact_text
+
+    assert compact_text(None) == ""
+    assert compact_text("") == ""
+    assert compact_text("snowman ☃") == "snowman ?"
+
+
+def test_startup_context_returns_project_not_found_for_unknown_id(tmp_db) -> None:
+    assert build_startup_context("missing-project") == "Project not found."
+
+
+def test_task_matches_phase_uses_phase_id_before_legacy_title(project) -> None:
+    from engram.context.startup.orchestrator import _task_matches_phase
+
+    phase = Phase.create(project_id=project.id, id="phmatch1", title="Legacy Title", status="active")
+    matching_id = Task.create(
+        project_id=project.id,
+        title="Matching id",
+        phase_id=phase.id,
+        phase="Other title",
+    )
+    mismatched_id = Task.create(
+        project_id=project.id,
+        title="Mismatched id",
+        phase_id="different",
+        phase=phase.title,
+    )
+    legacy_match = Task.create(project_id=project.id, title="Legacy", phase=" legacy title ")
+
+    assert _task_matches_phase(matching_id, phase) is True
+    assert _task_matches_phase(mismatched_id, phase) is False
+    assert _task_matches_phase(legacy_match, phase) is True
+
+
+def test_resolve_default_startup_inputs_prefers_in_progress_active_phase_task(project) -> None:
+    from engram.context.startup.orchestrator import _resolve_default_startup_inputs
+
+    phase = Phase.create(project_id=project.id, id="phres001", title="Phase A", status="active")
+    Task.create(project_id=project.id, title="Todo", phase_id=phase.id, status="todo")
+    in_progress = Task.create(
+        project_id=project.id,
+        title="In progress",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+
+    resolved_phase, resolved_task = _resolve_default_startup_inputs(project.id)
+
+    assert resolved_phase.id == phase.id
+    assert resolved_task.id == in_progress.id
+
+
+def test_resolve_default_startup_inputs_falls_back_to_in_progress_any(project) -> None:
+    from engram.context.startup.orchestrator import _resolve_default_startup_inputs
+
+    phase = Phase.create(project_id=project.id, id="phres002", title="Phase B", status="active")
+    outside_phase = Task.create(project_id=project.id, title="Outside", status="in-progress")
+
+    resolved_phase, resolved_task = _resolve_default_startup_inputs(project.id)
+
+    assert resolved_phase.id == phase.id
+    assert resolved_task.id == outside_phase.id
+
+
+def test_context_package_lazy_snapshot_and_handoff_wrappers(project) -> None:
+    from engram.context import get_handoff_context, get_snapshot_context
+
+    snapshot = get_snapshot_context(project.id)
+    handoff = get_handoff_context(project.id)
+
+    assert "# PROJECT SNAPSHOT: Test Project" in snapshot
+    assert "# PROJECT HANDOFF: Test Project" in handoff
