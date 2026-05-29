@@ -103,6 +103,16 @@ class Memory:
         return [cls.from_row(row) for row in rows]
 
     @classmethod
+    def list_by_task(cls, task_id: str) -> list["Memory"]:
+        """Return all memories linked to a specific task ordered by creation date."""
+        conn = get_db_connection()
+        rows = conn.execute(
+            "SELECT * FROM memories WHERE task_id = ? ORDER BY created_at ASC", (task_id,)
+        ).fetchall()
+        conn.close()
+        return [cls.from_row(row) for row in rows]
+
+    @classmethod
     def list_by_type(cls, project_id: str, memory_type: str) -> list["Memory"]:
         """Return memories of a specific type for a project, ordered by creation date."""
         conn = get_db_connection()

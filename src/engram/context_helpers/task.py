@@ -65,8 +65,7 @@ def build_task_context(task_id: str, hard_constraints_only: bool = False) -> str
             context.append(f"... {hidden_count} additional relevant file path(s) hidden by cap.")
 
     if not hard_constraints_only:
-        memories = Memory.list_by_project(task.project_id)
-        linked_memories = [memory for memory in memories if memory.task_id == task_id]
+        linked_memories = Memory.list_by_task(task_id)
         if linked_memories:
             context.append("\n## LINKED MEMORIES")
             for memory in linked_memories:
