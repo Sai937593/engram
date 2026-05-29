@@ -30,9 +30,9 @@ class Project:
         row = conn.execute("SELECT * FROM projects WHERE id = ?", (id,)).fetchone()
         conn.close()
         if row:
-            return cls(
-                row["id"], row["name"], row["summary"], row["status"], json.loads(row["repo_paths"])
-            )
+            paths_str = row["repo_paths"]
+            paths = json.loads(paths_str) if paths_str else []
+            return cls(row["id"], row["name"], row["summary"], row["status"], paths)
         return None
 
     @classmethod
@@ -43,7 +43,8 @@ class Project:
         conn.close()
 
         for row in rows:
-            paths = json.loads(row["repo_paths"])
+            paths_str = row["repo_paths"]
+            paths = json.loads(paths_str) if paths_str else []
             if path in paths:
                 return cls(row["id"], row["name"], row["summary"], row["status"], paths)
         return None
@@ -53,12 +54,12 @@ class Project:
         conn = get_db_connection()
         rows = conn.execute("SELECT * FROM projects").fetchall()
         conn.close()
-        return [
-            cls(
-                row["id"], row["name"], row["summary"], row["status"], json.loads(row["repo_paths"])
-            )
-            for row in rows
-        ]
+        res = []
+        for row in rows:
+            paths_str = row["repo_paths"]
+            paths = json.loads(paths_str) if paths_str else []
+            res.append(cls(row["id"], row["name"], row["summary"], row["status"], paths))
+        return res
 
     def update(self, name=None, summary=None, status=None):
         updates = []

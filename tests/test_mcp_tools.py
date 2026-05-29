@@ -1057,7 +1057,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
     # 4. Error path: Project bound but has no repo_paths configured
     monkeypatch.setattr(
-        "engram.mcp.tools.resolve_current_project",
+        "engram.mcp.tools.resolve_active_project",
         lambda: {"id": "proj-tool-workflow", "repo_paths": []},
     )
     res_no_repo = yaml.safe_load(asyncio.run(start_handler()))
@@ -1096,6 +1096,68 @@ def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
     exc_unknown = EngramServiceError(code="SOME_UNKNOWN_ERROR", message="An unknown error")
     res_unknown = yaml.safe_load(_respond_error(exc_unknown))
     assert res_unknown["ok"] is False
+    assert res_unknown["error"] == "SOME_UNKNOWN_ERROR"
+    assert "fix" not in res_unknown
+
+
+def test_mcp_phase_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_phase_create tool creates a phase and gracefully handles validation errors."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    create_handler = server.tools["engram_phase_create"]
+
+    # 1. Happy path
+    res = yaml.safe_load(
+        create_handler(
+            title="MCP Phase 1",
+            description="Testing phase creation over MCP",
+            status="planned",
+            acceptance="Must be green",
+        )
+    )
+    assert res["ok"] is True
+    assert "id" in res
+    assert res["title"] == "MCP Phase 1"
+
+    # Verify actual persistence
+    from engram.models.phase import Phase
+
+    phase = Phase.get(res["id"])
+    assert phase is not None
+    assert phase.title == "MCP Phase 1"
+    assert phase.description == "Testing phase creation over MCP"
+
+    # 2. Validation error path (duplicate title)
+    res_err = yaml.safe_load(
+        create_handler(
+            title="MCP Phase 1",
+        )
+    )
+    assert res_err["ok"] is False
+    assert res_err["error"] == "DUPLICATE_PHASE_TITLE"
+
+    # 3. Validation error path (invalid status)
+    res_err2 = yaml.safe_load(
+        create_handler(
+            title="MCP Phase 2",
+            status="invalid-status",
+        )
+    )
+    assert res_err2["ok"] is False
+    assert res_err2["error"] == "INVALID_PHASE_STATUS"
     assert res_unknown["error"] == "SOME_UNKNOWN_ERROR"
     assert "fix" not in res_unknown
 

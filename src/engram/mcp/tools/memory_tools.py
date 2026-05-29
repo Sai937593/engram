@@ -7,7 +7,7 @@ from typing import Any
 from engram.mcp.tools.helpers import _respond, _respond_error
 from engram.services.errors import EngramServiceError
 from engram.services.memory_service import create_memory, search_memories
-from engram.services.project_service import resolve_current_project
+from engram.services.project_service import resolve_active_project
 
 
 def register_memory_tools(server: Any) -> None:
@@ -22,7 +22,7 @@ def register_memory_tools(server: Any) -> None:
     ) -> str:
         """Search memories in the currently bound engram project."""
         try:
-            project = resolve_current_project()
+            project = resolve_active_project()
             memories = search_memories(
                 project_id=str(project["id"]),
                 query=query,
@@ -86,7 +86,7 @@ def register_memory_tools(server: Any) -> None:
     ) -> str:
         """Create a new memory in the currently bound engram project."""
         try:
-            project = resolve_current_project()
+            project = resolve_active_project()
             memory = create_memory(
                 project_id=str(project["id"]),
                 type=type,

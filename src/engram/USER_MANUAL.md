@@ -7,7 +7,7 @@ Engram is a local-first, agent-agnostic persistent memory system for AI coding a
 ## 1. Core Concepts
 
 ### Projects
-A project binds one or more local repository absolute paths to a unique database record. When the MCP server or CLI is invoked, it dynamically resolves the active project using the current working directory. Memory and task states live globally outside the repository, surviving branch checkouts, resets, and folder moves.
+A project binds one or more local repository absolute paths to a unique database record. When the companion CLI is invoked, it dynamically resolves the current project using the current working directory. For the MCP server, it resolves the globally active project (with a safe auto-activation fallback if there is exactly one project in the database). Memory and task states live globally outside the repository, surviving branch checkouts, resets, and folder moves.
 
 ### Phases
 Phases are first-class project milestones that group related tasks.
@@ -89,7 +89,7 @@ Agents can read the following read-only Markdown resources:
 *   **`engram://handoff`**: Returns a focused summary of recent phase completions, active tasks, and blockers, perfect for agent handoffs.
 
 #### Programmatic Tools
-The MCP server exposes 17 tools for full interactive capabilities:
+The MCP server exposes 19 tools for full interactive capabilities:
 
 *   **Workflow Control:**
     *   `engram_workflow_start`: Starts the session workflow. Claims next actionable task, updates branch, and returns startup context.
@@ -111,8 +111,10 @@ The MCP server exposes 17 tools for full interactive capabilities:
     *   `engram_phase_create`: Creates a new first-class project phase milestone.
     *   `engram_phase_start`: Activates a specific phase, demoting all other project phases to planned.
     *   `engram_phase_complete`: Marks a milestone phase as complete with evidence.
-*   **System Utilities:**
-    *   `engram_project_current`: Returns the active project metadata resolved from the working directory.
+*   **System Utilities & Project Resolution:**
+    *   `engram_project_current`: Returns the active project metadata.
+    *   `engram_project_init`: Initialize a new project, bind it to a repository path, and set it as active.
+    *   `engram_project_switch`: Switch the active project to a specified ID.
 
 ---
 
@@ -150,8 +152,8 @@ When the implementation is complete and verified:
 ## 4. Troubleshooting
 
 ### Error: `PROJECT_NOT_BOUND`
-*   **Cause:** The workspace directory from which the MCP server or agent was launched has not been initialized.
-*   **Solution:** Open a terminal in the target repository root and run `engram init --name "<project-name>"`.
+*   **Cause:** The workspace directory has not been initialized, or no active project is set.
+*   **Solution:** For the companion CLI, run `engram init --name "<project-name>"` in the repository root. For the MCP server, call the tool `engram_project_init` or `engram_project_switch` to configure the active project.
 
 ### Error: Missing optional MCP dependencies
 *   **Cause:** Engram was installed without the fast STDIO server dependencies.

@@ -16,9 +16,9 @@ def register_workflow_tools(server: Any) -> None:
 
     @server.tool()
     def engram_project_current() -> str:
-        """Get details of the currently bound engram project."""
+        """Get details of the currently active engram project."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             slim_project = {
                 "id": str(project["id"]),
                 "name": str(project["name"]),
@@ -34,16 +34,56 @@ def register_workflow_tools(server: Any) -> None:
             return engram.mcp.tools._respond_error(exc)
 
     @server.tool()
-    async def engram_workflow_start() -> str:
-        """Start or resume the next actionable task in the currently bound engram project.
+    def engram_project_init(
+        id: str,
+        name: str,
+        summary: str | None = None,
+        repo_path: str | None = None,
+    ) -> str:
+        """Initialize a new project, bind it to a repository path, and set it as active."""
+        try:
+            project = engram.mcp.tools.init_project(
+                id=id,
+                name=name,
+                summary=summary,
+                repo_path=repo_path,
+            )
+            return engram.mcp.tools._respond(
+                {
+                    "ok": True,
+                    "id": project["id"],
+                    "name": project["name"],
+                }
+            )
+        except EngramServiceError as exc:
+            return engram.mcp.tools._respond_error(exc)
 
-        This tool resolves the project bound to the current directory, checks out or creates the
+    @server.tool()
+    def engram_project_switch(project_id: str) -> str:
+        """Switch the currently active project to the specified ID."""
+        try:
+            project = engram.mcp.tools.switch_project(project_id=project_id)
+            return engram.mcp.tools._respond(
+                {
+                    "ok": True,
+                    "id": project["id"],
+                    "name": project["name"],
+                }
+            )
+        except EngramServiceError as exc:
+            return engram.mcp.tools._respond_error(exc)
+
+    @server.tool()
+    async def engram_workflow_start() -> str:
+        """Start or resume the next actionable task in the active engram project.
+
+        This tool resolves the active project, checks out or creates the
         appropriate Git branch for the task, and returns the task details along with its branch,
         resumption status, and startup context (including relevant memories and files).
         This tool performs Git branch checkout and creation operations.
         """
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             repo_paths = project.get("repo_paths", [])
             if not repo_paths:
                 raise EngramServiceError(
@@ -63,14 +103,14 @@ def register_workflow_tools(server: Any) -> None:
 
     @server.tool()
     async def engram_workflow_finish(commit_type: str | None = None) -> str:
-        """Finish the active task: commit, push, and mark done.
+        """Finish the active task: commit, push, and mark done in the active project.
 
         This tool stages all current changes, creates a conventional Git commit based on the active
         task and phase title, pushes to the remote repository, and marks the task as completed.
         If a pre-push test/hook fails, the push (and thus this tool) will block and fail.
         """
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             repo_paths = project.get("repo_paths", [])
             if not repo_paths:
                 raise EngramServiceError(

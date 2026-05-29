@@ -15,7 +15,7 @@ def register_task_tools(server: Any) -> None:
     def engram_task_list(status: str | None = None, phase: str | None = None) -> str:
         """List tasks for the currently bound engram project, optionally filtering by status or phase."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             tasks = engram.mcp.tools.list_tasks(
                 project_id=str(project["id"]), status=status, phase=phase
             )
@@ -43,7 +43,7 @@ def register_task_tools(server: Any) -> None:
     def engram_task_get(task_ref: str) -> str:
         """Get a task by ID or task reference for the currently bound engram project."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             task = engram.mcp.tools.get_task(project_id=str(project["id"]), task_ref=task_ref)
             return engram.mcp.tools._respond({"ok": True, "task": task})
         except EngramServiceError as exc:
@@ -53,7 +53,7 @@ def register_task_tools(server: Any) -> None:
     def engram_task_next() -> str:
         """Get the next actionable task for the currently bound engram project."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             task = engram.mcp.tools.get_next_task(project_id=str(project["id"]))
             return engram.mcp.tools._respond({"ok": True, "task": task})
         except EngramServiceError as exc:
@@ -74,7 +74,7 @@ def register_task_tools(server: Any) -> None:
     ) -> str:
         """Create a new task in the currently bound engram project."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             project_id = str(project["id"])
             from engram.models.task import Task
 
@@ -107,7 +107,7 @@ def register_task_tools(server: Any) -> None:
     def engram_task_update(task_ref: str, updates: dict[str, Any]) -> str:
         """Update an existing task in the currently bound engram project."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             project_id = str(project["id"])
             from engram.models.task import Task
             from engram.services.task import VALID_TASK_UPDATE_FIELDS, resolve_task_ref
@@ -133,7 +133,7 @@ def register_task_tools(server: Any) -> None:
     def engram_task_note_append(task_ref: str, note: str) -> str:
         """Append a note to a task's evidence log in the currently bound engram project."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             task = engram.mcp.tools.append_task_note(
                 project_id=str(project["id"]), task_ref=task_ref, note=note
             )
@@ -145,7 +145,7 @@ def register_task_tools(server: Any) -> None:
     def engram_task_start(task_ref: str) -> str:
         """Start a task in the currently bound engram project, validating its dependencies."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             task = engram.mcp.tools.start_task(project_id=str(project["id"]), task_ref=task_ref)
             return engram.mcp.tools._respond(
                 {
@@ -162,7 +162,7 @@ def register_task_tools(server: Any) -> None:
     def engram_task_done(task_ref: str, evidence: str | None = None) -> str:
         """Complete a task in the currently bound engram project, optionally appending evidence."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
+            project = engram.mcp.tools.resolve_active_project()
             task = engram.mcp.tools.complete_task(
                 project_id=str(project["id"]), task_ref=task_ref, evidence=evidence
             )
