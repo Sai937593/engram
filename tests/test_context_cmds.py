@@ -29,6 +29,27 @@ def make_runner_with_project(monkeypatch: pytest.MonkeyPatch, project: Project) 
     return CliRunner()
 
 
+def test_context_startup_error(tmp_db: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """engram context startup should handle service errors."""
+
+    def mock_get_startup_context() -> str:
+        raise EngramServiceError(
+            code="MOCK_ERROR",
+            message="Simulated startup failure",
+            details={},
+        )
+
+    monkeypatch.setattr(
+        "engram.cli.context_cmds.get_startup_context_for_current_project",
+        mock_get_startup_context,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["context", "startup"])
+    assert result.exit_code != 0
+    assert "Simulated startup failure" in result.output
+
+
 def test_context_startup_success(
     tmp_db: Any, project: Project, monkeypatch: pytest.MonkeyPatch
 ) -> None:
