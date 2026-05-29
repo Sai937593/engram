@@ -136,3 +136,48 @@ def complete_phase(project_id: str, phase_ref: str) -> dict[str, JsonValue]:
 
     phase.update(status="done")
     return phase_to_dict(phase)
+
+
+def create_phase(
+    project_id: str,
+    title: str,
+    description: str | None = None,
+    status: str = "planned",
+    acceptance: str | None = None,
+) -> dict[str, JsonValue]:
+    """Create a new phase in the project and return its JSON-safe DTO."""
+    if not title or not title.strip():
+        raise ValidationError(
+            code="INVALID_PHASE_TITLE",
+            message="Phase title cannot be empty.",
+            details={"title": title},
+        )
+
+    if status not in Phase.VALID_STATUSES:
+        raise ValidationError(
+            code="INVALID_PHASE_STATUS",
+            message=f"Phase status '{status}' is invalid.",
+            details={"status": status, "allowed_statuses": sorted(list(Phase.VALID_STATUSES))},
+        )
+
+    normalized_candidate = " ".join(title.split()).casefold()
+    matching_phases = [
+        project_phase
+        for project_phase in Phase.list_by_project(project_id)
+        if " ".join(project_phase.title.split()).casefold() == normalized_candidate
+    ]
+    if matching_phases:
+        raise ValidationError(
+            code="DUPLICATE_PHASE_TITLE",
+            message=f"A phase with the title '{title}' already exists in this project.",
+            details={"project_id": project_id, "title": title},
+        )
+
+    phase = Phase.create(
+        project_id=project_id,
+        title=title.strip(),
+        description=description.strip() if description else None,
+        status=status,
+        acceptance=acceptance.strip() if acceptance else None,
+    )
+    return phase_to_dict(phase)

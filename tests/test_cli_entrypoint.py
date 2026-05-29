@@ -39,21 +39,12 @@ def test_mcp_optional_extra_declared():
 
 
 def test_console_entrypoint_command_surface_loads():
-    """Loading the Click root command through the package exposes migrated commands."""
+    """Loading the Click root command through the package exposes essential commands."""
     result = CliRunner().invoke(cli, ["--help"])
-
     assert result.exit_code == 0, result.output
-    for command in [
-        "context",
-        "decision",
-        "export",
-        "guardrail",
-        "memory",
-        "phase",
-        "project",
-        "task",
-    ]:
-        assert command in result.output
+
+    exposed_commands = list(cli.commands.keys())
+    assert sorted(exposed_commands) == sorted(["init", "guide", "db"])
 
 
 def test_guide_command_runs_successfully():
@@ -71,9 +62,10 @@ def test_guide_command_with_sections():
         assert "Engram Guide" in result.output
 
 
-def test_phase_group_help_loads():
-    """The phase command group should load and render help text."""
-    result = CliRunner().invoke(cli, ["phase", "--help"])
-
+def test_db_command_runs_successfully(tmp_db):
+    """The db command should execute health checks on the database."""
+    result = CliRunner().invoke(cli, ["db"])
     assert result.exit_code == 0, result.output
-    assert "Manage phases." in result.output
+    assert "Database Path:" in result.output
+    assert "Database Exists: Yes" in result.output
+    assert "Database Connection & Integrity: Healthy" in result.output

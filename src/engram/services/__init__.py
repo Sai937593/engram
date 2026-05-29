@@ -1,5 +1,6 @@
 """Service-layer contracts shared by CLI and MCP adapters."""
 
+from engram.services import task as task_service
 from engram.services.context_service import (
     get_handoff_context_for_current_project,
     get_snapshot_context_for_current_project,
@@ -11,7 +12,7 @@ from engram.services.memory_service import search_memories
 from engram.services.phase_service import get_active_phase, list_phases
 from engram.services.project_service import resolve_current_project
 from engram.services.serializers import memory_to_dict, phase_to_dict, project_to_dict, task_to_dict
-from engram.services.task_service import get_task, list_tasks, resolve_task_ref
+from engram.services.task import get_task, list_tasks, resolve_task_ref
 from engram.services.workflow_service import finish_workflow, start_workflow
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "phase_to_dict",
     "start_workflow",
     "finish_workflow",
+    "task_service",
 ]

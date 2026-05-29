@@ -1,348 +1,162 @@
 # Engram User Manual
 
-Engram is a local-first, agent-agnostic memory system for AI coding assistants and developers. It stores durable project context in `~/.engram/memory.db` and exposes it through a compact CLI.
+Engram is a local-first, agent-agnostic persistent memory system for AI coding assistants and developers. It stores durable project context in a central SQLite database (`~/.engram/memory.db`) and exposes it programmatically through a custom Model Context Protocol (MCP) server, alongside a minimal companion CLI for workspace management.
+
+---
 
 ## 1. Core Concepts
 
 ### Projects
-
-A project maps one or more local repository paths to a record in the Engram database.
-
-- Commands are project-aware based on the current working directory.
-- Memory lives outside the repository, so it survives branch changes, moves, and deletes.
+A project binds one or more local repository absolute paths to a unique database record. When the MCP server or CLI is invoked, it dynamically resolves the active project using the current working directory. Memory and task states live globally outside the repository, surviving branch checkouts, resets, and folder moves.
 
 ### Phases
-
 Phases are first-class project milestones that group related tasks.
-
-- Planning structure: `Project -> Phase -> Task`
-- Lifecycle: `planned -> active -> done | blocked | cancelled`
-- Only one phase should be active per project. `engram phase start <phase_ref>` activates one phase and demotes any other active phase in the same project back to `planned`.
-- New task workflows should use first-class phase links through `phase_id`.
+- **Planning structure:** `Project -> Phase -> Task`
+- **Lifecycle:** `planned -> active -> done | blocked | cancelled`
+- Only one phase is active per project. Activating a phase automatically demotes all other phases in the same project back to `planned`.
 
 ### Tasks
-
-Tasks are units of work within a project.
-
-- Lifecycle: `todo -> in-progress -> done | blocked | cancelled`
-- Priority levels: `low | medium | high | critical`
-- Important fields: `title`, `description`, `acceptance`, `evidence`, `phase_id`, `phase`, `tags`, `depends_on`, `relevant_files`
-- `phase_id` is the first-class phase association. The legacy free-form `phase` text remains readable during compatibility and is backfilled into first-class phases during database initialization when possible.
-- Use `engram task next` or `engram start` to claim work instead of scanning all tasks manually.
+Tasks are specific actionable units of work.
+- **Lifecycle:** `todo -> in-progress -> done | blocked | cancelled`
+- **Priority levels:** `low | medium | high | critical`
+- **Metadata:** `title`, `description`, `acceptance`, `evidence`, `phase_id`, `tags`, `depends_on`, `relevant_files`.
+- Agents automatically resolve task context and associated dependencies programmatically.
 
 ### Memories
+Memories are persistent facts designed to survive across coding sessions.
+- **Types:** `note`, `decision`, `lesson`, `constraint`, `snippet`
+- **Retrieval:** Automatically indexed via SQLite FTS5 lexical search combined with local fastembed semantic search.
+- **Guardrails:** Pinned policy memories (levels L0/L1) act as active agent constraints and are automatically injected into the agent's startup context.
 
-Memories are durable facts that should survive a single coding session.
-
-- Types: `note`, `decision`, `lesson`, `constraint`, `snippet`
-- Searchable through SQLite FTS5 and optional local semantic vector embeddings.
-- Memories marked `--always-include` appear in startup context.
-- Constraints, decisions, and lessons are always included by their typed helper commands.
-
-### Workflow State
-
-Engram uses task state, evidence, notes, and memories as the durable handoff mechanism. `engram context startup` summarizes the project state for the next agent turn, and exports can produce Markdown snapshots or handoffs when needed.
+---
 
 ## 2. Command Reference
 
-### Initialization
+### Companion CLI Reference
+The Engram command-line interface has been trimmed to three essential workspace setup and utility commands:
 
+#### `engram init`
 ```bash
 engram init [--name NAME] [--id ID] [--summary SUMMARY]
 ```
+Registers the current directory as an Engram project. If the repository is already registered, safely binds the current path to the existing project metadata.
 
-Register the current directory as an Engram project. If the project already exists, Engram binds the current path to it.
-
-### Context
-
+#### `engram guide`
 ```bash
-engram context startup
+engram guide [concepts | commands | workflow | troubleshooting]
+```
+Opens this interactive user manual directly in the terminal, rendered as beautifully formatted rich Markdown.
+
+#### `engram db`
+```bash
+engram db
+```
+Utility command to print the absolute path, disk size, and SQLite integrity connection status of the global database at `~/.engram/memory.db`.
+
+### Deprecated & Removed CLI Commands
+To preserve clean separation of concerns and maintain a single source of truth, **all programmatic memory, task, phase, and workflow management commands have been removed from the CLI**. All agent interactions must go through the MCP server.
+
+Refer to the table below to transition from the old CLI commands to their MCP server equivalents:
+
+| Deprecated CLI Command | Status | MCP Server Equivalent |
+| :--- | :--- | :--- |
+| `engram context startup` | **REMOVED** | Read resource `engram://startup` |
+| `engram context task <id>` | **REMOVED** | Read resource `engram://task/{task_id}/context` |
+| `engram start` | **REMOVED** | Call tool `engram_workflow_start` |
+| `engram finish` | **REMOVED** | Call tool `engram_workflow_finish` |
+| `engram task list` | **REMOVED** | Call tool `engram_task_list` |
+| `engram task get` | **REMOVED** | Call tool `engram_task_get` |
+| `engram task next` | **REMOVED** | Call tool `engram_task_next` |
+| `engram task add` | **REMOVED** | Call tool `engram_task_create` |
+| `engram task update` | **REMOVED** | Call tool `engram_task_update` |
+| `engram task note` | **REMOVED** | Call tool `engram_task_note_append` |
+| `engram task done` | **REMOVED** | Call tool `engram_task_done` |
+| `engram memory add` / `decision add` | **REMOVED** | Call tool `engram_memory_create` |
+| `engram memory search` | **REMOVED** | Call tool `engram_memory_search` |
+| `engram phase list` / `get` / `start` | **REMOVED** | Call tools `engram_phase_*` |
+| `engram export snapshot` | **REMOVED** | Read resource `engram://snapshot` |
+| `engram export handoff` | **REMOVED** | Read resource `engram://handoff` |
+
+### MCP Interface Reference
+Connected AI agents communicate with Engram using the standard STDIO-based Model Context Protocol.
+
+#### Local Resources
+Agents can read the following read-only Markdown resources:
+
+*   **`engram://startup`**: Retrieves the startup context including active project details, active tasks, L0/L1 guardrails, and relevant memory candidates.
+*   **`engram://task/{task_id}/context`**: Retrieves a detailed requirement context for a single task including acceptance criteria, dependencies, and relevant lessons/decisions.
+*   **`engram://snapshot`**: Returns a comprehensive project summary report compiling all phases, tasks, and memories.
+*   **`engram://handoff`**: Returns a focused summary of recent phase completions, active tasks, and blockers, perfect for agent handoffs.
+
+#### Programmatic Tools
+The MCP server exposes 17 tools for full interactive capabilities:
+
+*   **Workflow Control:**
+    *   `engram_workflow_start`: Starts the session workflow. Claims next actionable task, updates branch, and returns startup context.
+    *   `engram_workflow_finish`: Stage changes, execute validation tests, confirm Conventional Commit, commit, and mark task done.
+*   **Task Management:**
+    *   `engram_task_list`: Filters and lists project tasks by status or phase.
+    *   `engram_task_get`: Retrieves full details of a specific task.
+    *   `engram_task_next`: Returns the highest-priority actionable `todo` task.
+    *   `engram_task_create`: Creates a new project task.
+    *   `engram_task_update`: Modifies properties of a task.
+    *   `engram_task_note_append`: Appends a timestamped log note to a task's evidence.
+    *   `engram_task_start`: Transition task status to `in-progress`.
+    *   `engram_task_done`: Transition task status to `done` with evidence.
+*   **Memory Management:**
+    *   `engram_memory_create`: Creates a persistent project memory (accepts `title`, `content`, `type`, `scope`, `level`).
+    *   `engram_memory_search`: Runs FTS5 + semantic hybrid query search over all project memories.
+*   **Phase Management:**
+    *   `engram_phase_list`: Lists all milestone phases for the project in priority order.
+    *   `engram_phase_create`: Creates a new first-class project phase milestone.
+    *   `engram_phase_start`: Activates a specific phase, demoting all other project phases to planned.
+    *   `engram_phase_complete`: Marks a milestone phase as complete with evidence.
+*   **System Utilities:**
+    *   `engram_project_current`: Returns the active project metadata resolved from the working directory.
+
+---
+
+## 3. Recommended Agent Workflow
+
+An AI agent connected to the Engram MCP server should follow this structured loop:
+
+### Step 1: Initialize Workspace
+The developer initializes the project once:
+```bash
+engram init --name "my-app"
 ```
 
-Generate compact startup context for an agent: project summary, active task/phase, task-relevant file path hints (when present), L0/L1 project guardrails, and task memory candidates.
-
-```bash
-engram context task <task_id>
-```
-
-Generate deeper context for one task, including description, acceptance criteria, dependencies, and relevant project knowledge.
-
-### Task Management
-
-```bash
-engram task next
-```
-
-Show the highest-priority actionable `todo` task.
-
-```bash
-engram task list [--status STATUS] [--all] [--phase TEXT]
-```
-
-List tasks. By default, Engram shows todo tasks; use `--all` to include terminal states. Use `--phase TEXT` to filter by first-class phase ID or unique phase title.
-
-```bash
-engram task add "<Title>" [--description TEXT] [--priority PRIORITY]
-                          [--status STATUS] [--phase TEXT]
-                          [--acceptance TEXT] [--tags tag1,tag2]
-                          [--depends-on TASK_IDS] [--files path1,path2]
-```
-
-Create a task. Defaults are `priority=medium` and `status=todo`. If `--phase` matches a first-class phase ID or unique title, Engram stores the linked `phase_id` and mirrors the phase title into legacy `phase` for compatibility. If no first-class phase matches, the value is stored as legacy free-form phase text.
-- `--files path1,path2`: Optional task-scoped relevant file path hints. Startup and task context display paths only (no file contents).
-
-```bash
-engram task start <task_id>
-```
-
-Mark a task as `in-progress`.
-
-```bash
-engram task update <task_id> --field <field> --value <value>
-```
-
-Update a single task field. Common fields are `status`, `priority`, `title`, `description`, `acceptance`, `evidence`, `phase_id`, `phase`, `tags`, and `depends_on`.
-
-- Use `--field phase_id --value <phase_id_or_unique_title>` to link a task to a first-class phase.
-- Use `--field phase_id --value none` to clear both `phase_id` and legacy `phase`.
-- Direct updates to `--field phase` are legacy compatibility behavior and should not be preferred for new tasks.
-
-```bash
-engram task note <task_id> "<note>"
-```
-
-Append a timestamped note to a task's evidence log.
-
-```bash
-engram task done <task_id> --evidence "<proof>"
-```
-
-Mark a task done and record completion evidence.
-
-```bash
-engram task get <task_id>
-```
-
-Show full task details.
-
-```bash
-engram task files list <task_id>
-engram task files add <task_id> --files path1,path2
-engram task files remove <task_id> --files path1,path2
-```
-
-List, append, or remove task relevant file path hints without changing other task fields.
-
-### Memory Management
-
-```bash
-engram memory add "<Title>" --content "CONTENT" [--type TYPE]
-                            [--tags tag1,tag2] [--always-include]
-```
-
-Store a note, decision, lesson, constraint, or snippet.
-
-```bash
-engram memory search "<query>" [--type TYPE] [--tag TAG]
-engram memory list
-engram memory get <memory_id>
-engram memory update <memory_id> --field <field> --value <value>
-engram memory delete <memory_id> [-y]
-engram memory reindex --semantic
-```
-
-Search, list, inspect, update, or delete project memories.
-
-If installed with `uv pip install "engram[semantic]"`, `engram memory reindex --semantic` triggers a local rebuild of semantic memory embeddings for the current project.
-
-### Guardrail Controls
-
-```bash
-engram guardrail demote <memory_id> --reason "<reason>"
-```
-
-Demote a project-scope guardrail by exactly one level (`L0 -> L1`, `L1 -> L2`, `L2 -> L3`). `L3` guardrails cannot be demoted further, and a non-empty reason is required.
-
-### Typed Memory Helpers
-
-```bash
-engram decision add "<title>" --content "<rationale>"
-engram lesson add "<title>" --content "<what was learned>"
-engram constraint add "<title>" --content "<rule and reason>"
-engram snippet add "<title>" --content "<reusable command or code>"
-```
-
-Each typed helper also supports `list`, `get`, and `search`.
-
-### Project Management
-
-```bash
-engram project get
-engram project update [--name NAME] [--summary SUMMARY] [--status STATUS]
-engram project list
-```
-
-Inspect or update project metadata. Valid statuses are `active`, `paused`, and `archived`.
-
-### Phase Management
-
-```bash
-engram phase add "<Title>" [--description TEXT] [--status STATUS]
-                         [--acceptance TEXT] [--order-index INTEGER]
-```
-
-Add a phase to the current project. The default status is `planned`. Valid statuses are `planned`, `active`, `done`, `blocked`, and `cancelled`.
-
-```bash
-engram phase list
-```
-
-List phases for the current project in `order_index` order.
-
-```bash
-engram phase get <phase_ref>
-```
-
-Show full details for a phase by ID or unique title.
-
-```bash
-engram phase start <phase_ref>
-```
-
-Start a phase by ID or unique title and make it the only active phase in the project.
-
-```bash
-engram phase update <phase_ref> --field <field> --value <value>
-```
-
-Update a mutable phase field. Supported fields are `title`, `description`, `status`, `order_index`, `acceptance`, and `evidence`.
-
-```bash
-engram phase done <phase_ref> --evidence "<proof>" [--force]
-```
-
-Mark a phase as done with completion evidence. By default, Engram rejects completion while linked `todo`, `in-progress`, or `blocked` tasks remain; use `--force` only when intentionally closing with unfinished linked work.
-
-### Exports
-
-```bash
-engram export snapshot [-o FILE]
-engram export handoff [-o FILE]
-```
-
-Create Markdown exports for full snapshots or focused handoffs.
-
-### Workflow Commands
-
-```bash
-engram start
-```
-
-Claim the next task and switch to the appropriate phase branch when needed.
-
-```bash
-engram finish [--type TYPE]
-```
-
-Finish the active task by committing, pushing, and marking the task done. Use `--type` for the Conventional Commit type when Engram cannot infer one.
-
-```bash
-engram commit "type(scope): subject [task-id]"
-```
-
-Stage all files, validate the Conventional Commit message, and commit.
-
-### Help
-
-```bash
-engram guide [SECTION]
-engram <command> --help
-```
-
-Show the packaged manual or command-specific help.
-
-## 3. Agent Integration and Workflows
-
-### 3.1 Model Context Protocol (MCP)
-
-Engram includes a fully featured MCP server to seamlessly connect your preferred AI agent. By exposing context boundaries (like startup context), memories, and workflow actions as direct tooling, Engram natively integrates directly into tools like Codex, Cursor, or Claude Desktop.
-
-For full installation and setup instructions, refer to the [MCP Setup Guide](mcp-codex-setup.md).
-
-### 3.2 Recommended Agent CLI Workflow
-
-If you are not using the MCP integration or your agent relies strictly on shell commands, follow this step-by-step approach.
-
-#### Step 1: Startup
-
-```bash
-engram context startup
-```
-
-Read current project state, active work, and pinned constraints.
-
-### Step 2: Claim Work
-
-```bash
-engram start
-engram context task <id>
-```
-
-Use `engram task add` if `engram start` reports that no tasks are defined.
-
-### Step 3: Work and Capture Knowledge
-
-```bash
-engram task note <id> "<progress note>"
-engram decision add "<title>" --content "<why>"
-engram lesson add "<title>" --content "<how it was solved>"
-engram constraint add "<title>" --content "<rule and reason>"
-engram snippet add "<title>" --content "<reusable command>"
-```
-
-If work is blocked:
-
-```bash
-engram task update <id> --field status --value blocked
-engram task note <id> "<blocker details>"
-```
-
-### Step 4: Validate and Finish
-
-```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest tests/ -v
-engram finish --type <feat|fix|docs|chore>
-```
+### Step 2: Session Startup & Claiming Work
+At the beginning of each session, the agent calls the `engram_workflow_start` tool.
+*   If a task is already `in-progress`, the agent resumes it.
+*   If no task is active, the agent claims the highest priority `todo` task, checks out its target branch, and retrieves the packed context.
+*   If no tasks exist, the agent prompts the developer or uses `engram_task_create` to define the first task.
+
+### Step 3: Deep Context Retrieval
+If the agent needs deep constraints or related documentation for a task, it reads the resource:
+`engram://task/{task_id}/context`
+
+### Step 4: Iterative Development & Memory Capture
+During the coding phase, the agent captures critical software engineering decisions, lessons, or constraints:
+*   Calls `engram_memory_create` to log decisions (e.g. why a specific architecture or library was selected).
+*   Calls `engram_task_note_append` to record diagnostic evidence or migration progress.
+
+### Step 5: Verification & Session Completion
+When the implementation is complete and verified:
+*   The agent calls `engram_workflow_finish` to stage changes, execute validation tests, confirm the Conventional Commit message, and push the branch.
+
+---
 
 ## 4. Troubleshooting
 
-### `Error: Missing option '--content'`
+### Error: `PROJECT_NOT_BOUND`
+*   **Cause:** The workspace directory from which the MCP server or agent was launched has not been initialized.
+*   **Solution:** Open a terminal in the target repository root and run `engram init --name "<project-name>"`.
 
-`memory add` and typed memory add commands require content as a flag.
+### Error: Missing optional MCP dependencies
+*   **Cause:** Engram was installed without the fast STDIO server dependencies.
+*   **Solution:** Reinstall the package using the MCP extra: `uv pip install -e ".[mcp]"`.
 
-```bash
-engram memory add "My Memory" --content "The content here"
-```
-
-### `Error: Unknown field '...'`
-
-`task update` and `memory update` validate field names. Run `engram task update --help` or `engram memory update --help`.
-
-### `Error: Invalid status '...'`
-
-Valid task statuses are `todo`, `in-progress`, `done`, `blocked`, and `cancelled`. Use `done`, not `completed`.
-
-### `task next` returns nothing
-
-All tasks are in a terminal state or no tasks exist. Use:
-
-```bash
-engram task list --all
-engram task add "<Next Task>"
-```
-
-### `Error: Project not found`
-
-You are not in a directory registered with Engram. Run `engram init` from the repository root or change to a registered directory.
+### FTS5 Lexical Search Returns No Results
+*   **Cause:** The search query is too specific or uses common SQL reserved characters.
+*   **Solution:** Simplify query terms or call `engram_memory_search` with standard alphanumeric strings.

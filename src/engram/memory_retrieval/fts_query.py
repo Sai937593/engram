@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from engram.context_helpers.common import compact_text
+from engram.context.common import compact_text
 
 EMPTY_FTS_QUERY = '""'
 MAX_FTS_TERMS = 48

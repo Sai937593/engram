@@ -114,6 +114,7 @@ def test_memory_to_dict_shape_and_optional_values():
         "tags": ["mcp"],
         "always_include": True,
         "level": None,
+        "superseded_by": None,
     }
     _assert_json_safe(payload)
 

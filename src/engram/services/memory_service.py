@@ -52,6 +52,7 @@ def search_memories(
     type_filter: str | None = None,
     tags: list[str] | tuple[str, ...] | None = None,
     limit: int = 10,
+    include_superseded: bool = False,
 ) -> list[dict[str, JsonValue]]:
     """Return project-scoped JSON-safe memory DTOs matching an FTS query or list fallback."""
     validated_limit = _validate_limit(limit)
@@ -63,7 +64,9 @@ def search_memories(
 
     if not terms:
         # Fallback to listing memories
-        memories = list_memories(project_id, type_filter=type_filter)
+        memories = list_memories(
+            project_id, type_filter=type_filter, include_superseded=include_superseded
+        )
         if tags:
             # Filter by tags manually in Python
             filtered = []
@@ -76,7 +79,13 @@ def search_memories(
         return memories[:validated_limit]
 
     # Optimization: Filter by project_id in the database instead of in-memory.
-    matches = Memory.search(query, type_filter=type_filter, tag_filters=tags, project_id=project_id)
+    matches = Memory.search(
+        query,
+        type_filter=type_filter,
+        tag_filters=tags,
+        project_id=project_id,
+        include_superseded=include_superseded,
+    )
 
     return [memory_to_dict(memory_item) for memory_item in matches[:validated_limit]]
 
@@ -85,12 +94,15 @@ def list_memories(
     project_id: str,
     type_filter: str | None = None,
     limit: int | None = None,
+    include_superseded: bool = False,
 ) -> list[dict[str, JsonValue]]:
     """Return project-scoped JSON-safe memory DTOs using list model behavior."""
     if type_filter:
-        memories = Memory.list_by_type(project_id, type_filter)
+        memories = Memory.list_by_type(
+            project_id, type_filter, include_superseded=include_superseded
+        )
     else:
-        memories = Memory.list_by_project(project_id)
+        memories = Memory.list_by_project(project_id, include_superseded=include_superseded)
 
     if limit is None:
         return [memory_to_dict(memory_item) for memory_item in memories]
@@ -110,6 +122,7 @@ def create_memory(
     always_include: bool = False,
     level: str | None = None,
     id: str | None = None,
+    supersedes: str | None = None,
 ) -> dict[str, JsonValue]:
     """Create a new memory with validation and return its JSON-safe DTO."""
     if type not in VALID_MEMORY_TYPES:
@@ -153,5 +166,6 @@ def create_memory(
         always_include=always_include,
         level=normalized_level,
         id=id,
+        supersedes=supersedes,
     )
     return memory_to_dict(memory_item)

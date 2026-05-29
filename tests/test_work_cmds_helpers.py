@@ -1,6 +1,6 @@
 """Tests for work commands helpers."""
 
-from engram.cli.work_cmds_helpers import slugify
+from engram.services.workflow_helpers import slugify
 
 
 def test_slugify_empty_string():

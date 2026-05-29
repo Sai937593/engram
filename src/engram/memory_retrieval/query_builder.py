@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from engram.context_helpers.common import compact_text
+from engram.context.common import compact_text
 from engram.models.phase import Phase
 from engram.models.task import Task
 
@@ -55,76 +55,6 @@ def _normalize_text(text: str | None) -> str:
     return " ".join(compacted.split())
 
 
-def _truncate_with_limit(text: str, limit: int) -> tuple[str, bool]:
-    """Apply deterministic truncation and return whether truncation occurred."""
-    if not text or limit <= 0:
-        return "", bool(text)
-    if len(text) <= limit:
-        return text, False
-    if limit <= len(ELLIPSIS):
-        return text[:limit], True
-    return f"{text[: limit - len(ELLIPSIS)].rstrip()}{ELLIPSIS}", True
-
-
-def _format_fragment(field_name: str, value: str) -> str:
-    """Render one field fragment in stable key-value form."""
-    return f"{field_name}: {value}"
-
-
-def _sorted_tags(tags: list[str] | tuple[str, ...] | None) -> str:
-    """Return deterministic comma-separated tags."""
-    if not tags:
-        return ""
-    cleaned = {_normalize_text(tag) for tag in tags if _normalize_text(tag)}
-    return ", ".join(sorted(cleaned, key=str.casefold))
-
-
-def _build_context_fields(context: Mapping[str, str | None] | None) -> list[tuple[str, str]]:
-    """Return normalized context fields sorted for deterministic output."""
-    if not context:
-        return []
-
-    fields: list[tuple[str, str]] = []
-    for key in sorted(context.keys(), key=str.casefold):
-        normalized_key = _normalize_text(key)
-        normalized_value = _normalize_text(context.get(key))
-        if normalized_key and normalized_value:
-            fields.append((f"context.{normalized_key}", normalized_value))
-    return fields
-
-
-def _resolve_phase_context(
-    selected_task: Task,
-    active_phase: Phase | None,
-) -> tuple[str | None, str | None, str | None, str | None]:
-    """Resolve phase context from active phase, phase_id link, then legacy phase title."""
-    if active_phase:
-        return (
-            active_phase.id,
-            _normalize_text(active_phase.title),
-            _normalize_text(active_phase.description),
-            _normalize_text(active_phase.acceptance),
-        )
-
-    if selected_task.phase_id:
-        resolved_phase = Phase.get(selected_task.phase_id)
-        if resolved_phase:
-            return (
-                resolved_phase.id,
-                _normalize_text(resolved_phase.title),
-                _normalize_text(resolved_phase.description),
-                _normalize_text(resolved_phase.acceptance),
-            )
-
-    legacy_phase_title = _normalize_text(selected_task.phase)
-    return (
-        selected_task.phase_id,
-        legacy_phase_title or None,
-        None,
-        None,
-    )
-
-
 def build_task_retrieval_query(
     selected_task: Task,
     active_phase: Phase | None = None,
@@ -132,6 +62,72 @@ def build_task_retrieval_query(
     options: RetrievalQueryBuilderOptions | None = None,
 ) -> TaskRetrievalQuery:
     """Build deterministic retrieval query text from task, phase, and optional context."""
+
+    def _truncate_with_limit(text: str, limit: int) -> tuple[str, bool]:
+        """Apply deterministic truncation and return whether truncation occurred."""
+        if not text or limit <= 0:
+            return "", bool(text)
+        if len(text) <= limit:
+            return text, False
+        if limit <= len(ELLIPSIS):
+            return text[:limit], True
+        return f"{text[: limit - len(ELLIPSIS)].rstrip()}{ELLIPSIS}", True
+
+    def _format_fragment(field_name: str, value: str) -> str:
+        """Render one field fragment in stable key-value form."""
+        return f"{field_name}: {value}"
+
+    def _sorted_tags(tags: list[str] | tuple[str, ...] | None) -> str:
+        """Return deterministic comma-separated tags."""
+        if not tags:
+            return ""
+        cleaned = {_normalize_text(tag) for tag in tags if _normalize_text(tag)}
+        return ", ".join(sorted(cleaned, key=str.casefold))
+
+    def _build_context_fields(context: Mapping[str, str | None] | None) -> list[tuple[str, str]]:
+        """Return normalized context fields sorted for deterministic output."""
+        if not context:
+            return []
+
+        fields: list[tuple[str, str]] = []
+        for key in sorted(context.keys(), key=str.casefold):
+            normalized_key = _normalize_text(key)
+            normalized_value = _normalize_text(context.get(key))
+            if normalized_key and normalized_value:
+                fields.append((f"context.{normalized_key}", normalized_value))
+        return fields
+
+    def _resolve_phase_context(
+        selected_task: Task,
+        active_phase: Phase | None,
+    ) -> tuple[str | None, str | None, str | None, str | None]:
+        """Resolve phase context from active phase, phase_id link, then legacy phase title."""
+        if active_phase:
+            return (
+                active_phase.id,
+                _normalize_text(active_phase.title),
+                _normalize_text(active_phase.description),
+                _normalize_text(active_phase.acceptance),
+            )
+
+        if selected_task.phase_id:
+            resolved_phase = Phase.get(selected_task.phase_id)
+            if resolved_phase:
+                return (
+                    resolved_phase.id,
+                    _normalize_text(resolved_phase.title),
+                    _normalize_text(resolved_phase.description),
+                    _normalize_text(resolved_phase.acceptance),
+                )
+
+        legacy_phase_title = _normalize_text(selected_task.phase)
+        return (
+            selected_task.phase_id,
+            legacy_phase_title or None,
+            None,
+            None,
+        )
+
     resolved_options = options or RetrievalQueryBuilderOptions()
     (
         resolved_phase_id,

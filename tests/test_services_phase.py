@@ -13,7 +13,13 @@ from engram.db import get_db_connection
 from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.services.errors import EngramServiceError, ValidationError
-from engram.services.phase_service import complete_phase, get_active_phase, list_phases, start_phase
+from engram.services.phase_service import (
+    complete_phase,
+    create_phase,
+    get_active_phase,
+    list_phases,
+    start_phase,
+)
 
 
 def _create_project(project_id: str, repo_path: str) -> Project:
@@ -234,3 +240,48 @@ def test_complete_phase_fails_if_unfinished_tasks_exist(tmp_db):
 
     assert exc.value.code == "UNFINISHED_TASKS"
     assert p.id in exc.value.details["phase_id"]
+
+
+def test_create_phase_success(tmp_db):
+    project = _create_project("proj-create-a", "/tmp/proj-create-a")
+    dto = create_phase(
+        project_id=project.id,
+        title="Phase 1",
+        description="A great phase",
+        status="planned",
+        acceptance="Acceptance criteria",
+    )
+    assert dto["title"] == "Phase 1"
+    assert dto["description"] == "A great phase"
+    assert dto["status"] == "planned"
+    assert dto["acceptance"] == "Acceptance criteria"
+    assert "id" in dto
+
+    # Verify database persistence
+    refreshed = Phase.get(dto["id"])
+    assert refreshed is not None
+    assert refreshed.title == "Phase 1"
+    assert refreshed.description == "A great phase"
+
+
+def test_create_phase_raises_if_empty_title(tmp_db):
+    project = _create_project("proj-create-b", "/tmp/proj-create-b")
+    with pytest.raises(ValidationError) as exc:
+        create_phase(project_id=project.id, title="   ")
+    assert exc.value.code == "INVALID_PHASE_TITLE"
+
+
+def test_create_phase_raises_if_invalid_status(tmp_db):
+    project = _create_project("proj-create-c", "/tmp/proj-create-c")
+    with pytest.raises(ValidationError) as exc:
+        create_phase(project_id=project.id, title="Phase 1", status="unknown-status")
+    assert exc.value.code == "INVALID_PHASE_STATUS"
+
+
+def test_create_phase_raises_if_duplicate_title(tmp_db):
+    project = _create_project("proj-create-d", "/tmp/proj-create-d")
+    Phase.create(project_id=project.id, title="Phase 1", status="planned")
+
+    with pytest.raises(ValidationError) as exc:
+        create_phase(project_id=project.id, title="   phase   1  ")
+    assert exc.value.code == "DUPLICATE_PHASE_TITLE"

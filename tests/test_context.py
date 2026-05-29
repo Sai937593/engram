@@ -1,7 +1,7 @@
 """Tests for context generation (startup and task context)."""
 
 from engram.context import get_startup_context, get_task_context
-from engram.context_helpers.startup import (
+from engram.context.startup import (
     CONTEXT_TRUNCATION_MARKER,
     STARTUP_HARD_CHAR_BUDGET,
     STARTUP_HARD_TOKEN_BUDGET,
@@ -429,7 +429,7 @@ def test_startup_builder_renders_selected_task_memories_separate_from_guardrails
         pack_result=pack_result,
     )
     monkeypatch.setattr(
-        "engram.context_helpers.startup.orchestrate_startup_task_memory_retrieval",
+        "engram.context.startup.builders.orchestrate_startup_task_memory_retrieval",
         lambda **kwargs: startup_result,
     )
 
@@ -773,3 +773,64 @@ def test_task_context_phase_formatting_stability(project):
         == len("Evidence line 1\nEvidence line 2 with a lot of details: ") + 200
     )
     assert not compacted_evidence.endswith("...")
+
+
+def test_startup_context_shows_constraints_first(tmp_db, project, monkeypatch):
+    """Startup context includes guardrails and excludes non-guardrail lessons."""
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="No pip",
+        content="Use uv run",
+        always_include=True,
+        level="L1",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="WAL mode",
+        content="Enable WAL",
+        always_include=True,
+        level="L3",
+    )
+
+    ctx = get_startup_context(project.id)
+    assert "## PROJECT GUARDRAILS" in ctx
+    assert "No pip" in ctx
+    assert "WAL mode" not in ctx
+
+
+def test_startup_context_no_tasks_phase_gap(tmp_db, project):
+    """Startup context shows no-task guidance when project has zero tasks."""
+    ctx = get_startup_context(project.id)
+    assert "No tasks are defined yet." in ctx
+
+
+def test_startup_context_phase_complete(tmp_db, project):
+    """Startup context shows completion guidance when all work is finished."""
+    Task.create(project_id=project.id, title="Done", status="done")
+    ctx = get_startup_context(project.id)
+    assert "All 1 tasks are done or cancelled." in ctx
+
+
+def test_task_context_includes_project_knowledge(tmp_db, project, task):
+    """Task context includes project-wide constraints and lessons."""
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="No secrets",
+        content="Use .env",
+        level="L1",
+    )
+    Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Use WAL",
+        content="Enable WAL mode",
+        level="L3",
+    )
+
+    ctx = get_task_context(task.id)
+    assert "PROJECT KNOWLEDGE" in ctx
+    assert "No secrets" in ctx
+    assert "Use WAL" in ctx

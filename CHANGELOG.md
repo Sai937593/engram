@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+- docs: update project documentation, README.md, and packaged user manuals to align with the new MCP-first architecture and CLI trim; remove all stale CLI commands from the manual and historical planning files from `docs/`
 - docs(gemini-md): slim GEMINI.md to a skill-router pattern under 60 lines and update CLI references to MCP tools
 - fix(mcp): resolve Windows ProactorEventLoop deadlock in `engram_workflow_start` and `engram_workflow_finish` by converting handlers to async and offloading git subprocess work via `anyio.to_thread.run_sync`; add `stdin=subprocess.DEVNULL` to all git subprocess calls in `workflow_service` to prevent STDIO pipe inheritance
 - feat: add `engram_workflow_start` and `engram_workflow_finish` MCP tools

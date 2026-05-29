@@ -173,12 +173,12 @@ def test_list_by_project_round_trips_relevant_files(project):
     task_a = Task.create(
         project_id=project.id,
         title="Task A",
-        relevant_files=["src/engram/db_helpers/schema.py"],
+        relevant_files=["src/engram/db/schema.py"],
     )
     task_b = Task.create(project_id=project.id, title="Task B")
     tasks = {t.id: t for t in Task.list_by_project(project.id)}
 
-    assert tasks[task_a.id].relevant_files == ["src/engram/db_helpers/schema.py"]
+    assert tasks[task_a.id].relevant_files == ["src/engram/db/schema.py"]
     assert tasks[task_b.id].relevant_files == []
 
 
