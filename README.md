@@ -76,7 +76,7 @@ engram init --name "catalyst" --summary "Realtime lakehouse e-commerce platform"
 
 ### 2. Configure your MCP Client
 
-Register `engram-mcp` with your agent client (Cursor, Codex, Claude Desktop, etc.). Supply the working directory as your initialized project root. See [Codex Setup Guide](docs/mcp-codex-setup.md) for comprehensive configuration examples.
+Register `engram-mcp` with your agent client (Cursor, Codex, Claude Desktop, etc.). Supply the working directory as your initialized project root.
 
 ### 3. Agent Tool Interaction
 
