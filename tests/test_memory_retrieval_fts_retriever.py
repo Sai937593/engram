@@ -2,6 +2,8 @@
 
 import sqlite3
 
+import pytest
+
 from engram.memory_retrieval.fts_retriever import retrieve_task_memory_candidates
 from engram.memory_retrieval.query_builder import (
     RetrievalQueryMetadata,
@@ -394,3 +396,11 @@ def test_retriever_threshold_keeps_multi_term_content_and_task_linked_matches(pr
     assert by_id[strong_content_overlap.id].content_term_hits == ("release", "manual")
     assert by_id[direct_task_match.id].task_id_match is True
     assert result.metadata.threshold_filtered_row_count == 0
+
+
+def test_build_fused_candidate_rejects_empty_channel_pair() -> None:
+    """The internal fusion guard should fail loudly for impossible empty channels."""
+    from engram.memory_retrieval.fusion import _build_fused_candidate, _CandidateChannels
+
+    with pytest.raises(ValueError, match="missing primary candidate"):
+        _build_fused_candidate(channels=_CandidateChannels(), memory_id="mem-empty")
