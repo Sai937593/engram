@@ -161,3 +161,46 @@ def test_run_check_scenarios(monkeypatch, tmp_path):
         lambda repo_root=None: [Path("src/engram/bad.py")],
     )
     assert run_check(repo_root=tmp_path) == 1
+
+
+def test_run_check_subprocess_error(monkeypatch, capsys):
+    """Test run_check handles subprocess.CalledProcessError with stderr."""
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["git", "diff", "--cached", "--name-only", "--diff-filter=AM"],
+            stderr="fatal: not a git repository\n",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    exit_code = run_check()
+    assert exit_code == 1
+
+    captured = capsys.readouterr()
+    assert (
+        "py-structure: failed to inspect staged files: fatal: not a git repository" in captured.err
+    )
+
+
+def test_run_check_subprocess_error_no_stderr(monkeypatch, capsys):
+    """Test run_check handles subprocess.CalledProcessError without stderr."""
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["git", "diff", "--cached", "--name-only", "--diff-filter=AM"],
+            stderr=None,
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    exit_code = run_check()
+    assert exit_code == 1
+
+    captured = capsys.readouterr()
+    assert (
+        "Command '['git', 'diff', '--cached', '--name-only', '--diff-filter=AM']' returned non-zero exit status 1."
+        in captured.err
+    )
