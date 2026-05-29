@@ -88,8 +88,23 @@ def test_context_task_errors(
     assert res_ambiguous.exit_code != 0
     assert "Task reference is ambiguous in this project." in res_ambiguous.output
 
+    # Test service error
+    def _mock_get_task_context(*args: Any, **kwargs: Any) -> str:
+        raise EngramServiceError(
+            code="SERVICE_ERROR",
+            message="Test service error",
+        )
 
-@pytest.mark.parametrize("cmd", ["startup", "export-snapshot", "export-handoff"])
+    monkeypatch.setattr(
+        "engram.cli.context_cmds.get_task_context_for_current_project",
+        _mock_get_task_context,
+    )
+    res_service_error = runner.invoke(cli, ["context", "task", "feed"])
+    assert res_service_error.exit_code != 0
+    assert "Test service error" in res_service_error.output
+
+
+@pytest.mark.parametrize("cmd", ["startup", "task", "export-snapshot", "export-handoff"])
 def test_unbound_errors(tmp_db: Any, monkeypatch: pytest.MonkeyPatch, cmd: str) -> None:
     """engram context commands should fail clearly when no project is bound."""
 
@@ -105,11 +120,15 @@ def test_unbound_errors(tmp_db: Any, monkeypatch: pytest.MonkeyPatch, cmd: str) 
         _unbound,
     )
     runner = CliRunner()
-    cli_cmd = (
-        ["context", "startup"]
-        if cmd == "startup"
-        else ["export", "snapshot" if cmd == "export-snapshot" else "handoff"]
-    )
+    if cmd == "startup":
+        cli_cmd = ["context", "startup"]
+    elif cmd == "task":
+        cli_cmd = ["context", "task", "dummy"]
+    elif cmd == "export-snapshot":
+        cli_cmd = ["export", "snapshot"]
+    else:
+        cli_cmd = ["export", "handoff"]
+
     result = runner.invoke(cli, cli_cmd)
     assert result.exit_code != 0
     assert "No project is bound to the current repository path." in result.output
