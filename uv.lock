@@ -531,6 +531,9 @@ requires-dist = [
 ]
 provides-extras = ["dev", "mcp", "semantic"]
 
+[package.metadata.requires-dev]
+dev = []
+
 [[package]]
 name = "exceptiongroup"
 version = "1.3.1"
