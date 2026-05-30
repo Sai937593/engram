@@ -24,6 +24,19 @@ The main workflow should use a small number of strong tools and gates instead of
 
 ---
 
+## Decision Locks
+
+Do not change these without user approval:
+
+- Keep the primary execution loop as `workflow_start -> workflow_verify -> memory review -> workflow_finish`.
+- Do not add Project Card as a new abstraction in this redesign.
+- Do not force memory creation for every task; force memory review only.
+- Do not make CRUD/lifecycle tools the main agent workflow path.
+- Do not auto-start the next task from `workflow_finish`.
+- Keep detailed reasoning in skills; keep tool outputs compact.
+
+---
+
 ## Primary Workflow Tools
 
 ### 1. `engram_workflow_start`
