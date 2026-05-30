@@ -243,6 +243,22 @@ def test_list_tasks_filters_by_legacy_phase_text_when_no_first_class_match(tmp_d
     _assert_json_safe(payloads)
 
 
+def test_get_task_raises_task_not_found(tmp_db, monkeypatch):
+    project = _create_project("proj-nf", "/tmp/proj-nf")
+
+    # We must patch Task.get to return None, to simulate a situation
+    # where resolve_task_ref succeeded (task exists) but Task.get fails.
+    # Actually, if resolve_task_ref succeeds, it returns a valid task_id,
+    # but since it's a test for when Task.get returns None, we can just monkeypatch Task.get.
+    monkeypatch.setattr(Task, "get", lambda _: None)
+
+    with pytest.raises(EngramServiceError) as exc:
+        get_task(project.id, "some-task-ref")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+    assert "Task reference was not found" in exc.value.message
+
+
 def test_get_task_returns_json_safe_payload_from_scoped_reference(tmp_db):
     project = _create_project("proj-m", "/tmp/proj-m")
     task_item = Task.create(
@@ -391,6 +407,77 @@ def test_create_task_invalid_priority_raises_validation_error(tmp_db):
     assert "priority" in exc.value.details
 
 
+def test_create_task_with_all_fields(tmp_db):
+    project = _create_project("proj-ca", "/tmp/proj-ca")
+    Phase.create(project_id=project.id, id="phase100", title="Phase 1")
+    Task.create(project_id=project.id, id="dep1000", title="Dep Task")
+
+    dto = create_task(
+        project_id=project.id,
+        title="All Fields Task",
+        description="A task with all fields set",
+        status="in-progress",
+        priority="high",
+        phase_id="phase100",
+        depends_on="dep1000",
+        acceptance="Acceptance Criteria",
+        tags=["full", "test"],
+        relevant_files=["file1.txt", "file2.txt"],
+        id="full1000",
+    )
+
+    assert dto["id"] == "full1000"
+    assert dto["project_id"] == project.id
+    assert dto["title"] == "All Fields Task"
+    assert dto["description"] == "A task with all fields set"
+    assert dto["status"] == "in-progress"
+    assert dto["priority"] == "high"
+    assert dto["phase_id"] == "phase100"
+    assert dto["depends_on"] == "dep1000"
+    assert dto["acceptance"] == "Acceptance Criteria"
+    assert dto["tags"] == ["full", "test"]
+    assert dto["relevant_files"] == ["file1.txt", "file2.txt"]
+    _assert_json_safe(dto)
+
+
+def test_create_task_with_dependency(tmp_db):
+    project = _create_project("proj-cd", "/tmp/proj-cd")
+    Task.create(project_id=project.id, id="dep2000", title="Dep 2000")
+
+    dto = create_task(
+        project_id=project.id,
+        title="Dependent Task",
+        depends_on="dep2000",
+    )
+
+    assert dto["depends_on"] == "dep2000"
+
+
+def test_create_task_with_phase(tmp_db):
+    project = _create_project("proj-cp", "/tmp/proj-cp")
+
+    dto = create_task(
+        project_id=project.id,
+        title="Task with Legacy Phase",
+        phase="Legacy Phase Title",
+    )
+
+    assert dto["phase"] == "Legacy Phase Title"
+    assert dto["phase_id"] is None
+
+
+def test_update_task_raises_task_not_found(tmp_db, monkeypatch):
+    project = _create_project("proj-nf-u", "/tmp/proj-nf-u")
+
+    monkeypatch.setattr(Task, "get", lambda _: None)
+
+    with pytest.raises(EngramServiceError) as exc:
+        update_task(project.id, "some-task-ref", title="New title")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+    assert "Task reference was not found" in exc.value.message
+
+
 def test_update_task_happy_path(tmp_db):
     project = _create_project("proj-u", "/tmp/proj-u")
     Task.create(project_id=project.id, id="task0001", title="Original Title", status="todo")
@@ -489,6 +576,18 @@ def test_update_task_first_class_vs_legacy_phase_constraints(tmp_db):
     )
     assert legacy_updated["phase_id"] is None
     assert legacy_updated["phase"] == "New Legacy Title"
+
+
+def test_append_task_note_raises_task_not_found(tmp_db, monkeypatch):
+    project = _create_project("proj-nf-a", "/tmp/proj-nf-a")
+
+    monkeypatch.setattr(Task, "get", lambda _: None)
+
+    with pytest.raises(EngramServiceError) as exc:
+        append_task_note(project.id, "some-task-ref", note="Test note")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+    assert "Task reference was not found" in exc.value.message
 
 
 def test_append_task_note_happy_path(tmp_db):
