@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Engram is being redesigned for a Codex/MCP-first workflow. The goal is to reduce ambiguity for coding agents, avoid duplicated or noisy tool outputs, enforce task quality gates, and keep project memory fresh across sessions.
+Engram is being redesigned for a Codex/MCP-first workflow. The goal is to reduce ambiguity for coding agents, avoid duplicated or noisy tool outputs, enforce task quality gates, respect active redesign branches, and keep project memory fresh across sessions.
 
 This ADR records the foundational decisions that Codex should treat as fixed unless the user explicitly approves a change.
 
@@ -24,6 +24,7 @@ This ADR records the foundational decisions that Codex should treat as fixed unl
 | Product surface | Make Engram MCP-first; normal Codex workflows must not depend on CLI commands. |
 | CLI role | Do not introduce new workflow functionality only in CLI. CLI may remain only for temporary diagnostics/migration if needed. |
 | Packaging | Keep Python + uv packaging/runtime. Do not rewrite Engram in Node/npm for this redesign. |
+| Branch policy | Do not assume `main` is always the integration branch. Skills and workflow guidance must respect the current/base branch for the active redesign session. |
 | Primary execution loop | Keep `workflow_start -> workflow_verify -> memory review -> workflow_finish`. |
 | Workflow outputs | Make primary workflow outputs Markdown-first, compact, non-duplicative, and state-aware. |
 | Finish behavior | Do not auto-start or instruct the agent to claim the next task from `workflow_finish`. |
@@ -44,6 +45,7 @@ This ADR records the foundational decisions that Codex should treat as fixed unl
 - MCP server startup must discover the repo/workspace and local `.engram` state deterministically.
 - Existing global DB behavior and `repo_paths`-based project resolution should be removed, deprecated, or limited to migration only.
 - Any useful CLI behavior must move into service-layer functions and MCP tools/resources.
+- Skills and workflow guidance must avoid hardcoded `main` assumptions during long-running redesign work.
 - Codex should operate through workflow gates rather than passive hints.
 - Memory freshness is enforced through a review gate without creating low-value memories on every task.
 - Implementation can vary, but these decisions should not be reversed without user approval.
