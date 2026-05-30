@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Redesign Engram around a tighter agent workflow: phase intake, task decomposition, gated task execution, verification, memory hygiene, and clean Markdown MCP outputs.
+Redesign Engram around a tighter agent workflow: repo-local project state, MCP-first operation, phase intake, task decomposition, gated task execution, verification, memory hygiene, and clean Markdown MCP outputs.
 
 This handoff defines **what to build/refine**. Implementation details should be decided during the build phase.
 
@@ -29,11 +29,79 @@ The main workflow should use a small number of strong tools and gates instead of
 Do not change these without user approval:
 
 - Keep the primary execution loop as `workflow_start -> workflow_verify -> memory review -> workflow_finish`.
+- Use repo-local `.engram/memory.db` as the only normal project state store.
+- Do not keep global DB as primary project storage.
+- Do not rely on repo-path binding in a global DB for project resolution.
+- Make Engram MCP-first; normal agent workflows must not depend on CLI commands.
+- Do not introduce new workflow functionality only in CLI.
+- Keep Python + uv packaging/runtime; do not rewrite Engram in Node/npm for this redesign.
 - Do not add Project Card as a new abstraction in this redesign.
 - Do not force memory creation for every task; force memory review only.
 - Do not make CRUD/lifecycle tools the main agent workflow path.
 - Do not auto-start the next task from `workflow_finish`.
 - Keep detailed reasoning in skills; keep tool outputs compact.
+
+---
+
+## Storage and MCP Integration
+
+Engram should use repo-local project state only.
+
+Target shape:
+
+```text
+project-root/
+  .engram/
+    memory.db
+    config.toml
+```
+
+Expected behavior:
+
+- MCP server is configured once in the client/machine.
+- Per project, Engram initializes `.engram/memory.db` once.
+- MCP tools resolve the active project from the current repo/workspace, not from a global project registry.
+- `.engram/` should be added to `.gitignore` during project initialization.
+- Missing repo-local state should produce a clear `not initialized` response with the next MCP action.
+
+Do not require per-project MCP command changes. The same MCP command should work across projects when launched from the project workspace.
+
+---
+
+## MCP-First Product Surface
+
+All normal functionality needed by Codex should exist in services and MCP tools/resources.
+
+CLI commands should not be required for:
+
+- project initialization
+- project status/current project lookup
+- task/phase/memory lifecycle operations
+- workflow start/verify/finish
+- memory review recording
+- diagnostics needed by agents
+
+Any existing CLI-only behavior should be migrated into service-layer functions and exposed through MCP.
+
+A tiny CLI may remain temporarily for human diagnostics or migration, but it must not be the main product/workflow path.
+
+---
+
+## Packaging Decision
+
+Keep Engram as a Python project managed with uv.
+
+Target runtime model:
+
+```text
+Python implementation
+uv packaging/runtime
+STDIO MCP server
+repo-local `.engram/memory.db`
+MCP-first workflow
+```
+
+Do not rewrite Engram in Node/npm for MCP integration. MCP reliability should be achieved through deterministic server startup, stable schemas, repo-local DB discovery, compact outputs, and clear errors.
 
 ---
 
@@ -245,6 +313,17 @@ Memory search output should also be refined to Markdown and made more useful whe
 
 Add or refine lifecycle tools for core entities.
 
+### Project/admin lifecycle
+
+Needed MCP actions:
+
+- project init
+- current project
+- project status / diagnostics
+- update project metadata if needed
+
+Do not use global project listing/binding as the normal model.
+
 ### Task lifecycle
 
 Needed actions:
@@ -284,15 +363,19 @@ Needed actions:
 - cancel
 - archive
 
-### Project/admin lifecycle
+---
 
-Keep this lighter for now.
+## Target New-Project Session
 
-Needed actions:
-
-- current project
-- update project metadata if needed
-- inspect bound repo context
+```text
+Open Codex in repo
+  -> MCP server starts with same command as other projects
+  -> Engram detects missing `.engram/memory.db`
+  -> Codex calls project init MCP tool
+  -> Engram creates repo-local DB and project metadata
+  -> Engram adds `.engram/` to `.gitignore`
+  -> Codex can use workflow tools normally
+```
 
 ---
 
@@ -338,6 +421,9 @@ Do not prioritize:
 - letting CRUD tools become the main workflow path
 - auto-starting the next task after finish
 - exposing raw database writes to agents
+- keeping global DB as normal project storage
+- requiring CLI for normal agent workflows
+- rewriting the project in Node/npm
 
 ---
 
@@ -345,6 +431,10 @@ Do not prioritize:
 
 This redesign is successful when:
 
+- project state is repo-local under `.engram/memory.db`
+- MCP can initialize and use a new repo without per-project MCP command changes
+- normal Codex workflows do not require CLI commands
+- Python + uv remain the packaging/runtime model
 - `workflow_start` returns a compact, non-duplicative Work Order
 - `workflow_verify` exists and gates finish
 - `workflow_finish` blocks when verification or memory review is missing
