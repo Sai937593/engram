@@ -16,13 +16,11 @@ from engram.models.task import Task
 from engram.services.errors import EngramServiceError, ValidationError
 from engram.services.task import (
     append_task_note,
-    complete_task,
     create_task,
     get_next_task,
     get_task,
     list_tasks,
     resolve_task_ref,
-    start_task,
     update_task,
 )
 
