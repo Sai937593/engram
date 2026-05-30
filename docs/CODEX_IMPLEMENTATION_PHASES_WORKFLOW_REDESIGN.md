@@ -16,6 +16,9 @@ The handoff doc defines the product decisions. This document defines a safe buil
 
 - Preserve the decision locks from the handoff doc.
 - Prefer small, testable phases over one large rewrite.
+- Use repo-local `.engram/memory.db` as the only normal project state store.
+- Make Engram MCP-first; normal Codex workflows must not depend on CLI commands.
+- Keep Python + uv packaging/runtime.
 - Keep primary workflow tools compact and Markdown-first.
 - Do not add Project Card as a new abstraction.
 - Do not force memory creation for every task; force memory review only.
@@ -28,16 +31,19 @@ The handoff doc defines the product decisions. This document defines a safe buil
 
 ### Goal
 
-Confirm the current MCP, task, memory, phase, and workflow surfaces before making changes.
+Confirm the current MCP, storage, task, memory, phase, and workflow surfaces before making changes.
 
 ### Work
 
+- Inspect current DB path and project resolution behavior.
+- Inspect CLI-only behavior that needs MCP/service parity.
+- Inspect current MCP server startup and stdio entrypoint behavior.
 - Inspect current workflow tools.
 - Inspect task lifecycle and task schema.
 - Inspect memory lifecycle support.
 - Inspect phase lifecycle support.
 - Inspect startup context / guardrail rendering.
-- Inspect existing tests around MCP tools, context, tasks, memory, and workflow.
+- Inspect existing tests around MCP tools, context, tasks, memory, storage, and workflow.
 
 ### Output
 
@@ -52,7 +58,99 @@ Confirm the current MCP, task, memory, phase, and workflow surfaces before makin
 
 ---
 
-## Phase 1: Markdown-First Workflow Output Contract
+## Phase 1: Repo-Local DB Foundation
+
+### Goal
+
+Move normal project state from global DB/project binding to repo-local `.engram/memory.db`.
+
+### Work
+
+- Add repo/workspace root discovery for MCP/service usage.
+- Store project state in `project-root/.engram/memory.db`.
+- Initialize repo-local DB schema and project metadata.
+- Add `.engram/` to `.gitignore` during project initialization.
+- Replace global repo-path binding with repo-local project resolution.
+- Keep any global storage only as temporary migration/legacy support if needed.
+
+### Acceptance
+
+- New projects use `.engram/memory.db` by default.
+- Project resolution no longer depends on scanning a global DB for `repo_paths`.
+- Missing repo-local DB returns a clear not-initialized state.
+- Existing tests are updated to use repo-local DB assumptions.
+
+---
+
+## Phase 2: MCP-First Project Init and Diagnostics
+
+### Goal
+
+Ensure Codex can initialize and inspect Engram state through MCP without CLI dependency.
+
+### Work
+
+- Add/refine MCP tool for project initialization.
+- Add/refine MCP tool/resource for current project status.
+- Add/refine MCP diagnostics for DB existence, schema health, repo root detection, and `.gitignore` status.
+- Ensure the same MCP command can work across projects when launched from the project workspace.
+- Avoid requiring per-project MCP command changes.
+
+### Acceptance
+
+- Codex can initialize a new repo through MCP.
+- Codex can inspect project status through MCP.
+- Uninitialized repos produce actionable MCP output.
+- Normal workflows do not require CLI commands.
+
+---
+
+## Phase 3: Remove CLI as Workflow Dependency
+
+### Goal
+
+Migrate CLI-owned behavior into services and MCP tools/resources.
+
+### Work
+
+- Identify CLI-only functionality still needed by agents.
+- Move required behavior into service-layer functions.
+- Expose required behavior through MCP tools/resources.
+- Update docs so normal workflow is MCP-first.
+- Keep, reduce, or remove CLI only after MCP/service parity exists.
+
+### Acceptance
+
+- No normal Codex workflow depends on CLI.
+- No new workflow functionality exists only in CLI.
+- CLI, if retained, is limited to optional human diagnostics/migration.
+
+---
+
+## Phase 4: Packaging and MCP Startup Reliability
+
+### Goal
+
+Keep Python + uv while making MCP startup deterministic and reliable.
+
+### Work
+
+- Preserve `engram-mcp` stdio entrypoint behavior.
+- Ensure startup does not initialize or depend on a global project DB.
+- Ensure startup can discover the current repo/workspace and report uninitialized state cleanly.
+- Keep tool schemas stable and errors actionable.
+- Do not rewrite in Node/npm.
+
+### Acceptance
+
+- MCP server starts reliably through the existing Python/uv path.
+- Startup behavior is deterministic across repos.
+- Packaging remains Python + uv.
+- No Node/npm migration is introduced.
+
+---
+
+## Phase 5: Markdown-First Workflow Output Contract
 
 ### Goal
 
@@ -80,7 +178,7 @@ Define and apply compact Markdown output contracts for primary workflow tools.
 
 ---
 
-## Phase 2: Work Order Refinement for `workflow_start`
+## Phase 6: Work Order Refinement for `workflow_start`
 
 ### Goal
 
@@ -103,7 +201,7 @@ Make `engram_workflow_start` the main task-entry point for Codex.
 
 ---
 
-## Phase 3: Add `engram_workflow_verify`
+## Phase 7: Add `engram_workflow_verify`
 
 ### Goal
 
@@ -126,7 +224,7 @@ Add the required verification gate before finish.
 
 ---
 
-## Phase 4: Verification Gate in `workflow_finish`
+## Phase 8: Verification Gate in `workflow_finish`
 
 ### Goal
 
@@ -148,7 +246,7 @@ Prevent finishing tasks without a valid verification pass.
 
 ---
 
-## Phase 5: Memory Review Skill + Gate
+## Phase 9: Memory Review Skill + Gate
 
 ### Goal
 
@@ -177,7 +275,7 @@ Force memory hygiene without forcing memory creation.
 
 ---
 
-## Phase 6: Task Decomposition Skill
+## Phase 10: Task Decomposition Skill
 
 ### Goal
 
@@ -206,7 +304,7 @@ Prevent weak task creation when Codex converts phase docs into Engram tasks.
 
 ---
 
-## Phase 7: Draft → Ready Task Lifecycle
+## Phase 11: Draft → Ready Task Lifecycle
 
 ### Goal
 
@@ -227,7 +325,7 @@ Ensure incomplete tasks cannot be selected by `workflow_start`.
 
 ---
 
-## Phase 8: Task Quality Validation
+## Phase 12: Task Quality Validation
 
 ### Goal
 
@@ -253,7 +351,7 @@ Create a quality gate for task metadata.
 
 ---
 
-## Phase 9: Memory Lifecycle Tool Refinement
+## Phase 13: Memory Lifecycle Tool Refinement
 
 ### Goal
 
@@ -280,7 +378,7 @@ Give Codex safe domain-level write access for memory hygiene.
 
 ---
 
-## Phase 10: Phase and Task Lifecycle Tool Refinement
+## Phase 14: Phase and Task Lifecycle Tool Refinement
 
 ### Goal
 
@@ -308,7 +406,7 @@ Complete domain-level lifecycle support around the primary workflow.
 
 ---
 
-## Phase 11: End-to-End Workflow Tests
+## Phase 15: End-to-End Workflow Tests
 
 ### Goal
 
@@ -318,6 +416,9 @@ Prove the redesigned workflow works as intended.
 
 Add tests for:
 
+- new repo -> MCP project init -> repo-local DB available
+- MCP startup reports uninitialized repo clearly
+- normal workflow does not require CLI
 - phase doc -> draft tasks -> validation -> ready tasks
 - `workflow_start` selects only ready tasks
 - `workflow_verify` records pass/fail state
@@ -330,6 +431,7 @@ Add tests for:
 
 ### Acceptance
 
+- End-to-end new-project session is covered.
 - End-to-end task session is covered.
 - End-to-end phase-splitting session is covered.
 - Regression tests protect the major decision locks.
@@ -340,17 +442,21 @@ Add tests for:
 
 ```text
 0. Baseline audit
-1. Markdown workflow output contract
-2. Work Order refinement
-3. workflow_verify
-4. verification gate in workflow_finish
-5. memory review skill + gate
-6. task decomposition skill
-7. draft -> ready lifecycle
-8. task quality validation
-9. memory lifecycle refinement
-10. phase/task lifecycle refinement
-11. end-to-end tests
+1. Repo-local DB foundation
+2. MCP-first project init and diagnostics
+3. Remove CLI as workflow dependency
+4. Packaging and MCP startup reliability
+5. Markdown workflow output contract
+6. Work Order refinement
+7. workflow_verify
+8. verification gate in workflow_finish
+9. memory review skill + gate
+10. task decomposition skill
+11. draft -> ready lifecycle
+12. task quality validation
+13. memory lifecycle refinement
+14. phase/task lifecycle refinement
+15. end-to-end tests
 ```
 
 ---
@@ -359,6 +465,11 @@ Add tests for:
 
 Pause and ask for user review if a phase requires changing any decision lock from the handoff doc, especially:
 
+- using global DB as normal project storage
+- relying on repo-path binding for project resolution
+- requiring CLI for normal Codex workflows
+- adding workflow functionality only in CLI
+- rewriting Engram in Node/npm
 - adding Project Card as a new abstraction
 - forcing memory creation for every task
 - making CRUD tools the main workflow path
