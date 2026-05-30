@@ -18,7 +18,7 @@ jobs:
       - name: Set up Python
         run: uv python install
       - name: Install project
-        run: uv sync --extra dev
+        run: uv sync --all-extras
       - name: Ruff Check
         run: uv run ruff check src/ tests/
       - name: Ruff Format
