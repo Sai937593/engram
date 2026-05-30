@@ -558,3 +558,122 @@ def test_complete_task_success_with_evidence(tmp_db):
     assert dto["status"] == "done"
     assert "All completed smoothly" in dto["evidence"]
     assert "[" in dto["evidence"]
+
+
+def test_get_task_not_found(tmp_db, monkeypatch):
+    project = _create_project("proj-get-not-found", "/tmp/proj-get-not-found")
+    monkeypatch.setattr(
+        "engram.services.task.crud.resolve_task_ref", lambda pid, ref: "nonexistent"
+    )
+
+    with pytest.raises(EngramServiceError) as exc:
+        get_task(project.id, "some-ref")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+
+
+def test_update_task_not_found(tmp_db, monkeypatch):
+    project = _create_project("proj-update-not-found", "/tmp/proj-update-not-found")
+    monkeypatch.setattr(
+        "engram.services.task.crud.resolve_task_ref", lambda pid, ref: "nonexistent"
+    )
+
+    with pytest.raises(EngramServiceError) as exc:
+        update_task(project.id, "some-ref", title="New Title")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+
+
+def test_append_task_note_not_found(tmp_db, monkeypatch):
+    project = _create_project("proj-note-not-found", "/tmp/proj-note-not-found")
+    monkeypatch.setattr(
+        "engram.services.task.crud.resolve_task_ref", lambda pid, ref: "nonexistent"
+    )
+
+    with pytest.raises(EngramServiceError) as exc:
+        append_task_note(project.id, "some-ref", "note")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+
+
+def test_update_task_clears_dependency(tmp_db):
+    project = _create_project("proj-clear-dep", "/tmp/proj-clear-dep")
+    dep = Task.create(project_id=project.id, id="task-dep", title="Dependency")
+    t = Task.create(project_id=project.id, id="task-with-dep", title="Task", depends_on=dep.id)
+
+    updated = update_task(project.id, t.id, depends_on="clear")
+    assert updated["depends_on"] is None
+
+    updated = update_task(project.id, t.id, depends_on=None)
+    assert updated["depends_on"] is None
+
+
+def test_update_task_invalid_dependency_type(tmp_db):
+    project = _create_project("proj-invalid-dep-type", "/tmp/proj-invalid-dep-type")
+    t = Task.create(project_id=project.id, id="task-inv-type", title="Task")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project.id, t.id, depends_on=123)
+
+    assert exc.value.code == "INVALID_DEPENDENCY"
+
+
+def test_update_task_nonexistent_dependency(tmp_db):
+    project = _create_project("proj-nonexistent-dep", "/tmp/proj-nonexistent-dep")
+    t = Task.create(project_id=project.id, id="task-nonexistent-dep", title="Task")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project.id, t.id, depends_on="nonexistent-dep")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+
+
+def test_update_task_invalid_phase_id_type_or_empty(tmp_db):
+    project = _create_project("proj-invalid-phase", "/tmp/proj-invalid-phase")
+    t = Task.create(project_id=project.id, id="task-inv-phase", title="Task")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project.id, t.id, phase_id=123)
+    assert exc.value.code == "INVALID_PHASE_REFERENCE"
+
+    updated = update_task(project.id, t.id, phase_id="   ")
+    assert updated["phase_id"] is None
+
+
+def test_update_task_phase_id_by_title(tmp_db):
+    project = _create_project("proj-phase-title", "/tmp/proj-phase-title")
+    phase = Phase.create(project_id=project.id, id="phase01", title="Alpha Phase")
+    t = Task.create(project_id=project.id, id="task-phase-title", title="Task")
+
+    updated = update_task(project.id, t.id, phase_id="Alpha Phase")
+    assert updated["phase_id"] == phase.id
+    assert updated["phase"] == "Alpha Phase"
+
+
+def test_update_task_phase_id_ambiguous(tmp_db):
+    project = _create_project("proj-phase-ambig", "/tmp/proj-phase-ambig")
+    Phase.create(project_id=project.id, id="phase01", title="Common Phase")
+    Phase.create(project_id=project.id, id="phase02", title="Common Phase")
+    t = Task.create(project_id=project.id, id="task-phase-ambig", title="Task")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project.id, t.id, phase_id="Common Phase")
+    assert exc.value.code == "AMBIGUOUS_PHASE"
+
+
+def test_update_task_phase_not_found(tmp_db):
+    project = _create_project("proj-phase-not-found", "/tmp/proj-phase-not-found")
+    t = Task.create(project_id=project.id, id="task-phase-notfound", title="Task")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project.id, t.id, phase_id="Missing Phase")
+    assert exc.value.code == "PHASE_NOT_FOUND"
+
+
+def test_update_task_valid_dependency(tmp_db):
+    project = _create_project("proj-valid-dep", "/tmp/proj-valid-dep")
+    dep = Task.create(project_id=project.id, id="task-valid-dep-tgt", title="Target Dependency")
+    t = Task.create(project_id=project.id, id="task-valid-dep-src", title="Task")
+
+    updated = update_task(project.id, t.id, depends_on=dep.id)
+    assert updated["depends_on"] == dep.id
