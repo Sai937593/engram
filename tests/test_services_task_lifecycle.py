@@ -34,6 +34,7 @@ def _assert_json_safe(value: Any) -> None:
             _assert_json_safe(item)
         return
 
+
 def test_get_next_task_returns_next_actionable_task_payload(tmp_db):
     project = _create_project("proj-n", "/tmp/proj-n")
     blocked_dependency = Task.create(project_id=project.id, id="depn0001", title="Open dependency")
@@ -117,8 +118,10 @@ def test_complete_task_success_with_evidence(tmp_db):
     assert "All completed smoothly" in dto["evidence"]
     assert "[" in dto["evidence"]
 
+
 def test_start_task_not_found(tmp_db, monkeypatch):
     import engram.services.task.lifecycle as lifecycle
+
     monkeypatch.setattr(lifecycle, "resolve_task_ref", lambda pid, ref: "missing-task-id")
     project = _create_project("proj-start-nf", "/tmp/proj-start-nf")
     with pytest.raises(EngramServiceError) as exc:
@@ -129,7 +132,9 @@ def test_start_task_not_found(tmp_db, monkeypatch):
 def test_start_task_with_dependency_done(tmp_db):
     project = _create_project("proj-start-dep-done", "/tmp/proj-start-dep-done")
     dep = Task.create(project_id=project.id, id="task-dep-01", title="Dep", status="done")
-    t = Task.create(project_id=project.id, id="task-main-01", title="Main", status="todo", depends_on=dep.id)
+    t = Task.create(
+        project_id=project.id, id="task-main-01", title="Main", status="todo", depends_on=dep.id
+    )
 
     dto = start_task(project.id, t.id)
     assert dto["status"] == "in-progress"
@@ -138,7 +143,13 @@ def test_start_task_with_dependency_done(tmp_db):
 def test_start_task_dependency_deleted_from_db(tmp_db):
     project = _create_project("proj-start-dep-del", "/tmp/proj-start-dep-del")
     # Simulate a dependency ID that does not exist in DB (e.g. deleted or dangling ref)
-    t = Task.create(project_id=project.id, id="task-main-02", title="Main", status="todo", depends_on="missing-dep-id")
+    t = Task.create(
+        project_id=project.id,
+        id="task-main-02",
+        title="Main",
+        status="todo",
+        depends_on="missing-dep-id",
+    )
 
     dto = start_task(project.id, t.id)
     assert dto["status"] == "in-progress"
@@ -146,6 +157,7 @@ def test_start_task_dependency_deleted_from_db(tmp_db):
 
 def test_complete_task_not_found(tmp_db, monkeypatch):
     import engram.services.task.lifecycle as lifecycle
+
     monkeypatch.setattr(lifecycle, "resolve_task_ref", lambda pid, ref: "missing-task-id")
     project = _create_project("proj-comp-nf", "/tmp/proj-comp-nf")
     with pytest.raises(EngramServiceError) as exc:
@@ -155,7 +167,9 @@ def test_complete_task_not_found(tmp_db, monkeypatch):
 
 def test_complete_task_appends_evidence(tmp_db):
     project = _create_project("proj-comp-app-ev", "/tmp/proj-comp-app-ev")
-    t = Task.create(project_id=project.id, id="task-ev-01", title="Task with Ev", status="in-progress")
+    t = Task.create(
+        project_id=project.id, id="task-ev-01", title="Task with Ev", status="in-progress"
+    )
     t.update(evidence="[2024-01-01 12:00] Old evidence")
 
     dto = complete_task(project.id, t.id, evidence="New final evidence")

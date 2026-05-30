@@ -472,5 +472,3 @@ def test_append_task_note_blank_rejection(tmp_db):
         append_task_note(project_id=project.id, task_ref="task0009", note="   ")
 
     assert exc.value.code == "INVALID_NOTE"
-
-
