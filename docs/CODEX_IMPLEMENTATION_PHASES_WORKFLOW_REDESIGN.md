@@ -28,11 +28,11 @@ The handoff doc defines the product decisions. This document defines a safe buil
 
 ---
 
-## Phase 0: Baseline Audit and Branch Policy Setup
+## Phase 0: Baseline Audit and External Skill Update
 
 ### Goal
 
-Confirm the current MCP, storage, task, memory, phase, workflow, and skill-bank surfaces before making changes, and prevent the redesign from accidentally targeting `main`.
+Confirm the current MCP, storage, task, memory, phase, workflow, and skill-bank surfaces before making product changes, and update the external Engram transition skill so it does not accidentally target `main`.
 
 ### Work
 
@@ -41,19 +41,23 @@ Confirm the current MCP, storage, task, memory, phase, workflow, and skill-bank 
 - Inspect current MCP server startup and stdio entrypoint behavior.
 - Inspect current workflow tools.
 - Inspect current branch creation / merge / phase-transition assumptions.
-- Inspect existing skill-bank instructions for hardcoded `main` assumptions.
+- Inspect the external Codex/Engram transition skill instructions for hardcoded `main` assumptions.
+- Before product-code changes, update the external Engram transition skill so it:
+  - detects or respects the current active redesign/base branch
+  - creates phase/task branches from that branch
+  - targets merges/PRs back to that branch
+  - does not merge, rebase, or open PRs into `main` unless the user explicitly asks
 - Inspect task lifecycle and task schema.
 - Inspect memory lifecycle support.
 - Inspect phase lifecycle support.
 - Inspect startup context / guardrail rendering.
 - Inspect existing tests around MCP tools, context, tasks, memory, storage, branch behavior, and workflow.
-- Update early skill-bank guidance so Codex respects the current/base branch instead of defaulting to `main`.
 
 ### Output
 
 - Short implementation note identifying current gaps and files to modify.
+- Confirmation that the external Engram transition skill was updated before product implementation.
 - Branch policy note stating the active redesign/base branch and how phase/task branches should target it.
-- Skill-bank update or proposed update removing hardcoded `main` assumptions.
 - No product behavior changes unless needed to unblock later phases.
 
 ### Acceptance
@@ -62,7 +66,7 @@ Confirm the current MCP, storage, task, memory, phase, workflow, and skill-bank 
 - Existing tests still pass.
 - Later phases have clear file targets.
 - Codex has explicit branch guidance before any workflow/phase-transition changes.
-- Skills no longer instruct agents to merge/target `main` by default.
+- The external Engram transition skill no longer instructs agents to merge/target `main` by default.
 
 ---
 
@@ -427,7 +431,7 @@ Add tests for:
 - new repo -> MCP project init -> repo-local DB available
 - MCP startup reports uninitialized repo clearly
 - normal workflow does not require CLI
-- skills do not hardcode `main` as the integration target
+- external Engram transition skill does not hardcode `main` as the integration target
 - phase doc -> draft tasks -> validation -> ready tasks
 - `workflow_start` selects only ready tasks
 - `workflow_verify` records pass/fail state
@@ -443,7 +447,7 @@ Add tests for:
 - End-to-end new-project session is covered.
 - End-to-end task session is covered.
 - End-to-end phase-splitting session is covered.
-- Branch-aware skill guidance is covered.
+- Branch-aware external transition skill guidance is covered.
 - Regression tests protect the major decision locks.
 
 ---
@@ -451,7 +455,7 @@ Add tests for:
 ## Suggested Build Order
 
 ```text
-0. Baseline audit and branch policy setup
+0. Baseline audit and external skill update
 1. Repo-local DB foundation
 2. MCP-first project init and diagnostics
 3. Remove CLI as workflow dependency
