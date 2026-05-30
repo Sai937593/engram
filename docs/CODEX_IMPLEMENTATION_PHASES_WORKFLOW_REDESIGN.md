@@ -19,6 +19,7 @@ The handoff doc defines the product decisions. This document defines a safe buil
 - Use repo-local `.engram/memory.db` as the only normal project state store.
 - Make Engram MCP-first; normal Codex workflows must not depend on CLI commands.
 - Keep Python + uv packaging/runtime.
+- Skills and workflow guidance must respect the current/base branch instead of assuming `main`.
 - Keep primary workflow tools compact and Markdown-first.
 - Do not add Project Card as a new abstraction.
 - Do not force memory creation for every task; force memory review only.
@@ -27,11 +28,11 @@ The handoff doc defines the product decisions. This document defines a safe buil
 
 ---
 
-## Phase 0: Baseline Audit
+## Phase 0: Baseline Audit and Branch Policy Setup
 
 ### Goal
 
-Confirm the current MCP, storage, task, memory, phase, and workflow surfaces before making changes.
+Confirm the current MCP, storage, task, memory, phase, workflow, and skill-bank surfaces before making changes, and prevent the redesign from accidentally targeting `main`.
 
 ### Work
 
@@ -39,22 +40,29 @@ Confirm the current MCP, storage, task, memory, phase, and workflow surfaces bef
 - Inspect CLI-only behavior that needs MCP/service parity.
 - Inspect current MCP server startup and stdio entrypoint behavior.
 - Inspect current workflow tools.
+- Inspect current branch creation / merge / phase-transition assumptions.
+- Inspect existing skill-bank instructions for hardcoded `main` assumptions.
 - Inspect task lifecycle and task schema.
 - Inspect memory lifecycle support.
 - Inspect phase lifecycle support.
 - Inspect startup context / guardrail rendering.
-- Inspect existing tests around MCP tools, context, tasks, memory, storage, and workflow.
+- Inspect existing tests around MCP tools, context, tasks, memory, storage, branch behavior, and workflow.
+- Update early skill-bank guidance so Codex respects the current/base branch instead of defaulting to `main`.
 
 ### Output
 
 - Short implementation note identifying current gaps and files to modify.
-- No behavior changes unless needed to unblock later phases.
+- Branch policy note stating the active redesign/base branch and how phase/task branches should target it.
+- Skill-bank update or proposed update removing hardcoded `main` assumptions.
+- No product behavior changes unless needed to unblock later phases.
 
 ### Acceptance
 
 - Current behavior is understood.
 - Existing tests still pass.
 - Later phases have clear file targets.
+- Codex has explicit branch guidance before any workflow/phase-transition changes.
+- Skills no longer instruct agents to merge/target `main` by default.
 
 ---
 
@@ -419,6 +427,7 @@ Add tests for:
 - new repo -> MCP project init -> repo-local DB available
 - MCP startup reports uninitialized repo clearly
 - normal workflow does not require CLI
+- skills do not hardcode `main` as the integration target
 - phase doc -> draft tasks -> validation -> ready tasks
 - `workflow_start` selects only ready tasks
 - `workflow_verify` records pass/fail state
@@ -434,6 +443,7 @@ Add tests for:
 - End-to-end new-project session is covered.
 - End-to-end task session is covered.
 - End-to-end phase-splitting session is covered.
+- Branch-aware skill guidance is covered.
 - Regression tests protect the major decision locks.
 
 ---
@@ -441,7 +451,7 @@ Add tests for:
 ## Suggested Build Order
 
 ```text
-0. Baseline audit
+0. Baseline audit and branch policy setup
 1. Repo-local DB foundation
 2. MCP-first project init and diagnostics
 3. Remove CLI as workflow dependency
@@ -465,6 +475,7 @@ Add tests for:
 
 Pause and ask for user review if a phase requires changing any decision lock from the handoff doc, especially:
 
+- assuming `main` is always the integration branch
 - using global DB as normal project storage
 - relying on repo-path binding for project resolution
 - requiring CLI for normal Codex workflows
