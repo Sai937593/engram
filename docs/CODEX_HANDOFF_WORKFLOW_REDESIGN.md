@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Redesign Engram around a tighter agent workflow: repo-local project state, MCP-first operation, phase intake, task decomposition, gated task execution, verification, memory hygiene, and clean Markdown MCP outputs.
+Redesign Engram around a tighter agent workflow: repo-local project state, MCP-first operation, phase intake, task decomposition, gated task execution, verification, memory hygiene, branch-aware skills, and clean Markdown MCP outputs.
 
 This handoff defines **what to build/refine**. Implementation details should be decided during the build phase.
 
@@ -39,7 +39,27 @@ Do not change these without user approval:
 - Do not force memory creation for every task; force memory review only.
 - Do not make CRUD/lifecycle tools the main agent workflow path.
 - Do not auto-start the next task from `workflow_finish`.
+- Do not assume `main` is always the integration branch.
+- Skills and workflow guidance must respect the current/base branch for the active redesign session.
 - Keep detailed reasoning in skills; keep tool outputs compact.
+
+---
+
+## Branch Policy
+
+Engram skills and workflow guidance should be branch-aware.
+
+For this redesign, Codex should treat the active redesign branch as the integration/base branch, not `main`.
+
+Expected behavior:
+
+- Detect or respect the current branch/base branch for the active session.
+- Create phase/task branches from the active redesign/base branch.
+- Merge or target completed phase/task work back to the active redesign/base branch.
+- Do not merge, rebase, or open PRs into `main` unless the user explicitly asks.
+- Update skill-bank instructions so agents do not hardcode `main` as the default merge target.
+
+This should be handled early in the redesign so the user does not need to repeat branch instructions manually.
 
 ---
 
@@ -199,7 +219,19 @@ Do not force memory creation on every task. Force memory review.
 
 ---
 
-## Skills to Add
+## Skills to Add or Refine
+
+### Branch-Aware Skill Guidance
+
+Purpose:
+
+Prevent skills from assuming `main` as the merge/integration target.
+
+Skills should instruct agents to:
+
+- respect the current active branch/base branch
+- avoid touching `main` unless user-approved
+- target merges/PRs to the active redesign/base branch during long-running redesign work
 
 ### Task Decomposition Skill
 
@@ -424,6 +456,7 @@ Do not prioritize:
 - keeping global DB as normal project storage
 - requiring CLI for normal agent workflows
 - rewriting the project in Node/npm
+- hardcoding `main` as the integration branch in skills or workflow guidance
 
 ---
 
@@ -435,6 +468,7 @@ This redesign is successful when:
 - MCP can initialize and use a new repo without per-project MCP command changes
 - normal Codex workflows do not require CLI commands
 - Python + uv remain the packaging/runtime model
+- skills and workflow guidance respect the current/base branch instead of assuming `main`
 - `workflow_start` returns a compact, non-duplicative Work Order
 - `workflow_verify` exists and gates finish
 - `workflow_finish` blocks when verification or memory review is missing
