@@ -558,3 +558,41 @@ def test_complete_task_success_with_evidence(tmp_db):
     assert dto["status"] == "done"
     assert "All completed smoothly" in dto["evidence"]
     assert "[" in dto["evidence"]
+
+
+def test_complete_task_raises_task_not_found(tmp_db):
+    from unittest.mock import patch
+
+    project = _create_project("proj-comp-t3", "/tmp/proj-comp-t3")
+    t = Task.create(project_id=project.id, id="task0106", title="Task 106")
+
+    # Mock Task.get to return None after resolve_task_ref succeeds
+    with patch("engram.services.task.lifecycle.Task.get", return_value=None):
+        with pytest.raises(EngramServiceError) as exc:
+            complete_task(project.id, t.id)
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+
+
+def test_complete_task_appends_to_existing_evidence(tmp_db):
+    project = _create_project("proj-comp-t4", "/tmp/proj-comp-t4")
+    t = Task.create(project_id=project.id, id="task0107", title="Task 107", status="in-progress")
+    t.update(evidence="[2023-01-01 12:00] Initial evidence")
+
+    dto = complete_task(project.id, t.id, evidence="Additional evidence")
+    assert dto["id"] == t.id
+    assert dto["status"] == "done"
+    assert "[2023-01-01 12:00] Initial evidence" in dto["evidence"]
+    assert "Additional evidence" in dto["evidence"]
+    assert "\n" in dto["evidence"]
+
+
+def test_complete_task_with_blank_evidence(tmp_db):
+    project = _create_project("proj-comp-t5", "/tmp/proj-comp-t5")
+    t = Task.create(project_id=project.id, id="task0108", title="Task 108", status="in-progress")
+    t.update(evidence="Initial evidence")
+
+    dto = complete_task(project.id, t.id, evidence="   ")
+    assert dto["id"] == t.id
+    assert dto["status"] == "done"
+    assert dto["evidence"] == "Initial evidence"  # Should not append anything
