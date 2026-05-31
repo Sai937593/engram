@@ -19,20 +19,47 @@ from .schema import (
     create_tasks_table,
 )
 
-DEFAULT_DB_PATH = Path.home() / ".engram" / "memory.db"
+
+def get_default_db_path() -> Path:
+    """Resolve the dynamic default database path."""
+    try:
+        from engram.services.project_path import get_repo_local_db_path
+
+        return get_repo_local_db_path()
+    except Exception:
+        return Path.home() / ".engram" / "memory.db"
+
+
+def __getattr__(name: str):
+    if name == "DEFAULT_DB_PATH":
+        return get_default_db_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def get_db_connection(db_path=None):
     """Return a sqlite connection configured for Engram."""
     if db_path is None:
-        db_path = DEFAULT_DB_PATH
+        db_path = globals().get("DEFAULT_DB_PATH", get_default_db_path())
     return create_db_connection(db_path)
 
 
 def init_db(db_path=None):
     """Initialize schema and run idempotent migrations."""
+    if db_path is None:
+        db_path = globals().get("DEFAULT_DB_PATH", get_default_db_path())
+    else:
+        db_path = Path(db_path)
+
+    # Ensure parent state directories exist
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
+
+    # Drop existing triggers first so column migrations do not fire them and cause issues
+    cursor.execute("DROP TRIGGER IF EXISTS memories_ai")
+    cursor.execute("DROP TRIGGER IF EXISTS memories_ad")
+    cursor.execute("DROP TRIGGER IF EXISTS memories_au")
 
     create_projects_table(cursor)
     create_tasks_table(cursor)

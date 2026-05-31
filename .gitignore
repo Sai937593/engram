@@ -184,5 +184,5 @@ cython_debug/
 /agent-config/
 .vscode/settings.json
 
-# Engram Local Database
+# Engram local database and state
 .engram/

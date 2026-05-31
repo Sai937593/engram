@@ -113,3 +113,30 @@ def test_start_workflow_project_not_found(tmp_db: Any) -> None:
         start_workflow("non-existent", "/tmp/path")
 
     assert exc_info.value.code == "PROJECT_NOT_FOUND"
+
+
+def test_start_workflow_unbound_repo(tmp_db: Any, mock_startup_context: None) -> None:
+    """Verify start_workflow raises GIT_OPERATION_FAILED when repo_path is not a git repository."""
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    Phase.create(project_id=project.id, id="ph-1", title="Phase One", status="active")
+    Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Fix bugs",
+        phase="Phase One",
+        phase_id="ph-1",
+        status="todo",
+    )
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with pytest.raises(EngramServiceError) as exc_info:
+            start_workflow("proj-1", tmpdir)
+
+        assert exc_info.value.code == "GIT_OPERATION_FAILED"

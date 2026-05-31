@@ -13,8 +13,8 @@ class Project:
         self.repo_paths = repo_paths or []
 
     @classmethod
-    def create(cls, id, name, summary=None, repo_paths=None):
-        conn = get_db_connection()
+    def create(cls, id, name, summary=None, repo_paths=None, db_path=None):
+        conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
         repo_paths_json = json.dumps(repo_paths or [])
         conn.execute(
             "INSERT INTO projects (id, name, summary, repo_paths) VALUES (?, ?, ?, ?)",
@@ -25,8 +25,8 @@ class Project:
         return cls(id, name, summary, repo_paths=repo_paths)
 
     @classmethod
-    def get(cls, id):
-        conn = get_db_connection()
+    def get(cls, id, db_path=None):
+        conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
         row = conn.execute("SELECT * FROM projects WHERE id = ?", (id,)).fetchone()
         conn.close()
         if row:
@@ -36,9 +36,9 @@ class Project:
         return None
 
     @classmethod
-    def find_by_repo_path(cls, path):
+    def find_by_repo_path(cls, path, db_path=None):
         path = os.path.abspath(path)
-        conn = get_db_connection()
+        conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
         rows = conn.execute("SELECT * FROM projects").fetchall()
         conn.close()
 
@@ -49,8 +49,8 @@ class Project:
         return None
 
     @classmethod
-    def list_all(cls):
-        conn = get_db_connection()
+    def list_all(cls, db_path=None):
+        conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
         rows = conn.execute("SELECT * FROM projects").fetchall()
         conn.close()
         return [
@@ -60,7 +60,7 @@ class Project:
             for row in rows
         ]
 
-    def update(self, name=None, summary=None, status=None):
+    def update(self, name=None, summary=None, status=None, db_path=None):
         updates = []
         params = []
         if name:
@@ -83,16 +83,16 @@ class Project:
         params.append(self.id)
 
         query = f"UPDATE projects SET {', '.join(updates)} WHERE id = ?"
-        conn = get_db_connection()
+        conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
         conn.execute(query, params)
         conn.commit()
         conn.close()
 
-    def add_repo_path(self, path):
+    def add_repo_path(self, path, db_path=None):
         path = os.path.abspath(path)
         if path not in self.repo_paths:
             self.repo_paths.append(path)
-            conn = get_db_connection()
+            conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
             conn.execute(
                 "UPDATE projects SET repo_paths = ? WHERE id = ?",
                 (json.dumps(self.repo_paths), self.id),
