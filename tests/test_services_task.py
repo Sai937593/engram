@@ -126,10 +126,12 @@ def test_resolve_task_ref_does_not_resolve_foreign_project_tasks(tmp_db):
     assert error.details == {"project_id": in_scope.id, "task_ref": "face"}
 
 
-def test_list_tasks_defaults_to_todo_effective_status(tmp_db):
+def test_list_tasks_defaults_to_ready_effective_status(tmp_db):
     project = _create_project("proj-g", "/tmp/proj-g")
-    dependency = Task.create(project_id=project.id, id="depd0001", title="Unfinished dependency")
-    Task.create(project_id=project.id, id="todo0001", title="Todo candidate")
+    dependency = Task.create(
+        project_id=project.id, id="depd0001", title="Unfinished dependency", status="ready"
+    )
+    Task.create(project_id=project.id, id="todo0001", title="Todo candidate", status="ready")
     Task.create(
         project_id=project.id,
         id="blok0001",
@@ -141,7 +143,7 @@ def test_list_tasks_defaults_to_todo_effective_status(tmp_db):
     payloads = list_tasks(project.id)
 
     assert {payload["id"] for payload in payloads} == {"todo0001", "depd0001"}
-    assert all(payload["effective_status"] == "todo" for payload in payloads)
+    assert all(payload["effective_status"] == "ready" for payload in payloads)
     _assert_json_safe(payloads)
 
 
@@ -197,7 +199,16 @@ def test_list_tasks_raises_invalid_task_status(tmp_db):
     assert error.message == "Task status filter is invalid."
     assert error.details == {
         "status": "waiting",
-        "allowed_statuses": ["all", "blocked", "cancelled", "done", "in-progress", "todo"],
+        "allowed_statuses": [
+            "all",
+            "blocked",
+            "cancelled",
+            "done",
+            "draft",
+            "in-progress",
+            "ready",
+            "todo",
+        ],
     }
 
 
@@ -260,7 +271,7 @@ def test_get_task_returns_json_safe_payload_from_scoped_reference(tmp_db):
     assert payload["id"] == task_item.id
     assert payload["project_id"] == project.id
     assert payload["title"] == "Fetch me"
-    assert payload["effective_status"] == "todo"
+    assert payload["effective_status"] == "draft"
     _assert_json_safe(payload)
 
 
@@ -279,13 +290,14 @@ def test_get_next_task_returns_next_actionable_task_payload(tmp_db):
         id="next0002",
         title="Next actionable",
         priority="high",
+        status="ready",
     )
 
     payload = get_next_task(project.id)
 
     assert payload is not None
     assert payload["id"] == expected.id
-    assert payload["effective_status"] == "todo"
+    assert payload["effective_status"] == "ready"
     _assert_json_safe(payload)
 
 

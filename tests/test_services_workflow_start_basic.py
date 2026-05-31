@@ -31,7 +31,7 @@ def test_start_workflow_happy_path_branch_exists(tmp_db: Any, mock_startup_conte
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="todo",
+        status="ready",
     )
 
     git_mock = GitMock()
@@ -72,7 +72,7 @@ def test_start_workflow_happy_path_new_branch(tmp_db: Any, mock_startup_context:
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="todo",
+        status="ready",
     )
 
     git_mock = GitMock()
@@ -131,7 +131,7 @@ def test_start_workflow_unbound_repo(tmp_db: Any, mock_startup_context: None) ->
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="todo",
+        status="ready",
     )
 
     import tempfile

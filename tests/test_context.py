@@ -46,7 +46,7 @@ def test_startup_context_shows_always_include_memories(project):
 
 
 def test_startup_context_shows_active_tasks(project):
-    Task.create(project_id=project.id, title="My active task", status="todo")
+    Task.create(project_id=project.id, title="My active task", status="ready")
     ctx = get_startup_context(project.id)
     assert "My active task" in ctx
 

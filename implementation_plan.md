@@ -1,28 +1,38 @@
-# Implementation Plan - Task 9770c73a
+# Implementation Plan - Task 52ac8ebf
 
 ## Scope
-Restore parity between `docs/USER_MANUAL.md` and `src/engram/USER_MANUAL.md` by syncing the Phase 10 Task Decomposition Skill discoverability guidance in the session startup section.
+Add explicit `draft` and `ready` task statuses across schema, model, validation, and service/MCP-facing task surfaces while preserving existing lifecycle behavior.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `9770c73a`.
-- Keep changes limited to the two USER_MANUAL files unless verification requires a minimal in-scope fix.
-- Preserve no-touch directories: `planning/`, `workflow/`, `.github/`.
+- One-task session only: execute only task `52ac8ebf`.
+- No edits in `planning/`, `workflow/`, or `.github/`.
+- Keep service layers adapter-safe (no CLI/MCP adapter imports in services).
+- Keep Phase 11 gate minimal: only metadata/status gating needed for `draft` vs `ready`.
 
 ## Inputs to Use
-- `docs/USER_MANUAL.md`
-- `src/engram/USER_MANUAL.md`
+- `src/engram/db/schema.py`
+- `src/engram/db/migrations.py`
+- `src/engram/models/task/model.py`
+- `src/engram/services/task/validation.py`
+- `src/engram/services/task/crud.py`
+- Related task list/next or workflow-start selection files surfaced during implementation.
+- Target tests: `tests/test_task.py`, `tests/test_services_task.py`, `tests/test_mcp_tools.py`.
 
 ## Planned Changes
-1. Compare the session startup sections in both manuals.
-2. Copy missing Phase 10 task decomposition discoverability guidance into the packaged manual copy (`src/engram/USER_MANUAL.md`) or align wording so both are equivalent.
-3. Recheck both manuals for textual parity in that section.
-4. Record a concise task evidence note summarizing what was synced.
+1. Expand canonical task status enum/constants to include `draft` and `ready` where task statuses are defined/validated.
+2. Update schema/migration/model defaults and constraints so persistence accepts the expanded status set without breaking existing states.
+3. Update service-layer validation and CRUD/task selection logic so:
+   - `ready` is actionable for next/start selection.
+   - `draft` is non-actionable until promoted.
+   - `in-progress` resume behavior remains intact.
+4. Update user-visible lifecycle/status documentation where status sets are explicitly listed.
+5. Add/adjust targeted tests for status acceptance and selection behavior.
 
 ## Validation Plan
-- Confirm both manuals contain matching guidance for task decomposition discoverability in session startup.
-- Run `uv run pytest tests -q`.
-- Run `engram_workflow_verify`; if it fails, fix the first actionable issue and rerun.
+- Run: `uv run pytest tests/test_task.py -q tests/test_services_task.py -q tests/test_mcp_tools.py -q`
+- Run: `engram_workflow_verify`
+- If verification fails, fix the first actionable issue and rerun verification.
 
 ## Out of Scope
-- Any additional feature or workflow change outside this doc parity fix.
-- Work on any task other than `9770c73a` in this session.
+- Any Phase 12 quality heuristics or richer readiness scoring.
+- Any work on tasks other than `52ac8ebf` in this session.

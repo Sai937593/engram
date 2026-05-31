@@ -19,8 +19,8 @@ class _TaskQueryHelper:
         return " ".join(phase.split()).casefold()
 
     @staticmethod
-    def list_actionable_todo_rows(project_id: str) -> list[Any]:
-        """Return todo task rows whose dependencies are satisfied."""
+    def list_actionable_ready_rows(project_id: str) -> list[Any]:
+        """Return ready task rows whose dependencies are satisfied."""
         conn = get_db_connection()
         rows = conn.execute(
             """
@@ -28,7 +28,7 @@ class _TaskQueryHelper:
             FROM tasks t1
             LEFT JOIN tasks t2 ON t1.depends_on = t2.id
             WHERE t1.project_id = ?
-              AND t1.status = 'todo'
+              AND t1.status = 'ready'
               AND (t1.depends_on IS NULL OR t2.status = 'done')
             """,
             (project_id,),
@@ -75,17 +75,17 @@ def get(id: str) -> Task | None:
 
 
 def get_next(project_id: str, active_phase_id: str | None = None) -> Task | None:
-    """Return the highest-priority todo task, respecting dependencies."""
+    """Return the highest-priority ready task, respecting dependencies."""
     priority_order = "CASE t1.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
     conn = get_db_connection()
-    # Find a task that is 'todo', and either has no dependency, OR its dependency is 'done'
+    # Find a task that is 'ready', and either has no dependency, OR its dependency is 'done'
     if active_phase_id:
         query = f"""
             SELECT t1.* FROM tasks t1
             LEFT JOIN tasks t2 ON t1.depends_on = t2.id
             WHERE t1.project_id = ?
               AND t1.phase_id = ?
-              AND t1.status = 'todo'
+              AND t1.status = 'ready'
               AND (t1.depends_on IS NULL OR t2.status = 'done')
             ORDER BY {priority_order}, t1.created_at ASC
             LIMIT 1
@@ -101,7 +101,7 @@ def get_next(project_id: str, active_phase_id: str | None = None) -> Task | None
         SELECT t1.* FROM tasks t1
         LEFT JOIN tasks t2 ON t1.depends_on = t2.id
         WHERE t1.project_id = ?
-          AND t1.status = 'todo'
+          AND t1.status = 'ready'
           AND (t1.depends_on IS NULL OR t2.status = 'done')
         ORDER BY {priority_order}, t1.created_at ASC
         LIMIT 1
@@ -120,7 +120,7 @@ def get_next_for_phase(project_id: str, phase_id: str, phase_title: str) -> Task
     normalized_title = _TaskQueryHelper.normalize_phase_title(phase_title)
     rows = [
         row
-        for row in _TaskQueryHelper.list_actionable_todo_rows(project_id)
+        for row in _TaskQueryHelper.list_actionable_ready_rows(project_id)
         if row["phase_id"] == phase_id
         or (
             not row["phase_id"]
@@ -134,7 +134,7 @@ def get_next_unphased(project_id: str) -> Task | None:
     """Return the next actionable task with no first-class or legacy phase."""
     rows = [
         row
-        for row in _TaskQueryHelper.list_actionable_todo_rows(project_id)
+        for row in _TaskQueryHelper.list_actionable_ready_rows(project_id)
         if not row["phase_id"] and not _TaskQueryHelper.normalize_phase_title(row["phase"])
     ]
     return _TaskQueryHelper.select_next_from_rows(rows)

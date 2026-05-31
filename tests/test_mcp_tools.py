@@ -344,7 +344,7 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
         title="First Task",
         phase=phase.title,
         phase_id=phase.id,
-        status="todo",
+        status="ready",
     )
     Task.create(
         project_id=project.id,
@@ -371,15 +371,15 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
         assert set(t.keys()) == {"id", "title", "status"}
 
     # Filtered by status
-    res_todo = yaml.safe_load(handler(status="todo"))
-    assert res_todo["ok"] is True
-    assert len(res_todo["tasks"]) == 1
-    assert res_todo["tasks"][0]["id"] == "task-1"
+    res_ready = yaml.safe_load(handler(status="ready"))
+    assert res_ready["ok"] is True
+    assert len(res_ready["tasks"]) == 1
+    assert res_ready["tasks"][0]["id"] == "task-1"
 
     # Filtered by phase
     res_phase = yaml.safe_load(handler(phase="Task Phase"))
     assert res_phase["ok"] is True
-    # By default, status is None, which filters by "todo"
+    # By default, status is None, which filters by "ready"
     assert len(res_phase["tasks"]) == 1
     assert res_phase["tasks"][0]["id"] == "task-1"
 
@@ -539,7 +539,7 @@ def test_mcp_tool_task_next_returns_next_task(tmp_db, monkeypatch) -> None:
         title="Next Actionable Task",
         phase=phase.title,
         phase_id=phase.id,
-        status="todo",
+        status="ready",
     )
 
     res_task = yaml.safe_load(handler())

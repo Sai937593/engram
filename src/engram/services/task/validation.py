@@ -6,7 +6,16 @@ from engram.db import get_db_connection as _get_db_connection
 from engram.services.errors import EngramServiceError as _EngramServiceError
 from engram.services.errors import ValidationError as _ValidationError
 
-VALID_TASK_STATUSES = {"todo", "in-progress", "done", "blocked", "cancelled", "all"}
+VALID_TASK_STATUSES = {
+    "draft",
+    "ready",
+    "todo",
+    "in-progress",
+    "done",
+    "blocked",
+    "cancelled",
+    "all",
+}
 VALID_TASK_UPDATE_FIELDS = {
     "title",
     "status",
