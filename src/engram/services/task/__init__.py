@@ -7,6 +7,7 @@ from engram.services.task.crud import (
     create_task,
     get_task,
     list_tasks,
+    record_memory_review_outcome,
     update_task,
 )
 from engram.services.task.lifecycle import complete_task, get_next_task, start_task
@@ -22,5 +23,6 @@ __all__ = [
     "complete_task",
     "get_next_task",
     "resolve_task_ref",
+    "record_memory_review_outcome",
     "VALID_TASK_UPDATE_FIELDS",
 ]

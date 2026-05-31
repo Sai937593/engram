@@ -21,6 +21,7 @@ from engram.services.task import (
     get_next_task,
     get_task,
     list_tasks,
+    record_memory_review_outcome,
     resolve_task_ref,
     start_task,
     update_task,
@@ -633,3 +634,52 @@ def test_update_task_memory_review_outcome_invalid(tmp_db):
         )
     assert exc.value.code == "INVALID_MEMORY_REVIEW_OUTCOME"
     assert exc.value.details["outcome"] == "invalid_outcome"
+
+
+def test_record_memory_review_outcome_valid(tmp_db):
+    project = _create_project("proj-record-outcome", "/tmp/proj-record-outcome")
+    Task.create(project_id=project.id, id="task0301", title="Task 301")
+
+    # Happy path: record a valid outcome
+    updated = record_memory_review_outcome(
+        project_id=project.id,
+        task_ref="task0301",
+        outcome="created",
+    )
+    assert updated["memory_review_outcome"] == "created"
+
+    # Happy path: clear outcome by setting to None
+    cleared = record_memory_review_outcome(
+        project_id=project.id,
+        task_ref="task0301",
+        outcome=None,
+    )
+    assert cleared["memory_review_outcome"] is None
+
+
+def test_record_memory_review_outcome_invalid(tmp_db):
+    project = _create_project("proj-record-outcome", "/tmp/proj-record-outcome")
+    Task.create(project_id=project.id, id="task0302", title="Task 302")
+
+    # Invalid outcome raises ValidationError with stable code
+    with pytest.raises(ValidationError) as exc:
+        record_memory_review_outcome(
+            project_id=project.id,
+            task_ref="task0302",
+            outcome="invalid_outcome",
+        )
+    assert exc.value.code == "INVALID_MEMORY_REVIEW_OUTCOME"
+    assert exc.value.details["outcome"] == "invalid_outcome"
+
+
+def test_record_memory_review_outcome_task_not_found(tmp_db):
+    project = _create_project("proj-record-outcome", "/tmp/proj-record-outcome")
+
+    # Non-existent task raises TASK_NOT_FOUND
+    with pytest.raises(EngramServiceError) as exc:
+        record_memory_review_outcome(
+            project_id=project.id,
+            task_ref="nonexistent",
+            outcome="created",
+        )
+    assert exc.value.code == "TASK_NOT_FOUND"

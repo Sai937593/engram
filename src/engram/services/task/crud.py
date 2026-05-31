@@ -181,3 +181,12 @@ def append_task_note(project_id: str, task_ref: str, note: str) -> dict[str, obj
     updated = (t.evidence + "\n" + entry).strip() if t.evidence else entry
     t.update(evidence=updated)
     return _task_to_dict(t)
+
+
+def record_memory_review_outcome(
+    project_id: str,
+    task_ref: str,
+    outcome: str | None,
+) -> dict[str, object]:
+    """Record a memory review outcome for a task with validation."""
+    return update_task(project_id, task_ref, memory_review_outcome=outcome)
