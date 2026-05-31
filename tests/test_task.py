@@ -552,3 +552,27 @@ def test_get_next_active_phase_fallback_to_project_level(project):
     nxt = Task.get_next(project.id, active_phase_id=phase_1.id)
     assert nxt is not None
     assert nxt.id == task_proj.id
+
+
+def test_task_memory_review_outcome_round_trip(project):
+    """Test that memory_review_outcome can be created, updated, and queried."""
+    t = Task.create(
+        project_id=project.id,
+        title="Test Memory Review",
+        memory_review_outcome="created",
+    )
+    assert t.memory_review_outcome == "created"
+
+    # Query from DB
+    t_queried = Task.get(t.id)
+    assert t_queried is not None
+    assert t_queried.memory_review_outcome == "created"
+
+    # Update outcome
+    t_queried.update(memory_review_outcome="superseded")
+    assert t_queried.memory_review_outcome == "superseded"
+
+    # Query again
+    t_updated = Task.get(t.id)
+    assert t_updated is not None
+    assert t_updated.memory_review_outcome == "superseded"

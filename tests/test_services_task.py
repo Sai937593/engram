@@ -598,3 +598,38 @@ def test_complete_task_success_with_evidence(tmp_db):
     assert dto["status"] == "done"
     assert "All completed smoothly" in dto["evidence"]
     assert "[" in dto["evidence"]
+
+
+def test_update_task_memory_review_outcome_valid(tmp_db):
+    project = _create_project("proj-outcome", "/tmp/proj-outcome")
+    Task.create(project_id=project.id, id="task0201", title="Task 201")
+
+    # Happy path: update to valid outcome
+    updated = update_task(
+        project_id=project.id,
+        task_ref="task0201",
+        memory_review_outcome="created",
+    )
+    assert updated["memory_review_outcome"] == "created"
+
+    # Happy path: update to None/clear
+    cleared = update_task(
+        project_id=project.id,
+        task_ref="task0201",
+        memory_review_outcome=None,
+    )
+    assert cleared["memory_review_outcome"] is None
+
+
+def test_update_task_memory_review_outcome_invalid(tmp_db):
+    project = _create_project("proj-outcome", "/tmp/proj-outcome")
+    Task.create(project_id=project.id, id="task0202", title="Task 202")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(
+            project_id=project.id,
+            task_ref="task0202",
+            memory_review_outcome="invalid_outcome",
+        )
+    assert exc.value.code == "INVALID_MEMORY_REVIEW_OUTCOME"
+    assert exc.value.details["outcome"] == "invalid_outcome"

@@ -1,7 +1,11 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from engram.db import get_db_connection
-from engram.models.task.model import Task
+
+if TYPE_CHECKING:
+    from engram.models.task.model import Task
 
 PRIORITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
@@ -45,6 +49,8 @@ class _TaskQueryHelper:
                 row["created_at"] or "",
             ),
         )
+        from engram.models.task.model import Task
+
         return Task.from_row(ordered_rows[0])
 
 
@@ -52,6 +58,8 @@ def list_by_project(project_id: str) -> list[Task]:
     conn = get_db_connection()
     rows = conn.execute("SELECT * FROM tasks WHERE project_id = ?", (project_id,)).fetchall()
     conn.close()
+    from engram.models.task.model import Task
+
     return [Task.from_row(row) for row in rows]
 
 
@@ -60,6 +68,8 @@ def get(id: str) -> Task | None:
     row = conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
     conn.close()
     if row:
+        from engram.models.task.model import Task
+
         return Task.from_row(row)
     return None
 
@@ -83,6 +93,8 @@ def get_next(project_id: str, active_phase_id: str | None = None) -> Task | None
         row = conn.execute(query, (project_id, active_phase_id)).fetchone()
         if row:
             conn.close()
+            from engram.models.task.model import Task
+
             return Task.from_row(row)
 
     query = f"""
@@ -97,6 +109,8 @@ def get_next(project_id: str, active_phase_id: str | None = None) -> Task | None
     row = conn.execute(query, (project_id,)).fetchone()
     conn.close()
     if row:
+        from engram.models.task.model import Task
+
         return Task.from_row(row)
     return None
 

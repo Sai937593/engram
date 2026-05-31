@@ -11,6 +11,7 @@ from engram.services.task.dependency_ref import normalize_dependency_ref
 from engram.services.task.validation import (
     VALID_TASK_UPDATE_FIELDS,
     _normalize_phase_title,
+    validate_memory_review_outcome_field,
     validate_priority_field,
     validate_status_field,
 )
@@ -40,6 +41,8 @@ def validate_and_resolve_update(
         validate_status_field(kwargs["status"])
     if "priority" in kwargs:
         validate_priority_field(kwargs["priority"])
+    if "memory_review_outcome" in kwargs:
+        validate_memory_review_outcome_field(kwargs["memory_review_outcome"])
     if "depends_on" in kwargs:
         kwargs["depends_on"] = normalize_dependency_ref(
             project_id, kwargs["depends_on"], task_id=task_id

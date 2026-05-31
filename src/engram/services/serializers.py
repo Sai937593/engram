@@ -100,6 +100,7 @@ def task_to_dict(task: Task) -> dict[str, JsonValue]:
         "evidence": _none_if_blank(task.evidence),
         "tags": _string_list(task.tags),
         "relevant_files": _string_list(task.relevant_files),
+        "memory_review_outcome": _none_if_blank(task.memory_review_outcome),
     }
 
 

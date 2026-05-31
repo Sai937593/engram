@@ -1,48 +1,17 @@
-import json
+"""Task model representing a persistent unit of work."""
+
+from __future__ import annotations
+
 import uuid
-from typing import Any
 
 from engram.db import get_db_connection
 from engram.models.audit import AuditLog
-
-
-def _normalize_relevant_files(relevant_files: Any) -> list[str]:
-    """Normalize relevant file paths by trimming entries, dropping empties, and deduplicating."""
-    if relevant_files is None:
-        return []
-    if isinstance(relevant_files, str):
-        candidates = [relevant_files]
-    else:
-        candidates = list(relevant_files)
-
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for path in candidates:
-        if path is None:
-            continue
-        cleaned = str(path).strip()
-        if cleaned and cleaned not in seen:
-            normalized.append(cleaned)
-            seen.add(cleaned)
-    return normalized
-
-
-def _serialize_relevant_files(relevant_files: list[str]) -> str:
-    """Serialize relevant files for database storage."""
-    return json.dumps(relevant_files)
-
-
-def _deserialize_relevant_files(value: Any) -> list[str]:
-    """Deserialize relevant file path metadata from DB values."""
-    if value is None:
-        return []
-    if isinstance(value, str):
-        try:
-            loaded = json.loads(value)
-        except json.JSONDecodeError:
-            return _normalize_relevant_files(value.split(","))
-        return _normalize_relevant_files(loaded)
-    return _normalize_relevant_files(value)
+from engram.models.task import queries as _q
+from engram.models.task.serialization import (
+    deserialize_relevant_files,
+    normalize_relevant_files,
+    serialize_relevant_files,
+)
 
 
 class Task:
@@ -61,6 +30,7 @@ class Task:
         evidence=None,
         tags=None,
         relevant_files=None,
+        memory_review_outcome=None,
     ):
         self.id = id
         self.project_id = project_id
@@ -74,7 +44,8 @@ class Task:
         self.acceptance = acceptance
         self.evidence = evidence
         self.tags = tags or []
-        self.relevant_files = _normalize_relevant_files(relevant_files)
+        self.relevant_files = normalize_relevant_files(relevant_files)
+        self.memory_review_outcome = memory_review_outcome
 
     @classmethod
     def create(
@@ -90,6 +61,7 @@ class Task:
         acceptance=None,
         tags=None,
         relevant_files=None,
+        memory_review_outcome=None,
         id=None,
     ):
         if not id:
@@ -97,10 +69,9 @@ class Task:
 
         conn = get_db_connection()
         conn.execute(
-            """
-            INSERT INTO tasks (id, project_id, title, description, status, priority, phase, phase_id, depends_on, acceptance, tags, relevant_files)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
+            "INSERT INTO tasks (id, project_id, title, description, status, priority, "
+            "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 id,
                 project_id,
@@ -113,15 +84,15 @@ class Task:
                 depends_on,
                 acceptance,
                 ",".join(tags or []),
-                _serialize_relevant_files(_normalize_relevant_files(relevant_files)),
+                serialize_relevant_files(normalize_relevant_files(relevant_files)),
+                memory_review_outcome,
             ),
         )
         conn.commit()
         conn.close()
 
         AuditLog.log("tasks", id, "create")
-
-        return cls(
+        args = [
             id,
             project_id,
             title,
@@ -135,14 +106,19 @@ class Task:
             None,
             tags,
             relevant_files,
-        )
+            memory_review_outcome,
+        ]
+        return cls(*args)
 
     @classmethod
     def from_row(cls, row):
-        relevant_files = []
-        if "relevant_files" in row.keys():
-            relevant_files = _deserialize_relevant_files(row["relevant_files"])
-        return cls(
+        rf = (
+            deserialize_relevant_files(row["relevant_files"])
+            if "relevant_files" in row.keys()
+            else []
+        )
+        mro = row["memory_review_outcome"] if "memory_review_outcome" in row.keys() else None
+        args = [
             row["id"],
             row["project_id"],
             row["title"],
@@ -155,47 +131,37 @@ class Task:
             row["acceptance"],
             row["evidence"],
             row["tags"].split(",") if row["tags"] else [],
-            relevant_files,
-        )
+            rf,
+            mro,
+        ]
+        return cls(*args)
 
     def update(self, **kwargs):
-        updates = []
-        params = []
-
-        # Mapping model attributes to DB columns if they differ (here they match)
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                old_value = getattr(self, key)
-                new_value = value
-                if key == "relevant_files":
-                    new_value = _normalize_relevant_files(value)
-                if old_value != new_value:
-                    updates.append(f"{key} = ?")
-                    if key == "relevant_files":
-                        params.append(_serialize_relevant_files(new_value))
-                    else:
-                        params.append(value if not isinstance(value, list) else ",".join(value))
-                    setattr(self, key, new_value)
-                    AuditLog.log(
-                        "tasks",
-                        self.id,
-                        "update",
-                        field=key,
-                        old_value=str(old_value),
-                        new_value=str(new_value),
-                    )
-
-        if not updates:
-            return
-
-        updates.append("updated_at = datetime('now')")
-        params.append(self.id)
-
-        query = f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?"
-        conn = get_db_connection()
-        conn.execute(query, params)
-        conn.commit()
-        conn.close()
+        updates, params = [], []
+        for key, val in kwargs.items():
+            if not hasattr(self, key):
+                continue
+            old = getattr(self, key)
+            new = normalize_relevant_files(val) if key == "relevant_files" else val
+            if old != new:
+                updates.append(f"{key} = ?")
+                p_val = (
+                    serialize_relevant_files(new)
+                    if key == "relevant_files"
+                    else (val if not isinstance(val, list) else ",".join(val))
+                )
+                params.append(p_val)
+                setattr(self, key, new)
+                AuditLog.log(
+                    "tasks", self.id, "update", field=key, old_value=str(old), new_value=str(new)
+                )
+        if updates:
+            updates.append("updated_at = datetime('now')")
+            params.append(self.id)
+            conn = get_db_connection()
+            conn.execute(f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
+            conn.close()
 
     def delete(self):
         conn = get_db_connection()
@@ -205,37 +171,25 @@ class Task:
         AuditLog.log("tasks", self.id, "delete")
 
     @classmethod
-    def list_by_project(cls, project_id: str) -> list["Task"]:
-        from engram.models.task.queries import list_by_project
-
-        return list_by_project(project_id)
+    def list_by_project(cls, project_id: str) -> list[Task]:
+        return _q.list_by_project(project_id)
 
     @classmethod
-    def get(cls, id: str) -> "Task | None":
-        from engram.models.task.queries import get
-
-        return get(id)
+    def get(cls, id: str) -> Task | None:
+        return _q.get(id)
 
     @classmethod
-    def get_next(cls, project_id: str, active_phase_id: str | None = None) -> "Task | None":
-        from engram.models.task.queries import get_next
-
-        return get_next(project_id, active_phase_id)
+    def get_next(cls, project_id: str, active_phase_id: str | None = None) -> Task | None:
+        return _q.get_next(project_id, active_phase_id)
 
     @classmethod
-    def get_next_for_phase(cls, project_id: str, phase_id: str, phase_title: str) -> "Task | None":
-        from engram.models.task.queries import get_next_for_phase
-
-        return get_next_for_phase(project_id, phase_id, phase_title)
+    def get_next_for_phase(cls, project_id: str, phase_id: str, phase_title: str) -> Task | None:
+        return _q.get_next_for_phase(project_id, phase_id, phase_title)
 
     @classmethod
-    def get_next_unphased(cls, project_id: str) -> "Task | None":
-        from engram.models.task.queries import get_next_unphased
-
-        return get_next_unphased(project_id)
+    def get_next_unphased(cls, project_id: str) -> Task | None:
+        return _q.get_next_unphased(project_id)
 
     @classmethod
     def count_by_status(cls, project_id: str) -> dict[str, int]:
-        from engram.models.task.queries import count_by_status
-
-        return count_by_status(project_id)
+        return _q.count_by_status(project_id)

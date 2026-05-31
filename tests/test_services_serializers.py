@@ -83,7 +83,22 @@ def test_task_to_dict_shape_lists_optional_values_and_effective_status(monkeypat
         "evidence": None,
         "tags": ["mcp", "services"],
         "relevant_files": ["src/engram/services/serializers.py"],
+        "memory_review_outcome": None,
     }
+    _assert_json_safe(payload)
+
+
+def test_task_to_dict_with_memory_review_outcome(monkeypatch):
+    task = Task(
+        id="task1234",
+        project_id="proj1234",
+        title="Implement serializers",
+        status="done",
+        priority="high",
+        memory_review_outcome="created",
+    )
+    payload = task_to_dict(task)
+    assert payload["memory_review_outcome"] == "created"
     _assert_json_safe(payload)
 
 
