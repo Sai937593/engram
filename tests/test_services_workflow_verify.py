@@ -39,10 +39,15 @@ def test_verify_workflow_records_pass(tmp_db: Any) -> None:
 
     assert res["passed"] is True
     assert res["task_id"] == task.id
+    assert res["summary"] == "All local quality checks passed."
+    assert res["actionable_target"] is None
     latest = get_latest_workflow_verification(project_id=project.id, task_id=task.id)
     assert latest is not None
     assert latest["status"] == "passed"
     assert latest["summary"] == "All local quality checks passed."
+    details = str(latest["details"])
+    assert "ruff check ." in details
+    assert "pytest tests -q" in details
 
 
 def test_verify_workflow_records_failure_with_actionable_target(tmp_db: Any) -> None:
@@ -76,7 +81,10 @@ def test_verify_workflow_records_failure_with_actionable_target(tmp_db: Any) -> 
     latest = get_latest_workflow_verification(project_id=project.id, task_id=task.id)
     assert latest is not None
     assert latest["status"] == "failed"
-    assert "Check:" in str(latest["details"])
+    details = str(latest["details"])
+    assert "Check:" in details
+    assert "src/engram/services/workflow_service.py:42:1: F401 unused import" in details
+    assert "extra line" in details
 
 
 def test_verify_workflow_requires_in_progress_task(tmp_db: Any) -> None:

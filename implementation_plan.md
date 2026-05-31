@@ -1,61 +1,59 @@
-# Implementation Plan - Task 3cfdbf33 (Phase 7.3)
+﻿# Implementation Plan - Task d8d0574d (Phase 7.4)
 
 ## Scope
-Expose `engram_workflow_verify` through the MCP workflow tool surface and return concise Markdown output using the shared workflow formatter. Keep behavior repo-local and branch-aware via existing service plumbing.
+Add regression coverage for Phase 7 verification behavior only: pass/fail execution outcomes, persisted verification state, and concise deterministic MCP-visible verification Markdown. Do not introduce Phase 8 stale-verification blocking, memory-review gates, or finish gating.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `3cfdbf33`.
-- Phase boundary: do not add finish gating, stale-verification enforcement, task auto-progression, or memory-review gates.
-- Output boundary: keep verification responses compact; avoid dumping long raw logs.
+- One-task session only: execute only task `d8d0574d`.
+- Phase boundary: stay strictly inside `engram_workflow_verify` + verification-state recording behavior.
+- Output boundary: verification output must remain compact, deterministic, and fix-focused.
+- Startup boundary: keep repo-local startup/MCP behavior protected from verification regressions.
 - No-touch directories: `planning/`, `workflow/`, `.github/`.
-- Service safety: `src/engram/services` must remain adapter-safe (no Click/Rich/CLI/subprocess/MCP adapter imports).
-- Preserve existing `engram_workflow_start` / `engram_workflow_finish` contracts.
+- Service safety: no CLI/Click/Rich/subprocess/MCP adapter imports inside service-layer modules unless already part of existing verify service behavior.
 
 ## Investigation Plan
-1. Inspect current verify service result contract and formatter helpers:
-- `src/engram/services/workflow_formatter.py`
-- verify-related service functions already used by workflow tools.
+1. Inspect current verification coverage and identify gaps against acceptance:
+- `tests/test_services_workflow_verify.py`
+- `tests/test_workflow_redesign_phase_5_regressions.py`
 
-2. Inspect MCP workflow tool registration and server wiring:
-- `src/engram/mcp/tools/workflow_tools.py`
-- `src/engram/mcp/server.py` (registration/bootstrap regression checks).
-
-3. Inspect tests covering MCP tool registration and response behavior:
+2. Inspect MCP verification contract coverage and startup integration assertions:
 - `tests/test_mcp_tools.py`
 - `tests/test_mcp_server.py`
 
+3. Inspect verification formatter/service contract needed for deterministic Markdown assertions:
+- `src/engram/services/workflow_formatter.py`
+- `src/engram/services/workflow_service.py`
+- `src/engram/services/workflow_verification_service.py`
+
 ## Planned Changes
-1. Formatter:
-- Ensure formatter exposes a compact verification Markdown shape with:
-  - explicit pass/fail status
-  - concise details block
-  - exactly one next action line
-- Fix any encoding/formatting artifacts in task display lines.
+1. Service-layer regression tests (`tests/test_services_workflow_verify.py`):
+- Ensure explicit coverage for both pass and fail runs.
+- Assert persisted verification state captures status + summary/details shape for both outcomes.
+- Keep assertions independent of Phase 8/9 behaviors.
 
-2. MCP workflow tools:
-- Register a new async MCP tool `engram_workflow_verify` in workflow tools.
-- Resolve bound project and primary repo path consistently with existing workflow tools.
-- Delegate execution to existing verify workflow/service function (no duplicate business logic).
-- Map unbound/misconfigured workspace errors through existing actionable error response path.
+2. MCP tool contract tests (`tests/test_mcp_tools.py`):
+- Strengthen `engram_workflow_verify` response checks for deterministic concise Markdown:
+  - status line present and stable (`PASSED`/`FAILED`)
+  - single `## Next action` section
+  - concise details summary (no long log dump assumptions)
+- Preserve actionable error behavior when project has no repo binding/path.
 
-3. MCP server / exports:
-- Ensure the new workflow tool is included via existing tool registration surfaces without regressing startup behavior.
-
-4. Tests:
-- Add/update tests to verify:
-  - tool registration includes `engram_workflow_verify`
-  - happy path returns compact Markdown with status and one next action
-  - error paths remain actionable for missing repo bindings/config
-  - existing start/finish tests remain green
+3. MCP server/startup regression tests (`tests/test_mcp_server.py` and/or `tests/test_workflow_redesign_phase_5_regressions.py`):
+- Add or tighten assertions that verification tool registration and startup-facing behavior do not regress while adding Phase 7.4 coverage.
+- Keep tests repo-local and deterministic.
 
 ## Validation Plan
 - Run targeted tests first:
+- `pytest tests/test_services_workflow_verify.py`
 - `pytest tests/test_mcp_tools.py -k workflow_verify`
 - `pytest tests/test_mcp_server.py`
-- Then run full touched module if needed:
-- `pytest tests/test_mcp_tools.py`
+- `pytest tests/test_workflow_redesign_phase_5_regressions.py`
+
+- Then run an aggregate verification-focused pass if needed:
+- `pytest tests/test_services_workflow_verify.py tests/test_mcp_tools.py tests/test_mcp_server.py tests/test_workflow_redesign_phase_5_regressions.py`
 
 ## Out of Scope
-- Any finish blocking based on verify state.
-- Automatic next-task selection/progression changes.
-- Broad diagnostic/reporting refactors outside workflow verify output contract.
+- Blocking `engram_workflow_finish` based on verification state age/result.
+- Any memory-review requirement changes.
+- Broad workflow redesign changes outside verification tests.
+- Refactoring production behavior unrelated to test coverage required by this task.

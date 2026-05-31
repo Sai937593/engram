@@ -1113,8 +1113,27 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "## Details" in res_verify
     assert mock_verify_res["summary"] in res_verify
     assert "## Next action" in res_verify
+    assert res_verify.count("## Next action") == 1
     assert "Fix the first actionable target, then rerun engram_workflow_verify." in res_verify
+    assert "ok:" not in res_verify.lower()
+    assert "error:" not in res_verify.lower()
     assert verify_called_args == [("proj-tool-workflow", cwd)]
+
+    # 3b. Happy path: Verify PASS remains concise and deterministic
+    mock_verify_res["passed"] = True
+    mock_verify_res["summary"] = "All local quality checks passed."
+    res_verify_pass = asyncio.run(verify_handler())
+    assert "# Verification Result" in res_verify_pass
+    assert "Task: `t1` - Test Task" in res_verify_pass
+    assert "Status: PASSED" in res_verify_pass
+    assert "## Details" in res_verify_pass
+    assert "All local quality checks passed." in res_verify_pass
+    assert "## Next action" in res_verify_pass
+    assert res_verify_pass.count("## Next action") == 1
+    assert (
+        "Verification passed. Continue implementation and run engram_workflow_finish when ready."
+        in res_verify_pass
+    )
 
     # 4. Error path: start_workflow raising EngramServiceError
     from engram.services.errors import EngramServiceError
