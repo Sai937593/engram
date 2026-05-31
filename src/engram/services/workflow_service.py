@@ -180,4 +180,5 @@ def finish_workflow(
         "id": task.id,
         "commit": commit_msg,
         "phase_complete": phase_complete,
+        "task_title": task.title,
     }
