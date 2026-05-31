@@ -1083,7 +1083,10 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "Commit: `feat: Test Task`" in res_finish
     assert "Phase complete: False" in res_finish
     assert "## Next action" in res_finish
-    assert "Run engram_workflow_start to claim the next task." in res_finish
+    assert (
+        "Stop here. The active task is finished and committed. Await further instructions."
+        in res_finish
+    )
     assert finish_called_args == [("proj-tool-workflow", cwd, "feat")]
 
     # 3. Error path: start_workflow raising EngramServiceError

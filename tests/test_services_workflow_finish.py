@@ -139,3 +139,43 @@ def test_finish_workflow_project_not_found(tmp_db: Any) -> None:
         finish_workflow("non-existent", "/tmp/path")
 
     assert exc_info.value.code == "PROJECT_NOT_FOUND"
+
+
+def test_format_finish_success() -> None:
+    """Verify format_finish_success produces the correct Markdown-first response."""
+    from engram.services.workflow_formatter import format_finish_success
+
+    res = format_finish_success(
+        task_id="t-123",
+        commit_msg="feat(scope): add feature [t-123]",
+        phase_complete=False,
+        next_guidance="Stop here. The active task is finished and committed. Await further instructions.",
+        task_title="Add Feature",
+    )
+
+    assert res.startswith("# Task Finished")
+    assert "Task: `t-123` — Add Feature" in res
+    assert "Commit: `feat(scope): add feature [t-123]`" in res
+    assert "Phase complete: False" in res
+    assert "## Next action" in res
+    assert (
+        "Stop here. The active task is finished and committed. Await further instructions." in res
+    )
+
+
+def test_format_finish_blocked() -> None:
+    """Verify format_finish_blocked produces the correct Markdown-first response."""
+    from engram.services.workflow_formatter import format_finish_blocked
+
+    res = format_finish_blocked(
+        task_id="t-123",
+        reason="Branch dirty",
+        next_guidance="Commit or stash changes before proceeding.",
+        task_title="Add Feature",
+    )
+
+    assert res.startswith("# Finish Blocked")
+    assert "Task: `t-123` — Add Feature" in res
+    assert "Reason: Branch dirty" in res
+    assert "## Next action" in res
+    assert "Commit or stash changes before proceeding." in res

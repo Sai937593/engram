@@ -99,7 +99,7 @@ def register_workflow_tools(server: Any) -> None:
             next_guidance = (
                 "Phase complete. Ask the user for permission to run the engram-phase-transition skill."
                 if phase_complete
-                else "Run engram_workflow_start to claim the next task."
+                else "Stop here. The active task is finished and committed. Await further instructions."
             )
             from engram.services.workflow_formatter import format_finish_success
 
