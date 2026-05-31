@@ -98,6 +98,11 @@ def create_audit_log_table(cursor: sqlite3.Cursor) -> None:
 
 def create_memories_fts_and_triggers(cursor: sqlite3.Cursor) -> None:
     """Create memories FTS table and sync triggers when FTS5 is available."""
+    # Drop triggers first to ensure fresh creation
+    cursor.execute("DROP TRIGGER IF EXISTS memories_ai")
+    cursor.execute("DROP TRIGGER IF EXISTS memories_ad")
+    cursor.execute("DROP TRIGGER IF EXISTS memories_au")
+
     cursor.execute("""
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
         title, content, tags,
@@ -122,6 +127,9 @@ def create_memories_fts_and_triggers(cursor: sqlite3.Cursor) -> None:
       INSERT INTO memories_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
     END;
     """)
+
+    # Rebuild FTS index to synchronize any existing memories rows
+    cursor.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
 
 
 def create_indexes(cursor: sqlite3.Cursor) -> None:

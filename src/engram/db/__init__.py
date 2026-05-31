@@ -56,6 +56,11 @@ def init_db(db_path=None):
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
 
+    # Drop existing triggers first so column migrations do not fire them and cause issues
+    cursor.execute("DROP TRIGGER IF EXISTS memories_ai")
+    cursor.execute("DROP TRIGGER IF EXISTS memories_ad")
+    cursor.execute("DROP TRIGGER IF EXISTS memories_au")
+
     create_projects_table(cursor)
     create_tasks_table(cursor)
     create_phases_table(cursor)
