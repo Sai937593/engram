@@ -76,17 +76,25 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_workflow_finish"].__name__ == "engram_workflow_finish"
 
 
-def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
+def test_mcp_tool_resolves_current_project(tmp_path, monkeypatch) -> None:
     """Verify engram_project_current returns serialized project for a bound repo."""
-    cwd = os.path.abspath("repo/bound-mcp-tool")
-    monkeypatch.setattr("os.getcwd", lambda: cwd)
+    repo_path = tmp_path / "bound_mcp_tool"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
 
-    Project.create(
-        id="proj-tool-1",
-        name="MCP Tool Project",
-        summary="Service tool project summary",
-        repo_paths=[cwd],
+    from engram.db import get_db_connection, init_db
+
+    db_path = repo_path / ".engram" / "memory.db"
+    init_db(db_path)
+    conn = get_db_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (id, name, summary, status, repo_paths) VALUES (?, ?, ?, ?, ?)",
+        ("proj-tool-1", "MCP Tool Project", "Service tool project summary", "active", "[]"),
     )
+    conn.commit()
+    conn.close()
 
     server = MockServer()
     from engram.mcp.tools import register_tools
@@ -95,20 +103,22 @@ def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_project_current"]
 
     result = yaml.safe_load(handler())
-    assert result == {
-        "ok": True,
-        "project": {
-            "id": "proj-tool-1",
-            "name": "MCP Tool Project",
-            "status": "active",
-        },
+    assert result["ok"] is True
+    assert result["initialized"] is True
+    assert result["status"] == "ready"
+    assert result["project"] == {
+        "id": "proj-tool-1",
+        "name": "MCP Tool Project",
+        "status": "active",
     }
 
 
-def test_mcp_tool_raises_project_not_bound_for_unbound_repo(tmp_db, monkeypatch) -> None:
-    """Verify engram_project_current returns PROJECT_NOT_BOUND for unbound cwd."""
-    cwd = os.path.abspath("repo/unbound-mcp-tool")
-    monkeypatch.setattr("os.getcwd", lambda: cwd)
+def test_mcp_tool_returns_actionable_uninitialized_for_unbound_repo(tmp_path, monkeypatch) -> None:
+    """Verify engram_project_current returns actionable uninitialized status for unbound cwd."""
+    repo_path = tmp_path / "unbound_mcp_tool"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
 
     server = MockServer()
     from engram.mcp.tools import register_tools
@@ -117,8 +127,10 @@ def test_mcp_tool_raises_project_not_bound_for_unbound_repo(tmp_db, monkeypatch)
     handler = server.tools["engram_project_current"]
 
     result = yaml.safe_load(handler())
-    assert result["ok"] is False
-    assert result["error"] == "PROJECT_NOT_BOUND"
+    assert result["ok"] is True
+    assert result["initialized"] is False
+    assert result["status"] in {"uninitialized", "unresolved-workspace"}
+    assert "next" in result
 
 
 def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:

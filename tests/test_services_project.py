@@ -8,6 +8,7 @@ import pytest
 
 from engram.services.errors import EngramServiceError
 from engram.services.project_service import resolve_current_project
+from engram.services.project_status_service import get_current_project_status
 
 
 def test_resolve_current_project_returns_serialized_project_for_bound_repo(tmp_path):
@@ -349,3 +350,41 @@ def test_resolve_current_project_test_fallback_no_match(tmp_db, tmp_path):
     with pytest.raises(EngramServiceError) as raised:
         resolve_current_project(cwd=cwd)
     assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_get_current_project_status_returns_ready_for_initialized_repo(tmp_path):
+    repo_path = tmp_path / "repo_status_ready"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+
+    from engram.db import get_db_connection, init_db
+
+    db_path = repo_path / ".engram" / "memory.db"
+    init_db(db_path)
+
+    conn = get_db_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (id, name, summary, status, repo_paths) VALUES (?, ?, ?, ?, ?)",
+        ("proj-status", "Status Project", "Project status", "active", "[]"),
+    )
+    conn.commit()
+    conn.close()
+
+    payload = get_current_project_status(cwd=str(repo_path))
+    assert payload["initialized"] is True
+    assert payload["status"] == "ready"
+    assert payload["db_exists"] is True
+    assert payload["project"]["id"] == "proj-status"
+
+
+def test_get_current_project_status_returns_uninitialized_for_repo_without_db(tmp_path):
+    repo_path = tmp_path / "repo_status_uninit"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+
+    payload = get_current_project_status(cwd=str(repo_path))
+    assert payload["initialized"] is False
+    assert payload["status"] == "uninitialized"
+    assert payload["db_exists"] is False
+    assert "engram_project_init" in str(payload["next_action"])

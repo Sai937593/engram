@@ -18,18 +18,28 @@ def register_workflow_tools(server: Any) -> None:
     def engram_project_current() -> str:
         """Get details of the currently bound engram project."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
-            slim_project = {
-                "id": str(project["id"]),
-                "name": str(project["name"]),
-                "status": str(project["status"]),
+            status = engram.mcp.tools.get_current_project_status()
+            response: dict[str, Any] = {
+                "ok": True,
+                "initialized": bool(status["initialized"]),
+                "status": str(status["status"]),
             }
-            return engram.mcp.tools._respond(
-                {
-                    "ok": True,
-                    "project": slim_project,
+            if status.get("repo_root"):
+                response["repo_root"] = str(status["repo_root"])
+            if status.get("db_path"):
+                response["db_path"] = str(status["db_path"])
+            if "db_exists" in status:
+                response["db_exists"] = bool(status["db_exists"])
+            if status.get("next_action"):
+                response["next"] = str(status["next_action"])
+            if status.get("project"):
+                project = status["project"]
+                response["project"] = {
+                    "id": str(project["id"]),
+                    "name": str(project["name"]),
+                    "status": str(project["status"]),
                 }
-            )
+            return engram.mcp.tools._respond(response)
         except EngramServiceError as exc:
             return engram.mcp.tools._respond_error(exc)
 
