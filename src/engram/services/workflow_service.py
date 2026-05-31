@@ -12,6 +12,8 @@ from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title
 from engram.services.errors import EngramServiceError
 from engram.services.serializers import task_to_dict
+from engram.services.task.validation import validate_memory_review_outcome_field
+from engram.services.workflow_constants import CONVENTIONAL_COMMIT_TYPES
 from engram.services.workflow_helpers import (
     get_target_branch,
     is_same_phase,
@@ -21,18 +23,6 @@ from engram.services.workflow_helpers import (
 )
 from engram.services.workflow_verification_service import evaluate_verification_eligibility
 from engram.services.workflow_verify_service import verify_workflow as run_workflow_verify
-
-CONVENTIONAL_COMMIT_TYPES: set[str] = {
-    "feat",
-    "fix",
-    "docs",
-    "chore",
-    "refactor",
-    "test",
-    "ci",
-    "style",
-    "perf",
-}
 
 
 def _run(args: list[str], cwd: str) -> str:
@@ -140,6 +130,7 @@ def finish_workflow(
             code="MEMORY_REVIEW_OUTCOME_MISSING",
             message="Active task is missing memory_review_outcome.",
         )
+    validate_memory_review_outcome_field(task.memory_review_outcome)
     eligibility = evaluate_verification_eligibility(
         project_id=project_id,
         task_id=task.id,

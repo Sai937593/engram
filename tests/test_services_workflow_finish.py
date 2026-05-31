@@ -325,3 +325,68 @@ def test_finish_workflow_blocks_without_memory_review_outcome(tmp_db: Any) -> No
     with pytest.raises(EngramServiceError) as exc_info:
         finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
     assert exc_info.value.code == "MEMORY_REVIEW_OUTCOME_MISSING"
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    ["created", "superseded", "demoted", "archived", "deleted", "no_change"],
+)
+def test_finish_workflow_accepts_all_valid_memory_review_outcomes(
+    tmp_db: Any, outcome: str
+) -> None:
+    """Verify finish_workflow accepts every valid memory_review_outcome value."""
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+        memory_review_outcome=outcome,
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
+
+    git_mock = GitMock()
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        res = finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
+
+    assert res["id"] == "t-1"
+    assert res["memory_review_outcome"] == outcome
+
+
+def test_finish_workflow_rejects_invalid_memory_review_outcome(tmp_db: Any) -> None:
+    """Verify finish_workflow rejects an invalid memory_review_outcome value."""
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+        memory_review_outcome="invalid-outcome",
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
+
+    with pytest.raises(EngramServiceError) as exc_info:
+        finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
+    assert exc_info.value.code == "INVALID_MEMORY_REVIEW_OUTCOME"

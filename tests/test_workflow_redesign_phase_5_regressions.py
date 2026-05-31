@@ -429,7 +429,7 @@ def test_finish_verification_gate_e2e_contract(tmp_db: Any, monkeypatch: Any) ->
         title="Verification gate task",
         phase="Phase One",
         status="in-progress",
-        memory_review_outcome="created",
+        memory_review_outcome="no_change",
     )
 
     server = MockServer()
@@ -503,6 +503,7 @@ def test_finish_verification_gate_e2e_contract(tmp_db: Any, monkeypatch: Any) ->
     assert "Task: `t-gate` - Verification gate task" in res_success
     assert "Commit: `feat(phase-one): Verification gate task [t-gate]`" in res_success
     assert "Phase complete: True" in res_success
+    assert "Memory review outcome: `no_change`" in res_success
     assert "## Next action" in res_success
     assert res_success.count("## Next action") == 1
     assert (
