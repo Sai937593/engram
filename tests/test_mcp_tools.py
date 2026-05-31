@@ -76,6 +76,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_workflow_start"].__name__ == "engram_workflow_start"
     assert "engram_workflow_finish" in server.tools
     assert server.tools["engram_workflow_finish"].__name__ == "engram_workflow_finish"
+    assert "engram_workflow_verify" in server.tools
+    assert server.tools["engram_workflow_verify"].__name__ == "engram_workflow_verify"
 
 
 def test_mcp_tool_resolves_current_project(tmp_path, monkeypatch) -> None:
@@ -1023,7 +1025,7 @@ def test_mcp_task_done_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
 
 def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
-    """Verify that engram_workflow_start and engram_workflow_finish operate correctly under mock conditions."""
+    """Verify workflow start/finish/verify tools operate correctly under mock conditions."""
     cwd = os.path.abspath("repo/bound-mcp-tool-workflow")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -1047,6 +1049,12 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         "commit": "feat: Test Task",
         "phase_complete": False,
     }
+    mock_verify_res = {
+        "task_id": "t1",
+        "task_title": "Test Task",
+        "passed": False,
+        "summary": "`uv run pytest tests -q` failed. First actionable target: `tests/test_fail.py::test_x`.",
+    }
 
     start_called_args = []
 
@@ -1060,8 +1068,15 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         finish_called_args.append((project_id, repo_path, commit_type))
         return mock_finish_res
 
+    verify_called_args = []
+
+    def dummy_verify_workflow(project_id: str, repo_path: str):
+        verify_called_args.append((project_id, repo_path))
+        return mock_verify_res
+
     monkeypatch.setattr("engram.mcp.tools.start_workflow", dummy_start_workflow)
     monkeypatch.setattr("engram.mcp.tools.finish_workflow", dummy_finish_workflow)
+    monkeypatch.setattr("engram.mcp.tools.verify_workflow", dummy_verify_workflow)
 
     server = MockServer()
     from engram.mcp.tools import register_tools
@@ -1070,6 +1085,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
 
     start_handler = server.tools["engram_workflow_start"]
     finish_handler = server.tools["engram_workflow_finish"]
+    verify_handler = server.tools["engram_workflow_verify"]
 
     # 1. Happy path: Start (handler is now async)
     res_start = asyncio.run(start_handler())
@@ -1089,7 +1105,18 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     )
     assert finish_called_args == [("proj-tool-workflow", cwd, "feat")]
 
-    # 3. Error path: start_workflow raising EngramServiceError
+    # 3. Happy path: Verify returns compact markdown with one next action
+    res_verify = asyncio.run(verify_handler())
+    assert "# Verification Result" in res_verify
+    assert "Task: `t1` - Test Task" in res_verify
+    assert "Status: FAILED" in res_verify
+    assert "## Details" in res_verify
+    assert mock_verify_res["summary"] in res_verify
+    assert "## Next action" in res_verify
+    assert "Fix the first actionable target, then rerun engram_workflow_verify." in res_verify
+    assert verify_called_args == [("proj-tool-workflow", cwd)]
+
+    # 4. Error path: start_workflow raising EngramServiceError
     from engram.services.errors import EngramServiceError
 
     def raising_start(project_id, repo_path):
@@ -1102,7 +1129,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_err["error"] == "TEST_ERROR"
     assert res_err["message"] == "Mock error message"
 
-    # 4. Error path: Project bound but has no repo_paths configured
+    # 5. Error path: Project bound but has no repo_paths configured
     monkeypatch.setattr(
         "engram.mcp.tools.resolve_current_project",
         lambda: {"id": "proj-tool-workflow", "repo_paths": []},
@@ -1110,6 +1137,10 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     res_no_repo = yaml.safe_load(asyncio.run(start_handler()))
     assert res_no_repo["ok"] is False
     assert res_no_repo["error"] == "PROJECT_NO_REPOS"
+
+    res_verify_no_repo = yaml.safe_load(asyncio.run(verify_handler()))
+    assert res_verify_no_repo["ok"] is False
+    assert res_verify_no_repo["error"] == "PROJECT_NO_REPOS"
 
 
 def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:

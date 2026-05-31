@@ -1,55 +1,61 @@
-# Implementation Plan - Task b4ccfe48 (Phase 7.2)
+# Implementation Plan - Task 3cfdbf33 (Phase 7.3)
 
 ## Scope
-Implement `engram_workflow_verify` service execution flow in the workflow service so it runs repository-local quality checks via the established Python workflow helpers, records pass/fail verification state, and returns concise failure output centered on the first actionable fix target.
+Expose `engram_workflow_verify` through the MCP workflow tool surface and return concise Markdown output using the shared workflow formatter. Keep behavior repo-local and branch-aware via existing service plumbing.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `b4ccfe48`.
-- Phase boundary: do not add `engram_workflow_finish` gating, stale-result enforcement, or memory-review requirements.
+- One-task session only: execute only task `3cfdbf33`.
+- Phase boundary: do not add finish gating, stale-verification enforcement, task auto-progression, or memory-review gates.
+- Output boundary: keep verification responses compact; avoid dumping long raw logs.
 - No-touch directories: `planning/`, `workflow/`, `.github/`.
-- Service safety: `src/engram/services` must remain adapter-safe and must not import Click, Rich, CLI modules, subprocess, or MCP adapter code.
-- Keep concise and actionable verify output; avoid long raw log dumps.
+- Service safety: `src/engram/services` must remain adapter-safe (no Click/Rich/CLI/subprocess/MCP adapter imports).
+- Preserve existing `engram_workflow_start` / `engram_workflow_finish` contracts.
 
 ## Investigation Plan
-1. Inspect current verify-related service API and result contracts:
-- `src/engram/services/workflow_service.py`
-- `src/engram/services/workflow_helpers.py`
-- `src/engram/services/errors.py`
+1. Inspect current verify service result contract and formatter helpers:
+- `src/engram/services/workflow_formatter.py`
+- verify-related service functions already used by workflow tools.
 
-2. Inspect existing verification-state persistence hooks from prior phase:
-- workflow verify state record/read helpers
-- current schemas/types used by service layer
+2. Inspect MCP workflow tool registration and server wiring:
+- `src/engram/mcp/tools/workflow_tools.py`
+- `src/engram/mcp/server.py` (registration/bootstrap regression checks).
 
-3. Inspect current tests and expected output style:
-- `tests/test_services_workflow_verify.py`
+3. Inspect tests covering MCP tool registration and response behavior:
+- `tests/test_mcp_tools.py`
+- `tests/test_mcp_server.py`
 
 ## Planned Changes
-1. Service execution entrypoint:
-- Add or complete workflow-service logic for `engram_workflow_verify` to invoke local quality checks through existing workflow helpers.
-- Ensure execution path is service-only and adapter-safe.
+1. Formatter:
+- Ensure formatter exposes a compact verification Markdown shape with:
+  - explicit pass/fail status
+  - concise details block
+  - exactly one next action line
+- Fix any encoding/formatting artifacts in task display lines.
 
-2. Verification recording:
-- Persist verification outcomes for both passing and failing runs using existing verification-state recording mechanisms.
-- Ensure recorded data remains usable for later lookup/freshness features (without implementing freshness enforcement now).
+2. MCP workflow tools:
+- Register a new async MCP tool `engram_workflow_verify` in workflow tools.
+- Resolve bound project and primary repo path consistently with existing workflow tools.
+- Delegate execution to existing verify workflow/service function (no duplicate business logic).
+- Map unbound/misconfigured workspace errors through existing actionable error response path.
 
-3. Concise failure shaping:
-- Map failing command/test output into a compact summary with clear pass/fail status.
-- Derive and surface the first actionable fix target when possible (e.g., first failing test/file/check) instead of returning full logs.
+3. MCP server / exports:
+- Ensure the new workflow tool is included via existing tool registration surfaces without regressing startup behavior.
 
 4. Tests:
-- Add/update service tests to cover:
-  - pass flow executes checks and records success
-  - fail flow records failure and returns concise actionable message
-  - output shape remains compact and deterministic
+- Add/update tests to verify:
+  - tool registration includes `engram_workflow_verify`
+  - happy path returns compact Markdown with status and one next action
+  - error paths remain actionable for missing repo bindings/config
+  - existing start/finish tests remain green
 
 ## Validation Plan
-- Run targeted test module first:
-- `tests/test_services_workflow_verify.py`
-- If needed, run additional directly related service tests.
-- Ensure zero failures for touched tests before `engram_workflow_finish`.
+- Run targeted tests first:
+- `pytest tests/test_mcp_tools.py -k workflow_verify`
+- `pytest tests/test_mcp_server.py`
+- Then run full touched module if needed:
+- `pytest tests/test_mcp_tools.py`
 
 ## Out of Scope
-- Blocking `engram_workflow_finish` on verification state.
-- Stale-verification enforcement logic.
-- Memory-review enforcement.
-- Unrelated workflow command/service refactors.
+- Any finish blocking based on verify state.
+- Automatic next-task selection/progression changes.
+- Broad diagnostic/reporting refactors outside workflow verify output contract.

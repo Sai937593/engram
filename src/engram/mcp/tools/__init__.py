@@ -39,7 +39,7 @@ from engram.services.task import (
     start_task,
     update_task,
 )
-from engram.services.workflow_service import finish_workflow, start_workflow
+from engram.services.workflow_service import finish_workflow, start_workflow, verify_workflow
 
 __all__ = [
     "register_tools",
@@ -71,6 +71,7 @@ __all__ = [
     "update_task",
     "finish_workflow",
     "start_workflow",
+    "verify_workflow",
 ]
 
 
