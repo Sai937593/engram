@@ -132,6 +132,10 @@ At the beginning of each session, the agent calls the `engram_workflow_start` to
 *   If no task is active, the agent claims the highest priority `todo` task, checks out its target branch, and retrieves the packed context.
 *   If no tasks exist, the agent prompts the developer or uses `engram_task_create` to define the first task.
 
+When creating tasks from implementation phase documents, use the Task
+Decomposition Skill guidance at `docs/skills/task-decomposition.md` to avoid
+weak title-only tasks and ensure execution-ready metadata.
+
 ### Step 3: Deep Context Retrieval
 If the agent needs deep constraints or related documentation for a task, it reads the resource:
 `engram://task/{task_id}/context`
