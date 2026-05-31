@@ -1263,3 +1263,64 @@ def test_mcp_project_init_unbound_raises_unresolved_workspace(tmp_path, monkeypa
     assert res["ok"] is False
     assert res["error"] == "UNRESOLVED_WORKSPACE"
     assert "git init" in res["fix"]
+
+
+def test_mcp_project_init_and_diagnostics_work_across_fresh_workspaces_with_same_handlers(
+    tmp_path, monkeypatch
+) -> None:
+    """Verify MCP init/status/diagnostics are workspace-based across fresh repos."""
+    repo_a = tmp_path / "repo_a"
+    repo_b = tmp_path / "repo_b"
+    repo_a.mkdir()
+    repo_b.mkdir()
+    (repo_a / ".git").mkdir()
+    (repo_b / ".git").mkdir()
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    current_handler = server.tools["engram_project_current"]
+    init_handler = server.tools["engram_project_init"]
+    diagnostics_handler = server.tools["engram_project_diagnostics"]
+
+    # Guard against accidental CLI dependency in normal MCP init/status flow.
+    def _raise_if_cli_used(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("CLI command path should not be called by MCP init/status tools.")
+
+    monkeypatch.setattr("engram.cli.project_cmds.init", _raise_if_cli_used)
+
+    for repo_path, project_id in ((repo_a, "mcp-proj-a"), (repo_b, "mcp-proj-b")):
+        monkeypatch.setattr("os.getcwd", lambda p=repo_path: str(p))
+
+        before = yaml.safe_load(current_handler())
+        assert before["ok"] is True
+        assert before["initialized"] is False
+        assert before["status"] in {"uninitialized", "unresolved-workspace"}
+        assert "next" in before
+
+        initialized = yaml.safe_load(
+            init_handler(
+                name=f"Project {project_id}",
+                project_id=project_id,
+                summary=f"Summary {project_id}",
+            )
+        )
+        assert initialized["ok"] is True
+        assert initialized["project"]["id"] == project_id
+
+        current = yaml.safe_load(current_handler())
+        assert current["ok"] is True
+        assert current["initialized"] is True
+        assert current["status"] == "ready"
+        assert current["project"]["id"] == project_id
+        assert current["repo_root"] == str(repo_path)
+
+        diagnostics = yaml.safe_load(diagnostics_handler())
+        assert diagnostics["ok"] is True
+        assert diagnostics["status"] == "healthy"
+        assert diagnostics["repo_root"] == str(repo_path)
+        assert diagnostics["repo_root_detected"] is True
+        assert diagnostics["db"]["exists"] is True
+        assert diagnostics["db"]["schema_ok"] is True
+        assert diagnostics["gitignore"]["status"] == "configured"
