@@ -1,6 +1,5 @@
-"""Engram CLI — Agentic persistent memory system."""
+"""Engram CLI - Agentic persistent memory system."""
 
-import os
 import sys
 
 if sys.platform.startswith("win"):
@@ -13,9 +12,6 @@ if sys.platform.startswith("win"):
 
 import click
 from rich.console import Console
-
-from engram.db import init_db
-from engram.models.project import Project
 
 console = Console()
 
@@ -34,22 +30,10 @@ CONVENTIONAL_COMMIT_TYPES = {
 
 @click.group()
 def cli():
-    """Engram — Agentic persistent memory system."""
-    init_db()
+    """Engram - Agentic persistent memory system."""
 
 
-def get_current_project() -> Project:
-    """Resolve the current project from the working directory."""
-    cwd = os.getcwd()
-    project = Project.find_by_repo_path(cwd)
-    if not project:
-        console.print("[red]Error:[/red] Current directory is not bound to any Engram project.")
-        console.print("Run 'engram init' to register this repository.")
-        raise SystemExit(1)
-    return project
-
-
-# Register all command groups — import order doesn't matter,
+# Register all command groups - import order doesn't matter,
 # each module calls cli.add_command / cli.group on import.
 from engram.cli import project_cmds as _project_cmds  # noqa: E402, F401
 from engram.cli import utils_cmds as _utils_cmds  # noqa: E402, F401

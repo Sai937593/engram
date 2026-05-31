@@ -1,39 +1,38 @@
-# Implementation Plan - Task 2.4 (4b1a8e06)
+# Implementation Plan - Task 7b19d707 (Phase 3.1)
 
 ## Scope
-Add/adjust regression tests only to prove MCP-first initialization and diagnostics across fresh workspaces. No product-scope expansion.
+Refactor retained CLI startup and diagnostics so normal CLI bootstrap is side-effect free and no longer depends on legacy global repo-path binding assumptions.
 
-## Observed Gap vs Acceptance
-Existing tests cover:
-- `engram_project_init` success and unbound error behavior.
-- `engram_project_current` actionable uninitialized behavior.
-- diagnostics healthy/misconfigured/unresolved states.
-
-What remains to prove explicitly:
-- Same MCP handlers work across multiple fresh repo workspaces in one test flow (workspace-based behavior, no per-project command changes).
-- End-to-end repo lifecycle in MCP terms: fresh repo -> init -> current/diagnostics ready.
-- Explicit regression check that normal init/status flow does not rely on CLI commands.
+## Current Findings
+- `src/engram/cli/__init__.py` root Click callback calls `init_db()` unconditionally, causing DB initialization during generic CLI startup/help.
+- `src/engram/cli/__init__.py` exposes `get_current_project()` that uses `Project.find_by_repo_path()`, representing legacy global binding behavior.
+- `src/engram/cli/utils_cmds.py` `db` command reports `engram.db.DEFAULT_DB_PATH` and opens DB via global helper instead of resolving repo-local path via service-layer workspace resolution.
 
 ## Planned Changes
-1. `tests/test_mcp_tools.py`
-- Add a multi-workspace regression test that:
-  - Creates two fresh git repos.
-  - Uses identical MCP handlers (no tool reconfiguration between repos).
-  - Runs `engram_project_current` before init (expects actionable uninitialized response).
-  - Runs `engram_project_init` in each repo.
-  - Runs `engram_project_current` + `engram_project_diagnostics` after init (expects ready/healthy).
-- Add a guard assertion in that flow by monkeypatching key CLI entrypoints (if imported) to raise, proving MCP path remains service-driven and CLI-independent for normal init/status.
+1. `src/engram/cli/__init__.py`
+- Remove eager `init_db()` from root CLI callback.
+- Remove legacy `get_current_project()` helper if unused by retained command surface.
+- Keep command registration and entrypoint behavior stable (`init`, `guide`, `db`).
 
-2. `tests/test_services_project.py` (only if needed after step 1)
-- Add a focused service-level cross-workspace status regression if MCP test alone does not adequately prove workspace switching semantics.
+2. `src/engram/cli/utils_cmds.py`
+- Refactor `db` command to resolve workspace through `engram.services.project_path` helpers.
+- Report repo-local `.engram/memory.db` when executed inside a git repo.
+- Degrade cleanly outside a repo (clear unresolved-workspace messaging; no crash).
+- Perform explicit diagnostic DB touch/check only within command execution flow (not startup).
 
-## Validation
-- Run targeted tests first:
-  - `pytest tests/test_mcp_tools.py -k "project_init or project_current or diagnostics or workspace"`
-- Then run full impacted set:
-  - `pytest tests/test_mcp_tools.py tests/test_services_project.py tests/test_mcp_server.py`
+3. Tests
+- Update/add CLI regression tests in `tests/test_cli_entrypoint.py` to cover:
+  - Startup/help path does not initialize DB eagerly.
+  - `engram db` inside repo reports/uses repo-local DB path.
+  - `engram db` outside repo degrades cleanly.
+
+## Validation Plan
+- Run targeted tests:
+  - `pytest tests/test_cli_entrypoint.py -q`
+- If needed, run additional impacted suite:
+  - `pytest tests/test_cli_entrypoint.py tests/test_init_cmds.py -q`
 
 ## Out of Scope
-- No lifecycle/verification-gate changes (later phases).
-- No workflow output contract changes (later phases).
-- No CLI feature additions.
+- Adding new CLI workflow commands.
+- Changing MCP tool output contracts.
+- Broad docs rewrite beyond task-relevant wording discovered during this refactor.
