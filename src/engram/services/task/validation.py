@@ -6,7 +6,16 @@ from engram.db import get_db_connection as _get_db_connection
 from engram.services.errors import EngramServiceError as _EngramServiceError
 from engram.services.errors import ValidationError as _ValidationError
 
-VALID_TASK_STATUSES = {"todo", "in-progress", "done", "blocked", "cancelled", "all"}
+VALID_TASK_STATUSES = {
+    "draft",
+    "ready",
+    "todo",
+    "in-progress",
+    "done",
+    "blocked",
+    "cancelled",
+    "all",
+}
 VALID_TASK_UPDATE_FIELDS = {
     "title",
     "status",
@@ -137,4 +146,35 @@ def validate_memory_review_outcome_field(outcome: str | None) -> None:
             code="INVALID_MEMORY_REVIEW_OUTCOME",
             message="Task memory review outcome is invalid.",
             details={"outcome": outcome, "allowed_outcomes": sorted(allowed)},
+        )
+
+
+def validate_ready_promotion_metadata(
+    *,
+    status: str | None,
+    description: str | None,
+    acceptance: str | None,
+    relevant_files: list[str] | None,
+) -> None:
+    """Validate minimal metadata required to promote a task into ready."""
+    if status != "ready":
+        return
+
+    missing_fields: list[str] = []
+    if not description or not description.strip():
+        missing_fields.append("description")
+    if not acceptance or not acceptance.strip():
+        missing_fields.append("acceptance")
+    if not relevant_files:
+        missing_fields.append("relevant_files")
+
+    if missing_fields:
+        raise _ValidationError(
+            code="READY_METADATA_INCOMPLETE",
+            message="Task cannot be promoted to ready until minimum execution metadata is complete.",
+            details={
+                "status": status,
+                "missing_fields": missing_fields,
+                "required_fields": ["description", "acceptance", "relevant_files"],
+            },
         )

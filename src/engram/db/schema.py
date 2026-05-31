@@ -27,7 +27,7 @@ def create_tasks_table(cursor: sqlite3.Cursor) -> None:
         phase_id    TEXT REFERENCES phases(id),
         title       TEXT NOT NULL,
         description TEXT,
-        status      TEXT DEFAULT 'todo',
+        status      TEXT DEFAULT 'draft',
         priority    TEXT DEFAULT 'medium',
         phase       TEXT,
         depends_on  TEXT REFERENCES tasks(id),

@@ -17,7 +17,7 @@ Phases are first-class project milestones that group related tasks.
 
 ### Tasks
 Tasks are specific actionable units of work.
-- **Lifecycle:** `todo -> in-progress -> done | blocked | cancelled`
+- **Lifecycle:** `draft -> ready -> in-progress -> done | blocked | cancelled`
 - **Priority levels:** `low | medium | high | critical`
 - **Metadata:** `title`, `description`, `acceptance`, `evidence`, `phase_id`, `tags`, `depends_on`, `relevant_files`.
 - Agents automatically resolve task context and associated dependencies programmatically.
@@ -97,7 +97,7 @@ The MCP server exposes 17 tools for full interactive capabilities:
 *   **Task Management:**
     *   `engram_task_list`: Filters and lists project tasks by status or phase.
     *   `engram_task_get`: Retrieves full details of a specific task.
-    *   `engram_task_next`: Returns the highest-priority actionable `todo` task.
+    *   `engram_task_next`: Returns the highest-priority actionable `ready` task.
     *   `engram_task_create`: Creates a new project task.
     *   `engram_task_update`: Modifies properties of a task.
     *   `engram_task_note_append`: Appends a timestamped log note to a task's evidence.

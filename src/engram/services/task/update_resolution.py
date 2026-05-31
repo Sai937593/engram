@@ -13,6 +13,7 @@ from engram.services.task.validation import (
     _normalize_phase_title,
     validate_memory_review_outcome_field,
     validate_priority_field,
+    validate_ready_promotion_metadata,
     validate_status_field,
 )
 
@@ -57,6 +58,16 @@ def validate_and_resolve_update(
             code="PHASE_LINKED_TO_FIRST_CLASS",
             message="Task is linked to a first-class phase. Use phase_id to change the effective phase, or phase_id=None to clear the link first.",
             details={"task_id": task_id, "phase_id": eff_phase_id},
+        )
+
+    current_status = task_item.status
+    target_status = kwargs.get("status", current_status)
+    if current_status != "ready" and target_status == "ready":
+        validate_ready_promotion_metadata(
+            status=target_status,
+            description=kwargs.get("description", task_item.description),
+            acceptance=kwargs.get("acceptance", task_item.acceptance),
+            relevant_files=kwargs.get("relevant_files", task_item.relevant_files),
         )
     return kwargs
 

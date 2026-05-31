@@ -187,7 +187,8 @@ def backfill_legacy_phase_ids(cursor: sqlite3.Cursor) -> None:
 
 def apply_task_status_migrations(cursor: sqlite3.Cursor) -> None:
     """Normalize legacy task statuses."""
-    cursor.execute("UPDATE tasks SET status = 'todo' WHERE status = 'backlog'")
+    cursor.execute("UPDATE tasks SET status = 'draft' WHERE status = 'backlog'")
+    cursor.execute("UPDATE tasks SET status = 'ready' WHERE status = 'todo'")
     cursor.execute("UPDATE tasks SET status = 'done' WHERE status = 'completed'")
 
 

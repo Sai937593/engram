@@ -1,28 +1,34 @@
-# Implementation Plan - Task 9770c73a
+# Implementation Plan - Task c63c5495
 
 ## Scope
-Restore parity between `docs/USER_MANUAL.md` and `src/engram/USER_MANUAL.md` by syncing the Phase 10 Task Decomposition Skill discoverability guidance in the session startup section.
+Add regression coverage for the draft-to-ready execution path so Phase 11 lifecycle behavior remains stable: draft task creation, promotion to ready, blocked workflow start when only drafts remain, and successful selection/resumption once a ready task exists.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `9770c73a`.
-- Keep changes limited to the two USER_MANUAL files unless verification requires a minimal in-scope fix.
-- Preserve no-touch directories: `planning/`, `workflow/`, `.github/`.
+- One-task session only: execute only task `c63c5495`.
+- No edits in `planning/`, `workflow/`, or `.github/`.
+- Keep changes test-focused unless a missing test seam requires minimal production adjustment.
+- Preserve Phase 11 minimal ready-gate behavior; do not introduce richer Phase 12 heuristics.
 
 ## Inputs to Use
-- `docs/USER_MANUAL.md`
-- `src/engram/USER_MANUAL.md`
+- `tests/test_mcp_tools.py`
+- `tests/test_services_workflow_start_basic.py`
+- `tests/test_services_task.py`
+- `tests/test_workflow_redesign_phase_5_regressions.py`
 
 ## Planned Changes
-1. Compare the session startup sections in both manuals.
-2. Copy missing Phase 10 task decomposition discoverability guidance into the packaged manual copy (`src/engram/USER_MANUAL.md`) or align wording so both are equivalent.
-3. Recheck both manuals for textual parity in that section.
-4. Record a concise task evidence note summarizing what was synced.
+1. Review existing lifecycle coverage in the listed test modules and map gaps against the acceptance criteria.
+2. Add/adjust tests validating draft task creation and promotion to `ready` with minimum required metadata.
+3. Add/adjust workflow-start tests for blocked messaging when only `draft` tasks remain.
+4. Add/adjust selection/resumption tests confirming a `ready` task is selected for new starts while true `in-progress` work is resumed.
+5. Keep assertions deterministic and focused on observable service/MCP behavior, avoiding implementation-coupled expectations.
 
 ## Validation Plan
-- Confirm both manuals contain matching guidance for task decomposition discoverability in session startup.
-- Run `uv run pytest tests -q`.
-- Run `engram_workflow_verify`; if it fails, fix the first actionable issue and rerun.
+- Run targeted tests:
+  - `uv run pytest tests/test_mcp_tools.py -q tests/test_services_workflow_start_basic.py -q tests/test_services_task.py -q tests/test_workflow_redesign_phase_5_regressions.py -q`
+- Run full workflow verification: `engram_workflow_verify`
+- If verification fails, fix the first actionable issue and rerun.
 
 ## Out of Scope
-- Any additional feature or workflow change outside this doc parity fix.
-- Work on any task other than `9770c73a` in this session.
+- Any non-regression feature work in workflow/task services.
+- Any edits outside the accepted lifecycle regression scope.
+- Work on tasks other than `c63c5495` in this session.

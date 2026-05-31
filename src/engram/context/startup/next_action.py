@@ -51,6 +51,18 @@ def build_next_action(project: Project, selected_task: Task | None) -> str:
             ],
         )
 
+    draft = counts.get("draft", 0)
+    ready = counts.get("ready", 0)
+    in_progress = counts.get("in-progress", 0)
+    if draft > 0 and ready == 0 and in_progress == 0 and draft == pending:
+        return _render_section(
+            "NEXT ACTION",
+            [
+                f"Only draft tasks remain ({draft}); no ready task can be started.",
+                "Complete minimum execution metadata (description, acceptance, relevant_files), then set status=ready using engram_task_update.",
+            ],
+        )
+
     return _render_section(
         "NEXT ACTION",
         [

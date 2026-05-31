@@ -40,7 +40,7 @@ class _Helpers:
     def normalize_status(status: str | None) -> str:
         """Normalize and validate task status filter values."""
         if status is None:
-            return "todo"
+            return "ready"
         normalized = status.strip().casefold()
         if normalized in _VALID_TASK_STATUSES:
             return normalized
@@ -116,7 +116,7 @@ def create_task(
     project_id: str,
     title: str,
     description: str | None = None,
-    status: str = "todo",
+    status: str = "draft",
     priority: str = "medium",
     phase: str | None = None,
     phase_id: str | None = None,

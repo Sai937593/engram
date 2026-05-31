@@ -10,7 +10,7 @@ from engram.models.task import Task, _normalize_relevant_files, get_effective_ph
 def test_create_task(project):
     t = Task.create(project_id=project.id, title="Write tests", priority="high")
     assert t.title == "Write tests"
-    assert t.status == "todo"
+    assert t.status == "draft"
     assert t.priority == "high"
     assert t.tags == []
 
@@ -273,19 +273,19 @@ def test_get_effective_phase_title_handles_stale_phase_id_with_no_legacy_phase(p
 
 
 def test_get_next_respects_priority(project):
-    Task.create(project_id=project.id, title="Low priority task", priority="low")
-    Task.create(project_id=project.id, title="Critical task", priority="critical")
-    Task.create(project_id=project.id, title="High priority task", priority="high")
+    Task.create(project_id=project.id, title="Low priority task", priority="low", status="ready")
+    Task.create(project_id=project.id, title="Critical task", priority="critical", status="ready")
+    Task.create(project_id=project.id, title="High priority task", priority="high", status="ready")
     nxt = Task.get_next(project.id)
     assert nxt.priority == "critical"
 
 
-def test_get_next_skips_non_todo(project):
+def test_get_next_skips_non_ready(project):
     t = Task.create(project_id=project.id, title="Done task", priority="critical")
     t.update(status="done")
-    Task.create(project_id=project.id, title="Todo task", priority="low")
+    Task.create(project_id=project.id, title="Ready task", priority="low", status="ready")
     nxt = Task.get_next(project.id)
-    assert nxt.title == "Todo task"
+    assert nxt.title == "Ready task"
 
 
 def test_get_next_returns_none_when_empty(project):
@@ -518,12 +518,14 @@ def test_get_next_prefer_active_phase(project):
         title="Task Phase 1",
         priority="medium",
         phase_id=phase_1.id,
+        status="ready",
     )
     task_p2 = Task.create(
         project_id=project.id,
         title="Task Phase 2",
         priority="high",
         phase_id=phase_2.id,
+        status="ready",
     )
 
     nxt = Task.get_next(project.id, active_phase_id=phase_1.id)
@@ -547,6 +549,7 @@ def test_get_next_active_phase_fallback_to_project_level(project):
         title="Project Level Task",
         priority="medium",
         phase_id=None,
+        status="ready",
     )
 
     nxt = Task.get_next(project.id, active_phase_id=phase_1.id)

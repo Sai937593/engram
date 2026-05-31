@@ -31,7 +31,7 @@ def test_start_workflow_happy_path_branch_exists(tmp_db: Any, mock_startup_conte
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="todo",
+        status="ready",
     )
 
     git_mock = GitMock()
@@ -72,7 +72,7 @@ def test_start_workflow_happy_path_new_branch(tmp_db: Any, mock_startup_context:
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="todo",
+        status="ready",
     )
 
     git_mock = GitMock()
@@ -108,6 +108,35 @@ def test_start_workflow_no_task(tmp_db: Any, mock_startup_context: None) -> None
     assert len(git_mock.calls) == 0
 
 
+def test_start_workflow_blocks_when_only_draft_tasks_remain(
+    tmp_db: Any, mock_startup_context: None
+) -> None:
+    """Verify workflow start blocks with clear code when only draft tasks remain."""
+    project = Project.create(
+        id="proj-draft-only",
+        name="Project Draft Only",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-draft-only"],
+    )
+    Task.create(
+        project_id=project.id,
+        id="t-draft-1",
+        title="Draft Task",
+        status="draft",
+    )
+
+    git_mock = GitMock()
+    with (
+        patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock),
+        pytest.raises(EngramServiceError) as exc_info,
+    ):
+        start_workflow(project.id, "/tmp/proj-draft-only")
+
+    assert exc_info.value.code == "WORKFLOW_START_DRAFT_ONLY"
+    assert "No ready task is available to start." in exc_info.value.message
+    assert len(git_mock.calls) == 0
+
+
 def test_start_workflow_project_not_found(tmp_db: Any) -> None:
     """Verify start_workflow raises PROJECT_NOT_FOUND when project does not exist."""
     with pytest.raises(EngramServiceError) as exc_info:
@@ -131,7 +160,7 @@ def test_start_workflow_unbound_repo(tmp_db: Any, mock_startup_context: None) ->
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="todo",
+        status="ready",
     )
 
     import tempfile
