@@ -155,7 +155,7 @@ def evaluate_verification_eligibility(
                 "allowed": False,
                 "state": "stale",
                 "reason_code": "VERIFICATION_STALE_RELEVANT_CHANGES",
-                "reason": f"Relevant files changed after the latest successful verification. mtime={latest_mtime}, verified_at={verified_at}, diff={latest_mtime - verified_at}",
+                "reason": "Relevant files changed after the latest successful verification.",
                 "record": record,
             }
 
