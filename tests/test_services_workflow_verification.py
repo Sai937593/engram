@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from engram.models.task import Task
@@ -128,3 +130,31 @@ def test_evaluate_verification_eligibility_stale(project, task, tmp_path):
     assert result["allowed"] is False
     assert result["state"] == "stale"
     assert result["reason_code"] == "VERIFICATION_STALE_RELEVANT_CHANGES"
+
+
+def test_evaluate_verification_eligibility_not_stale_for_later_utc_verify(project, task, tmp_path):
+    candidate = tmp_path / "src" / "module.py"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text("print('changed')\n", encoding="utf-8")
+    file_mtime_epoch = datetime(2026, 5, 31, 12, 30, 0, tzinfo=timezone.utc).timestamp()
+    verified_at = "2026-05-31 13:00:00"
+    candidate.touch()
+    import os
+
+    os.utime(candidate, (file_mtime_epoch, file_mtime_epoch))
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+        verified_at=verified_at,
+    )
+    result = evaluate_verification_eligibility(
+        project_id=project.id,
+        task_id=task.id,
+        repo_path=str(tmp_path),
+        relevant_files=["src/module.py"],
+    )
+    assert result["allowed"] is True
+    assert result["state"] == "passed"
+    assert result["reason_code"] == "VERIFICATION_PASSED"

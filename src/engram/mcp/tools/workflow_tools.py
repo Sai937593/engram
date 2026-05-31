@@ -8,6 +8,10 @@ from typing import Any
 import anyio.to_thread
 
 import engram.mcp.tools
+from engram.mcp.tools.workflow_tool_helpers import (
+    VERIFICATION_GATE_ERROR_CODES,
+    format_verification_finish_blocked,
+)
 from engram.services.errors import EngramServiceError
 
 
@@ -75,12 +79,13 @@ def register_workflow_tools(server: Any) -> None:
     async def engram_workflow_finish(commit_type: str | None = None) -> str:
         """Finish the active task: commit, push, and mark done.
 
-        This tool stages all current changes, creates a conventional Git commit based on the active
-        task and phase title, pushes to the remote repository, and marks the task as completed.
+        This tool stages all current changes, creates a conventional Git commit based on the active task and phase title, pushes to the remote repository, and marks the task as completed.
         If a pre-push test/hook fails, the push (and thus this tool) will block and fail.
         """
+        project_id: str | None = None
         try:
             project = engram.mcp.tools.resolve_current_project()
+            project_id = str(project["id"])
             repo_paths = project.get("repo_paths", [])
             if not repo_paths:
                 raise EngramServiceError(
@@ -90,7 +95,7 @@ def register_workflow_tools(server: Any) -> None:
             res = await anyio.to_thread.run_sync(
                 functools.partial(
                     engram.mcp.tools.finish_workflow,
-                    project_id=str(project["id"]),
+                    project_id=project_id,
                     repo_path=repo_paths[0],
                     commit_type=commit_type,
                 )
@@ -111,6 +116,8 @@ def register_workflow_tools(server: Any) -> None:
                 task_title=res.get("task_title"),
             )
         except EngramServiceError as exc:
+            if exc.code in VERIFICATION_GATE_ERROR_CODES and project_id:
+                return format_verification_finish_blocked(project_id=project_id, reason=exc.message)
             return engram.mcp.tools._respond_error(exc)
 
     @server.tool()

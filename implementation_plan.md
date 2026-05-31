@@ -1,53 +1,49 @@
-# Implementation Plan - Task 5b0dc009 (Phase 8.1)
+# Implementation Plan - Task 7774e488 (Phase 8.2)
 
 ## Scope
-Add service-layer evaluation logic for `engram_workflow_finish` eligibility based on the active task's latest verification record. Classification must be deterministic with states: `passed`, `missing`, `failed`, `stale`. Keep this task strictly to state lookup and evaluation helpers.
+Enforce the verification gate in `workflow_finish` output behavior so missing/failed/stale verification blocks finish with compact markdown and exactly one `## Next action` section instructing Codex to run or rerun workflow verification. Keep successful finish output concise and do not auto-start the next task.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `5b0dc009`.
-- Do not change finish response formatting in MCP/CLI layers.
-- Do not add memory-review or broader readiness gates.
-- Service modules must remain adapter-safe (no Click/Rich/MCP adapter imports).
+- One-task session only: execute only task `7774e488`.
+- Keep scope limited to finish-time verification gate and MCP finish output.
+- Do not add memory review gates, stale-memory policies, or phase transition automation.
+- Service modules must remain adapter-safe.
 - No-touch directories: `planning/`, `workflow/`, `.github/`.
-- Keep changes focused to service/helper logic and unit tests for that logic.
 
 ## Investigation Plan
-1. Inspect finish path and helper extension points:
+1. Confirm current finish-time eligibility behavior and emitted error codes/messages:
 - `src/engram/services/workflow_service.py`
-- `src/engram/services/workflow_helpers.py`
-
-2. Inspect verification persistence/lookup APIs and record shape:
 - `src/engram/services/workflow_verification_service.py`
-- verification-related tests under `tests/`
 
-3. Confirm whether existing repo-local evidence (timestamps and git state) can support stale detection deterministically without CLI coupling.
+2. Confirm formatting helpers for blocked/success finish responses:
+- `src/engram/services/workflow_formatter.py`
+
+3. Confirm MCP tool mapping from service errors to final finish response:
+- `src/engram/mcp/tools/workflow_tools.py`
 
 ## Planned Changes
-1. Add verification eligibility resolver in service layer:
-- Resolve active in-progress task.
-- Fetch latest verification record for that task.
-- Return structured state result with deterministic reason code and message.
+1. Ensure blocked finish states (missing/failed/stale) are surfaced as compact markdown via `format_finish_blocked` with:
+- task context line
+- compact reason line
+- exactly one `## Next action` section
+- next action text explicitly telling Codex to run or rerun `engram_workflow_verify`
 
-2. Implement stale-after-relevant-changes check using repo-local evidence:
-- Compare latest verification timestamp with relevant post-verification repo/task change evidence.
-- Keep algorithm deterministic and dependency-light.
+2. Keep verification gate execution before any git side effects (`git add/commit/push`) and preserve existing behavior for successful eligible finishes.
 
-3. Wire eligibility evaluation helper for finish-time use:
-- Expose helper(s) callable by `finish_workflow` without changing current user-facing formatting in this task.
+3. Keep successful finish response concise via `format_finish_success`, with no automatic workflow start behavior.
 
-4. Add/extend focused tests:
-- `missing`: no verification record.
-- `failed`: latest record is failed.
-- `passed`: latest record is passed and not stale.
-- `stale`: latest record passed but invalidated by relevant subsequent changes.
-- Deterministic reason assertions for each state.
+4. Add or update focused tests for MCP finish output covering:
+- missing verification -> blocked format + next action
+- failed verification -> blocked format + next action
+- stale verification -> blocked format + next action
+- successful eligible finish -> concise success format unchanged
 
 ## Validation Plan
-- Run targeted tests for workflow services and verification logic.
-- Run any impacted finish-workflow tests.
-- Ensure no regressions in existing workflow verification tests.
+- Run targeted workflow tool/service tests for finish and formatter behavior.
+- Run any affected tests for workflow verification eligibility integration.
+- Confirm zero test failures before invoking `engram_workflow_finish`.
 
 ## Out of Scope
-- Editing finish output rendering or MCP markdown formatting.
-- Introducing new workflow policies unrelated to verification eligibility.
-- Completing phase transition or PR orchestration work.
+- Memory review gates or broader task readiness policies.
+- New automation for PR/phase transitions.
+- Refactoring unrelated workflow command surfaces.
