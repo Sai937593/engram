@@ -1,59 +1,53 @@
-﻿# Implementation Plan - Task d8d0574d (Phase 7.4)
+# Implementation Plan - Task 5b0dc009 (Phase 8.1)
 
 ## Scope
-Add regression coverage for Phase 7 verification behavior only: pass/fail execution outcomes, persisted verification state, and concise deterministic MCP-visible verification Markdown. Do not introduce Phase 8 stale-verification blocking, memory-review gates, or finish gating.
+Add service-layer evaluation logic for `engram_workflow_finish` eligibility based on the active task's latest verification record. Classification must be deterministic with states: `passed`, `missing`, `failed`, `stale`. Keep this task strictly to state lookup and evaluation helpers.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `d8d0574d`.
-- Phase boundary: stay strictly inside `engram_workflow_verify` + verification-state recording behavior.
-- Output boundary: verification output must remain compact, deterministic, and fix-focused.
-- Startup boundary: keep repo-local startup/MCP behavior protected from verification regressions.
+- One-task session only: execute only task `5b0dc009`.
+- Do not change finish response formatting in MCP/CLI layers.
+- Do not add memory-review or broader readiness gates.
+- Service modules must remain adapter-safe (no Click/Rich/MCP adapter imports).
 - No-touch directories: `planning/`, `workflow/`, `.github/`.
-- Service safety: no CLI/Click/Rich/subprocess/MCP adapter imports inside service-layer modules unless already part of existing verify service behavior.
+- Keep changes focused to service/helper logic and unit tests for that logic.
 
 ## Investigation Plan
-1. Inspect current verification coverage and identify gaps against acceptance:
-- `tests/test_services_workflow_verify.py`
-- `tests/test_workflow_redesign_phase_5_regressions.py`
-
-2. Inspect MCP verification contract coverage and startup integration assertions:
-- `tests/test_mcp_tools.py`
-- `tests/test_mcp_server.py`
-
-3. Inspect verification formatter/service contract needed for deterministic Markdown assertions:
-- `src/engram/services/workflow_formatter.py`
+1. Inspect finish path and helper extension points:
 - `src/engram/services/workflow_service.py`
+- `src/engram/services/workflow_helpers.py`
+
+2. Inspect verification persistence/lookup APIs and record shape:
 - `src/engram/services/workflow_verification_service.py`
+- verification-related tests under `tests/`
+
+3. Confirm whether existing repo-local evidence (timestamps and git state) can support stale detection deterministically without CLI coupling.
 
 ## Planned Changes
-1. Service-layer regression tests (`tests/test_services_workflow_verify.py`):
-- Ensure explicit coverage for both pass and fail runs.
-- Assert persisted verification state captures status + summary/details shape for both outcomes.
-- Keep assertions independent of Phase 8/9 behaviors.
+1. Add verification eligibility resolver in service layer:
+- Resolve active in-progress task.
+- Fetch latest verification record for that task.
+- Return structured state result with deterministic reason code and message.
 
-2. MCP tool contract tests (`tests/test_mcp_tools.py`):
-- Strengthen `engram_workflow_verify` response checks for deterministic concise Markdown:
-  - status line present and stable (`PASSED`/`FAILED`)
-  - single `## Next action` section
-  - concise details summary (no long log dump assumptions)
-- Preserve actionable error behavior when project has no repo binding/path.
+2. Implement stale-after-relevant-changes check using repo-local evidence:
+- Compare latest verification timestamp with relevant post-verification repo/task change evidence.
+- Keep algorithm deterministic and dependency-light.
 
-3. MCP server/startup regression tests (`tests/test_mcp_server.py` and/or `tests/test_workflow_redesign_phase_5_regressions.py`):
-- Add or tighten assertions that verification tool registration and startup-facing behavior do not regress while adding Phase 7.4 coverage.
-- Keep tests repo-local and deterministic.
+3. Wire eligibility evaluation helper for finish-time use:
+- Expose helper(s) callable by `finish_workflow` without changing current user-facing formatting in this task.
+
+4. Add/extend focused tests:
+- `missing`: no verification record.
+- `failed`: latest record is failed.
+- `passed`: latest record is passed and not stale.
+- `stale`: latest record passed but invalidated by relevant subsequent changes.
+- Deterministic reason assertions for each state.
 
 ## Validation Plan
-- Run targeted tests first:
-- `pytest tests/test_services_workflow_verify.py`
-- `pytest tests/test_mcp_tools.py -k workflow_verify`
-- `pytest tests/test_mcp_server.py`
-- `pytest tests/test_workflow_redesign_phase_5_regressions.py`
-
-- Then run an aggregate verification-focused pass if needed:
-- `pytest tests/test_services_workflow_verify.py tests/test_mcp_tools.py tests/test_mcp_server.py tests/test_workflow_redesign_phase_5_regressions.py`
+- Run targeted tests for workflow services and verification logic.
+- Run any impacted finish-workflow tests.
+- Ensure no regressions in existing workflow verification tests.
 
 ## Out of Scope
-- Blocking `engram_workflow_finish` based on verification state age/result.
-- Any memory-review requirement changes.
-- Broad workflow redesign changes outside verification tests.
-- Refactoring production behavior unrelated to test coverage required by this task.
+- Editing finish output rendering or MCP markdown formatting.
+- Introducing new workflow policies unrelated to verification eligibility.
+- Completing phase transition or PR orchestration work.

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from engram.db import get_db_connection
@@ -83,3 +85,79 @@ def get_latest_workflow_verification(
         ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def _parse_verified_at(verified_at: str | None) -> datetime | None:
+    """Parse a persisted verification timestamp into a datetime object."""
+    if not verified_at:
+        return None
+    try:
+        return datetime.fromisoformat(verified_at)
+    except ValueError:
+        return None
+
+
+def _latest_relevant_file_mtime(repo_path: str, relevant_files: list[str]) -> datetime | None:
+    """Return the latest mtime across existing relevant files under the repo path."""
+    latest: datetime | None = None
+    for rel in relevant_files:
+        candidate = (Path(repo_path) / rel).resolve()
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        modified_at = datetime.fromtimestamp(candidate.stat().st_mtime)
+        if latest is None or modified_at > latest:
+            latest = modified_at
+    return latest
+
+
+def evaluate_verification_eligibility(
+    project_id: str, task_id: str, repo_path: str, relevant_files: list[str] | None = None
+) -> dict[str, Any]:
+    """Classify finish eligibility from the latest verification record and change evidence."""
+    record = get_latest_workflow_verification(project_id=project_id, task_id=task_id)
+    if not record:
+        return {
+            "allowed": False,
+            "state": "missing",
+            "reason_code": "VERIFICATION_MISSING",
+            "reason": "No verification record exists for the active task.",
+            "record": None,
+        }
+
+    status = str(record.get("status") or "").strip().lower()
+    if status == "failed":
+        return {
+            "allowed": False,
+            "state": "failed",
+            "reason_code": "VERIFICATION_FAILED",
+            "reason": "The latest verification for the active task failed.",
+            "record": record,
+        }
+    if status != "passed":
+        return {
+            "allowed": False,
+            "state": "failed",
+            "reason_code": "VERIFICATION_INVALID_STATUS",
+            "reason": f"Latest verification has unsupported status '{status or 'unknown'}'.",
+            "record": record,
+        }
+
+    verified_at = _parse_verified_at(record.get("verified_at"))
+    if verified_at and relevant_files:
+        latest_mtime = _latest_relevant_file_mtime(repo_path, relevant_files)
+        if latest_mtime and latest_mtime > verified_at:
+            return {
+                "allowed": False,
+                "state": "stale",
+                "reason_code": "VERIFICATION_STALE_RELEVANT_CHANGES",
+                "reason": "Relevant files changed after the latest successful verification.",
+                "record": record,
+            }
+
+    return {
+        "allowed": True,
+        "state": "passed",
+        "reason_code": "VERIFICATION_PASSED",
+        "reason": "Latest verification passed and is eligible for finish.",
+        "record": record,
+    }

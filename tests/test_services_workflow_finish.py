@@ -11,6 +11,7 @@ from engram.models.project import Project
 from engram.models.task import Task
 from engram.services.errors import EngramServiceError
 from engram.services.workflow_service import finish_workflow
+from engram.services.workflow_verification_service import record_workflow_verification
 from tests.test_services_workflow_helpers import GitMock
 
 
@@ -28,6 +29,12 @@ def test_finish_workflow_happy_path(tmp_db: Any) -> None:
         title="Refactor auth",
         phase="Phase One",
         status="in-progress",
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
     )
 
     git_mock = GitMock()
@@ -85,6 +92,12 @@ def test_finish_workflow_git_push_fails(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
     )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
 
     git_mock = GitMock()
     git_mock.push_returncode = 1
@@ -118,6 +131,12 @@ def test_finish_workflow_nothing_to_commit(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
     )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
 
     git_mock = GitMock()
     git_mock.commit_returncode = 1
@@ -139,6 +158,26 @@ def test_finish_workflow_project_not_found(tmp_db: Any) -> None:
         finish_workflow("non-existent", "/tmp/path")
 
     assert exc_info.value.code == "PROJECT_NOT_FOUND"
+
+
+def test_finish_workflow_requires_verification(tmp_db: Any) -> None:
+    """Verify finish_workflow blocks when no verification exists for the active task."""
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+    )
+    with pytest.raises(EngramServiceError) as exc_info:
+        finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
+    assert exc_info.value.code == "VERIFICATION_MISSING"
 
 
 def test_format_finish_success() -> None:

@@ -21,6 +21,7 @@ from engram.services.workflow_formatter import (
     format_work_order,
 )
 from engram.services.workflow_service import finish_workflow, start_workflow
+from engram.services.workflow_verification_service import record_workflow_verification
 from tests.test_mcp_tools import MockServer
 from tests.test_services_workflow_helpers import GitMock
 
@@ -266,6 +267,12 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
         phase_id="ph-1",
         status="in-progress",
     )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id="t-1",
+        passed=True,
+        summary="all checks passed",
+    )
     Task.create(
         project_id=project.id,
         id="t-2",
@@ -306,6 +313,12 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
     t2 = Task.get("t-2")
     assert t2 is not None
     t2.update(status="in-progress")
+    record_workflow_verification(
+        project_id=project.id,
+        task_id="t-2",
+        passed=True,
+        summary="all checks passed",
+    )
 
     git_mock.calls.clear()
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
@@ -364,6 +377,12 @@ def test_finish_failures_contract(tmp_db: Any, monkeypatch: Any) -> None:
         title="Broken push",
         phase="Phase One",
         status="in-progress",
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id="t-fail",
+        passed=True,
+        summary="all checks passed",
     )
 
     git_mock = GitMock()
