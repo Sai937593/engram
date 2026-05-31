@@ -1,6 +1,8 @@
-"""Tests for Memory model including FTS5 search."""
-
+import os
 import sqlite3
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -175,6 +177,32 @@ def test_get_memory(memory):
 
 def test_get_nonexistent_memory(tmp_db):
     assert Memory.get("no-such-id") is None
+
+
+def test_memory_get_works_in_fresh_interpreter_without_circular_import(tmp_path):
+    script = tmp_path / "memory_get_smoke.py"
+    repo_src = Path(__file__).resolve().parents[1] / "src"
+    script.write_text(
+        "\n".join(
+            [
+                "from engram.models.memory import Memory",
+                "result = Memory.get('no-such-id')",
+                "print('RESULT', result)",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        cwd=str(repo_src.parent),
+        env={**os.environ, "PYTHONPATH": str(repo_src)},
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "RESULT None"
 
 
 def test_list_by_project(project):
