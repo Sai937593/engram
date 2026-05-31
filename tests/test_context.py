@@ -69,6 +69,7 @@ def test_startup_builder_accepts_project_phase_and_task(project):
         title="Implement startup builder",
         phase_id=phase.id,
         status="in-progress",
+        description="Deliver the startup builder contract.",
         acceptance="Startup context uses unified sections.",
     )
     Memory.create(
@@ -81,12 +82,15 @@ def test_startup_builder_accepts_project_phase_and_task(project):
 
     ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
 
-    assert "## PROJECT FRAME" in ctx
-    assert "## CURRENT PHASE FRAME" in ctx
-    assert "## CURRENT/NEXT TASK FRAME" in ctx
-    assert "## PROJECT GUARDRAILS" in ctx
-    assert "## TASK MEMORY CANDIDATES" in ctx
-    assert "## NEXT ACTION" in ctx
+    assert "# Work Order" in ctx
+    assert "Status: current" in ctx
+    assert f"Task: `{task.id}`" in ctx
+    assert "Phase: Phase Builder" in ctx
+    assert "## Objective" in ctx
+    assert "## Acceptance" in ctx
+    assert "## Guardrails" in ctx
+    assert "## Relevant memory" in ctx
+    assert "## Next action" in ctx
     assert "Implement startup builder" in ctx
     assert "Local-first only" in ctx
 
@@ -112,8 +116,8 @@ def test_startup_builder_renders_branch_and_is_resuming(project):
         is_resuming=True,
     )
 
-    assert "Selected: resuming" in ctx
-    assert "Branch: feat/refactor-branch" in ctx
+    assert "Status: resuming" in ctx
+    assert "Branch: `feat/refactor-branch`" in ctx
     assert (
         "Before coding: run engram_memory_search with keywords from the task. Create implementation_plan.md and await user approval before writing code."
         in ctx
@@ -129,7 +133,7 @@ def test_startup_builder_renders_branch_and_is_resuming(project):
         branch="feat/refactor-branch",
         is_resuming=False,
     )
-    assert "Selected: starting" in ctx_starting
+    assert "Status: starting" in ctx_starting
 
 
 def test_startup_builder_handles_no_task_input(project):
@@ -138,7 +142,7 @@ def test_startup_builder_handles_no_task_input(project):
     ctx = build_startup_context(project=project, active_phase=phase, selected_task=None)
 
     assert "No current or next task selected." in ctx
-    assert "## NEXT ACTION" in ctx
+    assert "## Next action" in ctx
 
 
 def test_startup_builder_renders_selected_task_relevant_files(project):
@@ -153,10 +157,10 @@ def test_startup_builder_renders_selected_task_relevant_files(project):
 
     ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
 
-    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
-        "\n## PROJECT GUARDRAILS", maxsplit=1
-    )[0]
-    assert "Relevant files:" in task_section
+    task_section = ctx.split("## Start here\n", maxsplit=1)[1].split("\n## Guardrails", maxsplit=1)[
+        0
+    ]
+    assert "src/engram/context_helpers/startup.py" in task_section
     assert "- src/engram/context_helpers/startup.py" in task_section
     assert "- tests/test_context.py" in task_section
 
@@ -172,10 +176,7 @@ def test_startup_builder_hides_relevant_files_label_when_selected_task_has_none(
 
     ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
 
-    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
-        "\n## PROJECT GUARDRAILS", maxsplit=1
-    )[0]
-    assert "Relevant files:" not in task_section
+    assert "## Start here" not in ctx
 
 
 def test_startup_builder_caps_and_truncates_relevant_file_paths(project):
@@ -194,9 +195,9 @@ def test_startup_builder_caps_and_truncates_relevant_file_paths(project):
         project=project, active_phase=phase, selected_task=task, options=options
     )
 
-    task_section = ctx.split("## CURRENT/NEXT TASK FRAME\n", maxsplit=1)[1].split(
-        "\n## PROJECT GUARDRAILS", maxsplit=1
-    )[0]
+    task_section = ctx.split("## Start here\n", maxsplit=1)[1].split("\n## Guardrails", maxsplit=1)[
+        0
+    ]
     assert f"- {_compact_with_limit(long_path, 24)}" in task_section
     assert "- tests/test_context.py" in task_section
     assert "- src/engram/models/task.py" not in task_section
@@ -308,8 +309,8 @@ def test_startup_builder_guardrails_use_project_l0_l1_only_in_order(project):
 
     ctx = build_startup_context(project=project)
 
-    guardrails_section = ctx.split("## PROJECT GUARDRAILS\n", maxsplit=1)[1].split(
-        "\n## TASK MEMORY CANDIDATES", maxsplit=1
+    guardrails_section = ctx.split("## Guardrails\n", maxsplit=1)[1].split(
+        "\n## Relevant memory", maxsplit=1
     )[0]
     assert "L0 Identity" in guardrails_section
     assert "L1 A" in guardrails_section
@@ -327,15 +328,15 @@ def test_startup_builder_guardrails_empty_and_separate_from_task_memory_section(
     assert "L1 Constraints:" in ctx
     assert "Python file size limits" in ctx
     assert "Python public symbol limit" in ctx
-    guardrails_index = ctx.index("## PROJECT GUARDRAILS")
-    task_memory_index = ctx.index("## TASK MEMORY CANDIDATES")
+    guardrails_index = ctx.index("## Guardrails")
+    task_memory_index = ctx.index("## Relevant memory")
     assert guardrails_index < task_memory_index
 
-    guardrails_section = ctx.split("## PROJECT GUARDRAILS\n", maxsplit=1)[1].split(
-        "\n## TASK MEMORY CANDIDATES", maxsplit=1
+    guardrails_section = ctx.split("## Guardrails\n", maxsplit=1)[1].split(
+        "\n## Relevant memory", maxsplit=1
     )[0]
-    task_memory_section = ctx.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
-        "\n## NEXT ACTION", maxsplit=1
+    task_memory_section = ctx.split("## Relevant memory\n", maxsplit=1)[1].split(
+        "\n## Next action", maxsplit=1
     )[0]
     assert "No relevant task memories selected." in task_memory_section
     assert "Python file size limits" not in task_memory_section
@@ -437,11 +438,11 @@ def test_startup_builder_renders_selected_task_memories_separate_from_guardrails
 
     ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
 
-    guardrails_section = ctx.split("## PROJECT GUARDRAILS\n", maxsplit=1)[1].split(
-        "\n## TASK MEMORY CANDIDATES", maxsplit=1
+    guardrails_section = ctx.split("## Guardrails\n", maxsplit=1)[1].split(
+        "\n## Relevant memory", maxsplit=1
     )[0]
-    task_memory_section = ctx.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
-        "\n## NEXT ACTION", maxsplit=1
+    task_memory_section = ctx.split("## Relevant memory\n", maxsplit=1)[1].split(
+        "\n## Next action", maxsplit=1
     )[0]
     assert "L1 Guardrail" in guardrails_section
     assert "Remember fallback behavior" not in guardrails_section
@@ -529,11 +530,9 @@ def test_startup_builder_task_memory_empty_state_compaction_is_deterministic(pro
     assert first == second
     assert "empty-state " in first
     assert "empty-state " + ("p" * 200) not in first
-    empty_state_line = first.split("## TASK MEMORY CANDIDATES\n", maxsplit=1)[1].split(
-        "\n", maxsplit=1
-    )[0]
+    empty_state_line = first.split("## Relevant memory\n", maxsplit=1)[1].split("\n", maxsplit=1)[0]
     assert empty_state_line.endswith("...")
-    assert len(empty_state_line) == 40
+    assert len(empty_state_line.lstrip("- ")) == 40
 
 
 def test_task_context_shows_title(task):
@@ -797,7 +796,7 @@ def test_startup_context_shows_constraints_first(tmp_db, project, monkeypatch):
     )
 
     ctx = get_startup_context(project.id)
-    assert "## PROJECT GUARDRAILS" in ctx
+    assert "## Guardrails" in ctx
     assert "No pip" in ctx
     assert "WAL mode" not in ctx
 

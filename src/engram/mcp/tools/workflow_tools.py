@@ -101,14 +101,14 @@ def register_workflow_tools(server: Any) -> None:
                 if phase_complete
                 else "Run engram_workflow_start to claim the next task."
             )
-            return engram.mcp.tools._respond(
-                {
-                    "ok": True,
-                    "id": res["id"],
-                    "commit": res["commit"],
-                    "phase_complete": phase_complete,
-                    "next": next_guidance,
-                }
+            from engram.services.workflow_formatter import format_finish_success
+
+            return format_finish_success(
+                task_id=res["id"],
+                commit_msg=res["commit"],
+                phase_complete=phase_complete,
+                next_guidance=next_guidance,
+                task_title=res.get("task_title"),
             )
         except EngramServiceError as exc:
             return engram.mcp.tools._respond_error(exc)
