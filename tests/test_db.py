@@ -16,23 +16,26 @@ def test_get_db_connection_default_path(monkeypatch):
     mock_create.assert_called_once_with(DEFAULT_DB_PATH)
 
 
-def test_get_default_db_path_resolves_repo_local():
+def test_get_default_db_path_resolves_repo_local(tmp_path, monkeypatch):
     """Test that get_default_db_path resolves to repo-local path in git repo."""
+    repo_path = tmp_path / "my_git_repo"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
+
     from engram.db import get_default_db_path
 
     path = get_default_db_path()
-    assert ".engram" in path.parts
-    assert path.name == "memory.db"
+    assert path == repo_path / ".engram" / "memory.db"
 
 
-def test_get_default_db_path_fallback_outside_repo(monkeypatch):
+def test_get_default_db_path_fallback_outside_repo(tmp_path, monkeypatch):
     """Test that get_default_db_path falls back to home directory if outside a repo."""
-    from engram.services.errors import EngramServiceError
+    outside_path = tmp_path / "not_a_repo"
+    outside_path.mkdir()
 
-    def mock_raise(*args, **kwargs):
-        raise EngramServiceError("UNRESOLVED_WORKSPACE", "No git repo found")
-
-    monkeypatch.setattr("engram.services.project_path.get_repo_local_db_path", mock_raise)
+    monkeypatch.setattr("os.getcwd", lambda: str(outside_path))
 
     from engram.db import get_default_db_path
 

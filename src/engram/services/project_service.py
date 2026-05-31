@@ -27,13 +27,17 @@ def resolve_current_project(cwd: str | None = None) -> dict[str, JsonValue]:
         if db_path.exists():
             from engram.db import get_db_connection
 
-            conn = get_db_connection(db_path)
+            row = None
             try:
-                row = conn.execute("SELECT * FROM projects LIMIT 1").fetchone()
+                conn = get_db_connection(db_path)
+                try:
+                    row = conn.execute("SELECT * FROM projects LIMIT 1").fetchone()
+                except Exception:
+                    row = None
+                finally:
+                    conn.close()
             except Exception:
                 row = None
-            finally:
-                conn.close()
 
             if row is not None:
                 repo_paths = json.loads(row["repo_paths"]) if row["repo_paths"] else []

@@ -220,3 +220,132 @@ def test_append_to_gitignore_preserves_new_lines_and_whitespace(tmp_path):
 
     content = gitignore_path.read_text(encoding="utf-8")
     assert content == "*.log\n*.tmp\n.engram/\n"
+
+
+def test_resolve_current_project_production_no_git(tmp_path):
+    """Verify resolve_current_project raises PROJECT_NOT_BOUND in production mode when outside a git repo."""
+    import sys
+    from unittest.mock import patch
+
+    cwd = tmp_path / "production_unbound"
+    cwd.mkdir()
+
+    with patch.dict(sys.modules):
+        if "pytest" in sys.modules:
+            del sys.modules["pytest"]
+
+        with pytest.raises(EngramServiceError) as raised:
+            resolve_current_project(cwd=str(cwd))
+        assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_resolve_current_project_production_missing_engram(tmp_path):
+    """Verify resolve_current_project raises PROJECT_NOT_BOUND in production mode when .git exists but .engram is missing."""
+    import sys
+    from unittest.mock import patch
+
+    cwd = tmp_path / "production_unbound"
+    cwd.mkdir()
+    (cwd / ".git").mkdir()
+
+    with patch.dict(sys.modules):
+        if "pytest" in sys.modules:
+            del sys.modules["pytest"]
+
+        with pytest.raises(EngramServiceError) as raised:
+            resolve_current_project(cwd=str(cwd))
+        assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_resolve_current_project_production_missing_db(tmp_path):
+    """Verify resolve_current_project raises PROJECT_NOT_BOUND in production mode when .git and .engram exist but DB is missing."""
+    import sys
+    from unittest.mock import patch
+
+    cwd = tmp_path / "production_unbound"
+    cwd.mkdir()
+    (cwd / ".git").mkdir()
+    (cwd / ".engram").mkdir()
+
+    with patch.dict(sys.modules):
+        if "pytest" in sys.modules:
+            del sys.modules["pytest"]
+
+        with pytest.raises(EngramServiceError) as raised:
+            resolve_current_project(cwd=str(cwd))
+        assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_resolve_current_project_production_empty_db(tmp_path):
+    """Verify resolve_current_project raises PROJECT_NOT_BOUND in production mode when DB is present but empty."""
+    import sys
+    from unittest.mock import patch
+
+    from engram.db import init_db
+
+    cwd = tmp_path / "production_unbound"
+    cwd.mkdir()
+    (cwd / ".git").mkdir()
+    (cwd / ".engram").mkdir()
+
+    db_path = cwd / ".engram" / "memory.db"
+    init_db(db_path)
+
+    with patch.dict(sys.modules):
+        if "pytest" in sys.modules:
+            del sys.modules["pytest"]
+
+        with pytest.raises(EngramServiceError) as raised:
+            resolve_current_project(cwd=str(cwd))
+        assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_resolve_current_project_production_corrupted_db(tmp_path):
+    """Verify resolve_current_project raises PROJECT_NOT_BOUND in production mode when DB is corrupted."""
+    import sys
+    from unittest.mock import patch
+
+    cwd = tmp_path / "production_unbound"
+    cwd.mkdir()
+    (cwd / ".git").mkdir()
+    (cwd / ".engram").mkdir()
+
+    db_path = cwd / ".engram" / "memory.db"
+    db_path.write_text("not a sqlite database", encoding="utf-8")
+
+    with patch.dict(sys.modules):
+        if "pytest" in sys.modules:
+            del sys.modules["pytest"]
+
+        with pytest.raises(EngramServiceError) as raised:
+            resolve_current_project(cwd=str(cwd))
+        assert raised.value.code == "PROJECT_NOT_BOUND"
+
+
+def test_resolve_current_project_test_fallback_success(tmp_db, tmp_path):
+    """Verify resolve_current_project successfully uses find_by_repo_path fallback in test environment."""
+    from engram.models.project import Project
+
+    cwd = str((tmp_path / "legacy_path").resolve())
+
+    Project.create(
+        id="legacy-fallback-proj",
+        name="Legacy Fallback Project",
+        summary="A legacy fallback project",
+        repo_paths=[cwd],
+    )
+
+    payload = resolve_current_project(cwd=cwd)
+
+    assert payload["id"] == "legacy-fallback-proj"
+    assert payload["name"] == "Legacy Fallback Project"
+    assert cwd in payload["repo_paths"]
+
+
+def test_resolve_current_project_test_fallback_no_match(tmp_db, tmp_path):
+    """Verify resolve_current_project raises PROJECT_NOT_BOUND in test environment when fallback doesn't match."""
+    cwd = str((tmp_path / "unbound_path").resolve())
+
+    with pytest.raises(EngramServiceError) as raised:
+        resolve_current_project(cwd=cwd)
+    assert raised.value.code == "PROJECT_NOT_BOUND"
