@@ -131,3 +131,92 @@ def test_local_state_paths_derivation(tmp_path):
 
     db_path = get_repo_local_db_path(cwd=str(nested_dir))
     assert db_path == tmp_path / ".engram" / "memory.db"
+
+
+def test_initialize_project_creates_local_db_and_metadata(tmp_path):
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+
+    from engram.db import get_db_connection
+    from engram.services.project_service import initialize_project
+
+    payload = initialize_project(
+        cwd=str(repo_path),
+        name="Cool Project",
+        project_id="cool-proj",
+        summary="A summary of cool project",
+    )
+
+    assert payload["id"] == "cool-proj"
+    assert payload["name"] == "Cool Project"
+    assert payload["summary"] == "A summary of cool project"
+    assert payload["repo_paths"] == [str(repo_path)]
+    assert payload["created"] is True
+
+    db_path = repo_path / ".engram" / "memory.db"
+    assert db_path.exists()
+
+    # Query the local DB directly to verify metadata row exists
+    conn = get_db_connection(db_path)
+    row = conn.execute("SELECT * FROM projects WHERE id = ?", ("cool-proj",)).fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row["name"] == "Cool Project"
+    assert row["summary"] == "A summary of cool project"
+
+    # Verify gitignore
+    gitignore_path = repo_path / ".gitignore"
+    assert gitignore_path.exists()
+    assert ".engram/" in gitignore_path.read_text(encoding="utf-8")
+
+
+def test_initialize_project_is_idempotent(tmp_path):
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+
+    from engram.services.project_service import initialize_project
+
+    # First run
+    payload1 = initialize_project(
+        cwd=str(repo_path),
+        name="Cool Project",
+        project_id="cool-proj",
+    )
+    assert payload1["created"] is True
+
+    # Second run
+    payload2 = initialize_project(
+        cwd=str(repo_path),
+        name="Cool Project",
+        project_id="cool-proj",
+    )
+    assert payload2["created"] is False
+    assert payload2["id"] == "cool-proj"
+
+    # Verify gitignore has exactly one entry
+    gitignore_content = (repo_path / ".gitignore").read_text(encoding="utf-8")
+    assert gitignore_content.count(".engram/") == 1
+
+
+def test_append_to_gitignore_preserves_new_lines_and_whitespace(tmp_path):
+    from engram.services.project_service import append_to_gitignore
+
+    # Case 1: Existing file without trailing newline
+    gitignore_path = tmp_path / ".gitignore"
+    gitignore_path.write_text("*.log\n*.tmp", encoding="utf-8")
+
+    append_to_gitignore(tmp_path)
+
+    content = gitignore_path.read_text(encoding="utf-8")
+    assert content == "*.log\n*.tmp\n.engram/\n"
+
+    # Case 2: Existing file with trailing newline
+    gitignore_path.write_text("*.log\n*.tmp\n", encoding="utf-8")
+
+    append_to_gitignore(tmp_path)
+
+    content = gitignore_path.read_text(encoding="utf-8")
+    assert content == "*.log\n*.tmp\n.engram/\n"

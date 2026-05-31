@@ -5,7 +5,6 @@ import os
 import click
 
 import engram.cli as cli_root
-from engram.models.project import Project
 
 
 @cli_root.cli.command()
@@ -14,31 +13,21 @@ from engram.models.project import Project
 @click.option("--summary", help="Short project summary")
 def init(name, id, summary):
     """Initialize engram in the current repository."""
+    from engram.services.errors import EngramServiceError
+    from engram.services.project_service import initialize_project
+
     cwd = os.getcwd()
 
-    # Check if already registered
-    existing = Project.find_by_repo_path(cwd)
-    if existing:
-        cli_root.console.print(
-            f"[yellow]Current directory is already bound to project:[/yellow] {existing.id} ({existing.name})"
-        )
-        return
-
-    if not id:
-        # Simple slugify
-        id = name.lower().replace(" ", "-")
-
-    # Check if project ID already exists
-    all_projects = Project.list_all()
-    project = next((p for p in all_projects if p.id == id), None)
-
-    if project:
-        cli_root.console.print(
-            f"[yellow]Project '{id}' already exists. Binding current directory to it.[/yellow]"
-        )
-        project.add_repo_path(cwd)
-    else:
-        Project.create(id, name, summary, repo_paths=[cwd])
-        cli_root.console.print(
-            f"[green]Initialized project '{id}' and bound to current directory.[/green]"
-        )
+    try:
+        payload = initialize_project(cwd=cwd, name=name, project_id=id, summary=summary)
+        if payload.get("created"):
+            cli_root.console.print(
+                f"[green]Initialized project '{payload['id']}' and bound to current directory.[/green]"
+            )
+        else:
+            cli_root.console.print(
+                f"[yellow]Current directory is already bound to project:[/yellow] {payload['id']} ({payload['name']})"
+            )
+    except EngramServiceError as e:
+        cli_root.console.print(f"[red]Error:[/red] {e.message}")
+        raise click.Abort() from e
