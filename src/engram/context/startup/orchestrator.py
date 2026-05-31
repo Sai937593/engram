@@ -128,6 +128,28 @@ def build_startup_context(
                 f"... {hidden_path_count} additional relevant file path(s) hidden by cap."
             )
 
+    # Task context (compact phase/task anchors) and sparse-metadata search hints.
+    task_context_list: list[str] = []
+    if selected_task:
+        task_context_list.append(f"Task: {selected_task.title} ({selected_task.id})")
+        if phase_title:
+            phase_display = f"{phase_title} ({phase_id})" if phase_id else phase_title
+            task_context_list.append(f"Phase: {phase_display}")
+
+    start_hints_list: list[str] = []
+    if selected_task and not relevant_files_list:
+        title_hint = _compact_with_limit(selected_task.title, 80)
+        if title_hint:
+            start_hints_list.append(title_hint)
+        if phase_title:
+            phase_hint = _compact_with_limit(phase_title, 80)
+            if phase_hint:
+                start_hints_list.append(phase_hint)
+        if selected_task.tags:
+            tags_hint = _compact_with_limit(", ".join(selected_task.tags[:3]), 80)
+            if tags_hint:
+                start_hints_list.append(tags_hint)
+
     # Guardrails
     guardrail_str = _build_guardrail_frame(resolved_project.id, resolved_options)
     guardrails_list = [line for line in guardrail_str.split("\n")[1:] if line.strip()]
@@ -156,7 +178,9 @@ def build_startup_context(
         branch=branch,
         objective=objective,
         acceptance=acceptance,
+        task_context=task_context_list or None,
         relevant_files=relevant_files_list or None,
+        start_hints=start_hints_list or None,
         guardrails=guardrails_list or None,
         memories=memories_list or None,
         next_action=next_action_content or None,

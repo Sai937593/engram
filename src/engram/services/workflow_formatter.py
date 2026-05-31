@@ -12,7 +12,9 @@ def format_work_order(
     branch: str | None,
     objective: str | None,
     acceptance: str | None,
+    task_context: list[str] | None,
     relevant_files: list[str] | None,
+    start_hints: list[str] | None,
     guardrails: list[str] | None,
     memories: list[str] | None,
     next_action: str | None,
@@ -33,6 +35,12 @@ def format_work_order(
         lines.append(acceptance)
         lines.append("")
 
+    if task_context:
+        lines.append("## Task context")
+        for entry in task_context:
+            lines.append(f"- {entry}")
+        lines.append("")
+
     lines.append("## Start here")
     if relevant_files:
         for f in relevant_files:
@@ -41,6 +49,9 @@ def format_work_order(
         lines.append(
             "- Search the codebase using engram_memory_search to find relevant memories or context."
         )
+        if start_hints:
+            for hint in start_hints:
+                lines.append(f"- Search hint: {hint}")
     lines.append("")
 
     lines.append("## Guardrails")
