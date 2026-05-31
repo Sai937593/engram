@@ -40,6 +40,8 @@ def test_register_tools_registers_engram_project_current() -> None:
 
     assert "engram_project_current" in server.tools
     assert server.tools["engram_project_current"].__name__ == "engram_project_current"
+    assert "engram_project_init" in server.tools
+    assert server.tools["engram_project_init"].__name__ == "engram_project_init"
     assert "engram_task_list" in server.tools
     assert server.tools["engram_task_list"].__name__ == "engram_task_list"
     assert "engram_task_get" in server.tools
@@ -1081,6 +1083,8 @@ def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
         "INVALID_TASK_STATUS",
         "PHASE_COMPLETION_BLOCKED",
         "UNFINISHED_TASKS",
+        "PROJECT_NOT_BOUND",
+        "UNRESOLVED_WORKSPACE",
     ]
 
     for code in known_codes:
@@ -1090,7 +1094,8 @@ def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
         assert res["error"] == code
         assert res["message"] == f"Test error {code}"
         assert "fix" in res
-        assert "engram_" in res["fix"]  # references MCP tool names
+        if code != "UNRESOLVED_WORKSPACE":
+            assert "engram_" in res["fix"]  # references MCP tool names
 
     # Unknown/unexpected error should not have fix field
     exc_unknown = EngramServiceError(code="SOME_UNKNOWN_ERROR", message="An unknown error")
@@ -1158,3 +1163,60 @@ def test_mcp_phase_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     )
     assert res_err2["ok"] is False
     assert res_err2["error"] == "INVALID_PHASE_STATUS"
+
+
+def test_mcp_project_init_success(tmp_path, monkeypatch) -> None:
+    """Verify engram_project_init creates project, db, and gitignore."""
+    repo_path = tmp_path / "repo_mcp_init"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    init_handler = server.tools["engram_project_init"]
+
+    res = yaml.safe_load(
+        init_handler(
+            name="MCP Bound Project",
+            project_id="mcp-bound-proj",
+            summary="MCP summary description",
+        )
+    )
+
+    assert res["ok"] is True
+    assert res["created"] is True
+    assert res["project"]["id"] == "mcp-bound-proj"
+    assert res["project"]["name"] == "MCP Bound Project"
+    assert "hint" in res
+
+    # Verify DB file is created
+    db_path = repo_path / ".engram" / "memory.db"
+    assert db_path.exists()
+
+    # Verify .gitignore is created and contains .engram/
+    gitignore_path = repo_path / ".gitignore"
+    assert gitignore_path.exists()
+    assert ".engram/" in gitignore_path.read_text(encoding="utf-8")
+
+
+def test_mcp_project_init_unbound_raises_unresolved_workspace(tmp_path, monkeypatch) -> None:
+    """Verify engram_project_init returns UNRESOLVED_WORKSPACE when run outside git repository."""
+    unbound_path = tmp_path / "unbound_dir"
+    unbound_path.mkdir()
+
+    monkeypatch.setattr("os.getcwd", lambda: str(unbound_path))
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    init_handler = server.tools["engram_project_init"]
+
+    res = yaml.safe_load(init_handler())
+    assert res["ok"] is False
+    assert res["error"] == "UNRESOLVED_WORKSPACE"
+    assert "git init" in res["fix"]

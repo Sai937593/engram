@@ -102,3 +102,34 @@ def register_workflow_tools(server: Any) -> None:
             )
         except EngramServiceError as exc:
             return engram.mcp.tools._respond_error(exc)
+
+    @server.tool()
+    def engram_project_init(
+        name: str | None = None,
+        project_id: str | None = None,
+        summary: str | None = None,
+    ) -> str:
+        """Initialize a new engram project in the current workspace directory.
+
+        Creates the repo-local database inside `.engram/`, writes project metadata, and ensures
+        `.engram/` is added to the repository `.gitignore`.
+        """
+        try:
+            project = engram.mcp.tools.initialize_project(
+                name=name, project_id=project_id, summary=summary
+            )
+            slim_project = {
+                "id": str(project["id"]),
+                "name": str(project["name"]),
+                "status": str(project["status"]),
+            }
+            return engram.mcp.tools._respond(
+                {
+                    "ok": True,
+                    "created": bool(project.get("created")),
+                    "project": slim_project,
+                    "hint": "Project successfully bound. Run engram_workflow_start or engram_task_list to start.",
+                }
+            )
+        except EngramServiceError as exc:
+            return engram.mcp.tools._respond_error(exc)

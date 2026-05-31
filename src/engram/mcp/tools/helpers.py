@@ -49,6 +49,8 @@ def _respond_error(exc: EngramServiceError) -> str:
         "INVALID_TASK_STATUS": "Use a valid task status (todo, in-progress, done, blocked, or cancelled) and update using engram_task_update.",
         "PHASE_COMPLETION_BLOCKED": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
         "UNFINISHED_TASKS": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
+        "PROJECT_NOT_BOUND": "Run engram_project_init to initialize Engram in this repository.",
+        "UNRESOLVED_WORKSPACE": "Run git init first to initialize a git repository.",
     }
 
     fix_val = getattr(exc, "fix", None) or known_fixes.get(exc.code)
