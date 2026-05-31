@@ -1,57 +1,50 @@
-# Implementation Plan - Task 1851de97 (Phase 6.2)
+# Implementation Plan - Task 8e1172e6 (Phase 6.3)
 
 ## Scope
-Curate Work Order guardrails and task-memory signals so `engram_workflow_start` stays compact, deterministic, and useful for implementation startup. Improve ordering/caps/truncation and sparse-memory guidance without introducing retrieval-system overhauls or new memory-mutation surfaces.
+Add regression tests for `engram_workflow_start` Work Order output in dense and sparse startup states after Phase 6 refinements. Lock behavior for compact high-signal context, sparse-memory guidance, single `Next action` rendering, and deterministic output budget behavior across service and MCP-visible paths.
 
 ## Constraints and Boundaries
-- Do not introduce Phase 7+ behaviors: no readiness lifecycle gates, `engram_workflow_verify`, finish gating, or memory-review enforcement.
-- Keep output compact and non-duplicative.
-- Respect service-layer boundaries (`src/engram/services` remains adapter-safe).
-- No edits inside `planning/`, `workflow/`, or `.github/`.
-- Exclude semantic retrieval overhauls, raw DB access, and new memory-mutation APIs.
+- One-task session only: execute only task `8e1172e6`.
+- Test-focused scope: no new workflow lifecycle states, no finish gating, no verify-phase behavior.
+- Keep edits within currently implemented workflow-start surface.
+- Respect no-touch directories: `planning/`, `workflow/`, `.github/`.
+- Preserve service/adapter boundaries in `src/engram/services`.
 
-## Current Investigation Plan
-1. Inspect current startup output assembly and section composition:
-- `src/engram/context/startup/builders.py`
-- `src/engram/context/startup/options.py`
-- `src/engram/memory_retrieval/startup_orchestration.py`
-- `src/engram/services/workflow_formatter.py`
-
-2. Inspect tests that lock startup rendering and memory/guardrail behavior:
+## Investigation Plan
+1. Review existing startup and workflow-start regression tests:
 - `tests/test_context.py`
-- Related workflow-start tests discovered via targeted search.
+- `tests/test_services_workflow_start_basic.py`
+- `tests/test_mcp_tools.py`
+- `tests/test_workflow_redesign_phase_5_regressions.py`
 
-3. Identify coverage gaps against acceptance criteria:
-- Guardrails/task-memory separation clarity
-- Deterministic ordering and compact caps
-- Truncation metadata visibility and stability
-- Useful sparse-memory next-step guidance
+2. Map acceptance criteria to concrete assertions:
+- Dense guardrail + memory rendering remains compact and deterministic.
+- Sparse task metadata/memory path shows useful guidance without duplication.
+- Exactly one `Next action` section is emitted.
+- Budget/truncation behavior stays deterministic.
 
-## Planned Implementation
-1. Add/adjust startup-context builders and formatter behavior to ensure:
-- Guardrails and task-memory are clearly separated and deterministic
-- Section output remains compact under configured budgets
-- Truncation behavior and indicators remain explicit and stable
+3. Identify whether any small fixture/helper additions are needed to avoid brittle assertions.
 
-2. Refine startup memory orchestration behavior for sparse/weak candidates:
-- Improve empty/sparse task-memory guidance with concrete next-step search hints
-- Avoid filler content while preserving current retrieval contracts
+## Planned Changes
+1. Add or refine tests for dense startup state:
+- Verify compact Work Order sections with high-signal guardrail/memory content.
+- Verify no duplicated obvious task metadata.
 
-3. Update/extend tests:
-- Assert deterministic ordering and clear section separation
-- Assert sparse-memory guidance behavior
-- Assert output budgets/truncation behavior remains enforced
-- Keep service/MCP adapter boundaries unaffected
+2. Add or refine tests for sparse startup state:
+- Verify fallback guidance when relevant memories/files are absent.
+- Verify output still includes one actionable `Next action`.
+
+3. Add/adjust budget stability assertions:
+- Lock deterministic truncation/ordering behavior under constrained output budgets.
+
+4. If needed, make minimal production adjustments only to satisfy validated regression expectations and keep behavior consistent across service + MCP entry points.
 
 ## Validation Plan
-- Run targeted tests for startup context/workflow formatter behavior first.
-- Run broader unit tests impacted by touched modules.
-- Confirm no semantic retrieval overhaul or adapter-boundary regressions.
+- Run targeted tests for edited modules first.
+- Run the full related workflow-start test set listed above.
+- Ensure zero failures before any finish step.
 
 ## Out of Scope
-- Any readiness lifecycle policy changes.
-- `engram_workflow_verify` implementation.
-- Finish-time verification or memory-review enforcement.
-- Any raw DB access pathway additions.
-- Any new memory-mutation or manual task-tracking surfaces.
-- Unrelated repository cleanup.
+- Implementing later-phase verification or readiness gates.
+- Changing `engram_workflow_finish` behavior.
+- Broad refactors outside startup Work Order regression coverage.

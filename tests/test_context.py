@@ -610,6 +610,83 @@ def test_startup_builder_task_memory_empty_state_includes_search_guidance_for_se
     assert "- Phase Memory Guidance" in memory_section
 
 
+def test_startup_builder_dense_context_keeps_single_next_action_and_no_metadata_duplication(
+    project,
+):
+    phase = Phase.create(project_id=project.id, title="Phase Dense", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Dense startup task",
+        phase_id=phase.id,
+        status="in-progress",
+        description="Implement dense startup behavior checks.",
+        acceptance="Dense startup rendering remains compact and deterministic.",
+        relevant_files=[
+            "src/engram/context/startup/builders.py",
+            "src/engram/context/startup/orchestrator.py",
+        ],
+    )
+    Memory.create(
+        project_id=project.id,
+        type="constraint",
+        title="Dense Guardrail",
+        content="Keep startup rendering compact.",
+        level="L1",
+    )
+
+    ctx = build_startup_context(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+        branch="feat/dense-startup",
+        is_resuming=False,
+    )
+
+    assert ctx.startswith("# Work Order")
+    assert "Branch: `feat/dense-startup`" in ctx
+    assert "## Task context" in ctx
+    assert "- Task: Dense startup task" in ctx
+    assert "- Phase: Phase Dense" in ctx
+    assert "## Guardrails" in ctx
+    assert "Dense Guardrail" in ctx
+    assert ctx.count("## Next action") == 1
+    assert "task_id:" not in ctx.lower()
+    assert "status:" not in ctx.lower()
+
+
+def test_startup_builder_sparse_context_budget_is_deterministic(project):
+    phase = Phase.create(project_id=project.id, title="Phase Sparse", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Sparse startup task",
+        phase_id=phase.id,
+        status="todo",
+        tags=["sparse", "guidance", "budget"],
+    )
+    options = StartupContextOptions(hard_char_budget=680)
+
+    first = build_startup_context(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+        options=options,
+    )
+    second = build_startup_context(
+        project=project,
+        active_phase=phase,
+        selected_task=task,
+        options=options,
+    )
+
+    assert first == second
+    assert len(first) <= 680
+    assert "## Start here" in first
+    assert "Search the codebase using engram_memory_search" in first
+    assert "- Search hint: Sparse startup task" in first
+    assert "- Search hint: Phase Sparse" in first
+    assert first.endswith("[Context truncated to fit budget.]")
+
+
 def test_task_context_shows_title(task):
     ctx = get_task_context(task.id)
     assert task.title in ctx

@@ -188,6 +188,60 @@ def test_blocked_start_contract(tmp_db: Any, monkeypatch: Any) -> None:
     assert "engram_" in res_mcp["fix"]
 
 
+def test_start_contract_sparse_metadata_in_service_and_mcp(tmp_db: Any, monkeypatch: Any) -> None:
+    """Verify sparse startup still returns compact actionable Work Order in both service and MCP paths."""
+    cwd = os.path.abspath("repo/bound-mcp-workflow-start-sparse")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-start-sparse",
+        name="Workflow Start Sparse Project",
+        summary="Sparse startup contract validation",
+        repo_paths=[cwd],
+    )
+    Phase.create(project_id=project.id, id="ph-sparse", title="Phase Sparse", status="active")
+    Task.create(
+        project_id=project.id,
+        id="t-sparse",
+        title="Sparse task title",
+        phase="Phase Sparse",
+        phase_id="ph-sparse",
+        status="todo",
+        tags=["sparse", "startup", "guidance"],
+    )
+
+    git_mock = GitMock()
+    git_mock.branch = "main"
+    git_mock.status = ""
+    git_mock.show_ref_returncode = 0
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    start_handler = server.tools["engram_workflow_start"]
+
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        res = start_workflow("proj-start-sparse", cwd)
+        res_mcp = asyncio.run(start_handler())
+
+    context = res["context"]
+    assert context.startswith("# Work Order")
+    assert context.count("## Next action") == 1
+    assert "## Start here" in context
+    assert "Search the codebase using engram_memory_search" in context
+    assert "- Search hint: Sparse task title" in context
+    assert "- Search hint: Phase Sparse" in context
+    assert "task_id:" not in context.lower()
+    assert "status:" not in context.lower()
+
+    assert res_mcp.startswith("# Work Order")
+    assert res_mcp.count("## Next action") == 1
+    assert "- Search hint: Sparse task title" in res_mcp
+    assert "task_id:" not in res_mcp.lower()
+    assert "status:" not in res_mcp.lower()
+
+
 def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
     """Verify successful finish contract for both stop-after-finish (phase not complete) and phase complete states."""
     cwd = os.path.abspath("repo/bound-mcp-workflow-finish")
