@@ -154,7 +154,7 @@ def test_format_finish_success() -> None:
     )
 
     assert res.startswith("# Task Finished")
-    assert "Task: `t-123` — Add Feature" in res
+    assert "Task: `t-123` - Add Feature" in res
     assert "Commit: `feat(scope): add feature [t-123]`" in res
     assert "Phase complete: False" in res
     assert "## Next action" in res
@@ -175,7 +175,7 @@ def test_format_finish_blocked() -> None:
     )
 
     assert res.startswith("# Finish Blocked")
-    assert "Task: `t-123` — Add Feature" in res
+    assert "Task: `t-123` - Add Feature" in res
     assert "Reason: Branch dirty" in res
     assert "## Next action" in res
     assert "Commit or stash changes before proceeding." in res
