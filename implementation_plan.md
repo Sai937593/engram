@@ -1,40 +1,52 @@
-# Implementation Plan - Task b26fc802 (Phase 3.3)
+﻿# Implementation Plan - Task 0b622c80 (Phase 6.1)
 
 ## Scope
-Rewrite published manuals for repo-local, MCP-first workflow behavior without changing product code. Keep CLI documentation trimmed to optional human utilities (`init`, `guide`, `db`) and remove wording that implies normal agent workflows depend on CLI.
+Refine `engram_workflow_start` startup-context coverage so the Work Order gives high-signal implementation context (objective, acceptance, relevant-file guidance, compact phase/task context) without broad repository scanning. Preserve current task selection and branch checkout behavior.
 
-## Current Findings
-- `README.md` still describes storage as user-level `~/.engram/memory.db` and architecture diagram references `~/.engram/`.
-- `docs/USER_MANUAL.md` and `src/engram/USER_MANUAL.md` still describe central/global storage and global DB diagnostics.
-- Workflow sections already emphasize MCP tools, but some wording still mixes CLI and MCP in ways that can imply CLI dependency.
-- `docs/PROJECT_BRIEF.md` appears mostly aligned but will be checked for consistency-only updates if required by acceptance framing.
+## Constraints and Boundaries
+- Do not introduce Phase 7+ behaviors: no readiness lifecycle gates, `engram_workflow_verify`, finish gating, or memory-review enforcement.
+- Keep output compact and non-duplicative.
+- Respect service-layer boundaries (`src/engram/services` remains adapter-safe).
+- No edits inside `planning/`, `workflow/`, or `.github/`.
 
-## Planned Changes
-1. `README.md`
-- Update storage model to repo-local `.engram/memory.db` as normal behavior.
-- Update architecture diagram labels and supporting bullets to match repo-local project state.
-- Keep MCP-first workflow guidance and clarify CLI as optional human utility only.
+## Current Investigation Plan
+1. Inspect current startup output assembly and section composition:
+- `src/engram/services/workflow_service.py`
+- `src/engram/context/startup/orchestrator.py`
+- `src/engram/context/startup/builders.py`
+- `src/engram/context/startup/next_action.py`
 
-2. `docs/USER_MANUAL.md`
-- Rewrite overview and project model sections to remove global-storage language.
-- Update `engram db` description to reflect repo-local diagnostics.
-- Tighten workflow narrative so normal agent execution is MCP tool/resource driven.
+2. Inspect tests that lock task selection/branch semantics and startup rendering:
+- `tests/test_context.py`
+- Related workflow-start tests found via targeted search.
 
-3. `src/engram/USER_MANUAL.md`
-- Mirror `docs/USER_MANUAL.md` updates so packaged and top-level manuals stay synchronized.
+3. Identify coverage gaps in startup guidance when task metadata is sparse:
+- Missing/weak relevant-file hints
+- Missing fallback search guidance
+- Repetition across objective/acceptance/context blocks
 
-4. `docs/PROJECT_BRIEF.md` (if needed)
-- Apply only minimal wording adjustments needed to remain consistent with repo-local MCP-first claims.
+## Planned Implementation
+1. Add/adjust startup-context builders to improve high-signal guidance under sparse metadata, prioritizing:
+- Clear objective + acceptance exposure
+- Relevant files first; deterministic fallback search hints only when needed
+- Compact guardrail/memory context with truncation metadata preserved
+
+2. Keep orchestration responsibilities clear:
+- Ensure orchestration composes existing context pieces without duplicating sections.
+- Avoid behavior changes to task selection, branch switching, or resume mechanics.
+
+3. Update/extend tests:
+- Assert compact output contract and non-duplicative section behavior.
+- Assert sparse metadata fallback guidance is present and stable.
+- Confirm task-selection/branch-checkout behavior remains unchanged.
 
 ## Validation Plan
-- Search for stale global-path phrasing:
-  - `rg -n "~/.engram|global database|globally outside the repository" README.md docs/USER_MANUAL.md src/engram/USER_MANUAL.md docs/PROJECT_BRIEF.md`
-- Ensure manuals remain in sync:
-  - `fc /N docs\\USER_MANUAL.md src\\engram\\USER_MANUAL.md` (or equivalent diff)
-- Run documentation-related checks if available in project tooling:
-  - `pytest -q` subset only if docs assertions exist.
+- Run targeted tests for context/workflow-start behavior first.
+- Run broader unit tests impacted by touched modules.
+- Confirm no new Phase 7+ semantics appear in output or logic.
 
 ## Out of Scope
-- Future-phase output-contract or verification-gate documentation updates.
-- Any CLI or MCP implementation refactors.
-- Non-task documentation cleanup unrelated to repo-local MCP-first behavior.
+- Any readiness lifecycle policy changes.
+- `engram_workflow_verify` implementation.
+- Finish-time verification or memory-review enforcement.
+- Unrelated repository cleanup.

@@ -179,6 +179,24 @@ def test_startup_builder_renders_search_hints_when_selected_task_has_no_relevant
         "Search the codebase using engram_memory_search to find relevant memories or context."
         in ctx
     )
+    assert "- Search hint: Task Without Relevant Files" in ctx
+    assert "- Search hint: Phase No Files" in ctx
+
+
+def test_startup_builder_renders_compact_task_context(project):
+    phase = Phase.create(project_id=project.id, title="Phase Context", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Task Context Anchor",
+        phase_id=phase.id,
+        status="in-progress",
+    )
+
+    ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
+
+    assert "## Task context" in ctx
+    assert "- Task: Task Context Anchor" in ctx
+    assert f"- Phase: Phase Context ({phase.id})" in ctx
 
 
 def test_startup_builder_caps_and_truncates_relevant_file_paths(project):
