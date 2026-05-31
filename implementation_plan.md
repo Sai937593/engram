@@ -1,50 +1,57 @@
-# Implementation Plan - Task 8e1172e6 (Phase 6.3)
+# Implementation Plan - Task c29f71bb (Phase 7.1)
 
 ## Scope
-Add regression tests for `engram_workflow_start` Work Order output in dense and sparse startup states after Phase 6 refinements. Lock behavior for compact high-signal context, sparse-memory guidance, single `Next action` rendering, and deterministic output budget behavior across service and MCP-visible paths.
+Add repo-local persistence for workflow verification results and expose a service contract to record and fetch the latest verification outcome for a task/workflow run. Keep this phase limited to storage, schema/migration, and lookup support for later freshness checks and concise summaries.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `8e1172e6`.
-- Test-focused scope: no new workflow lifecycle states, no finish gating, no verify-phase behavior.
-- Keep edits within currently implemented workflow-start surface.
+- One-task session only: execute only task `c29f71bb`.
+- Phase boundary: do not add `engram_workflow_finish` blocking, stale-verification enforcement, or memory-review gating.
 - Respect no-touch directories: `planning/`, `workflow/`, `.github/`.
 - Preserve service/adapter boundaries in `src/engram/services`.
+- Keep migrations idempotent and deterministic for fresh and legacy repos.
 
 ## Investigation Plan
-1. Review existing startup and workflow-start regression tests:
-- `tests/test_context.py`
-- `tests/test_services_workflow_start_basic.py`
-- `tests/test_mcp_tools.py`
-- `tests/test_workflow_redesign_phase_5_regressions.py`
+1. Inspect current DB schema/migration patterns in:
+- `src/engram/db/schema.py`
+- `src/engram/db/migrations.py`
 
-2. Map acceptance criteria to concrete assertions:
-- Dense guardrail + memory rendering remains compact and deterministic.
-- Sparse task metadata/memory path shows useful guidance without duplication.
-- Exactly one `Next action` section is emitted.
-- Budget/truncation behavior stays deterministic.
+2. Inspect current workflow service surface in:
+- `src/engram/services/workflow_service.py`
 
-3. Identify whether any small fixture/helper additions are needed to avoid brittle assertions.
+3. Inspect existing DB/service tests and fixtures in:
+- `tests/test_db.py`
+- Related workflow service tests if needed
+
+4. Define minimal verification record fields required now for:
+- Pass/fail outcome persistence
+- Timestamped recency/freshness comparison inputs
+- Basic user-facing summary support
 
 ## Planned Changes
-1. Add or refine tests for dense startup state:
-- Verify compact Work Order sections with high-signal guardrail/memory content.
-- Verify no duplicated obvious task metadata.
+1. Schema:
+- Add a dedicated verification-state table (or equivalent repo-local structure) keyed for task/workflow association with deterministic timestamps and status fields.
+- Add indexes/constraints needed for latest-outcome lookup and idempotent writes.
 
-2. Add or refine tests for sparse startup state:
-- Verify fallback guidance when relevant memories/files are absent.
-- Verify output still includes one actionable `Next action`.
+2. Migrations:
+- Add migration/backfill logic that safely upgrades existing DBs.
+- Ensure repeated init/migration runs remain no-op safe via table/column existence checks.
 
-3. Add/adjust budget stability assertions:
-- Lock deterministic truncation/ordering behavior under constrained output budgets.
+3. Service contract:
+- Add workflow service helpers to:
+- Record a verification result.
+- Fetch the latest verification result for a task/workflow.
+- Return structured data suitable for later freshness checks and concise summaries.
 
-4. If needed, make minimal production adjustments only to satisfy validated regression expectations and keep behavior consistent across service + MCP entry points.
+4. Tests:
+- Add/extend DB migration tests for fresh + legacy initialization determinism.
+- Add/extend service/DB tests validating record + latest lookup semantics and non-blocking behavior.
 
 ## Validation Plan
-- Run targeted tests for edited modules first.
-- Run the full related workflow-start test set listed above.
-- Ensure zero failures before any finish step.
+- Run targeted tests for touched files first.
+- Run full relevant test modules for DB + workflow service paths.
+- Ensure zero failures before any `engram_workflow_finish` call.
 
 ## Out of Scope
-- Implementing later-phase verification or readiness gates.
-- Changing `engram_workflow_finish` behavior.
-- Broad refactors outside startup Work Order regression coverage.
+- Any finish-time gating or enforcement behavior.
+- Memory-review policy enforcement.
+- Unrelated task lifecycle or CLI UX changes.

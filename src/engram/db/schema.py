@@ -96,6 +96,25 @@ def create_audit_log_table(cursor: sqlite3.Cursor) -> None:
     """)
 
 
+def create_workflow_verifications_table(cursor: sqlite3.Cursor) -> None:
+    """Create the workflow_verifications table when missing."""
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS workflow_verifications (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id        TEXT NOT NULL REFERENCES projects(id),
+        task_id           TEXT REFERENCES tasks(id),
+        workflow_run_ref  TEXT,
+        status            TEXT NOT NULL,
+        summary           TEXT NOT NULL,
+        details           TEXT,
+        verified_at       TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at        TEXT DEFAULT (datetime('now')),
+        CHECK (status IN ('passed', 'failed')),
+        CHECK (task_id IS NOT NULL OR workflow_run_ref IS NOT NULL)
+    )
+    """)
+
+
 def create_memories_fts_and_triggers(cursor: sqlite3.Cursor) -> None:
     """Create memories FTS table and sync triggers when FTS5 is available."""
     # Drop triggers first to ensure fresh creation
@@ -137,3 +156,11 @@ def create_indexes(cursor: sqlite3.Cursor) -> None:
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_phases_project_id ON phases(project_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_verifications_project_task_verified_at "
+        "ON workflow_verifications(project_id, task_id, verified_at DESC, id DESC)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_workflow_verifications_project_run_verified_at "
+        "ON workflow_verifications(project_id, workflow_run_ref, verified_at DESC, id DESC)"
+    )

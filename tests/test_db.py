@@ -56,6 +56,8 @@ def test_init_db_creates_parent_directory(tmp_path, monkeypatch):
     monkeypatch.setattr("engram.db.apply_tasks_column_migrations", MagicMock())
     monkeypatch.setattr("engram.db.create_memories_table", MagicMock())
     monkeypatch.setattr("engram.db.apply_memories_column_migrations", MagicMock())
+    monkeypatch.setattr("engram.db.create_workflow_verifications_table", MagicMock())
+    monkeypatch.setattr("engram.db.apply_workflow_verification_migrations", MagicMock())
     monkeypatch.setattr("engram.db.create_audit_log_table", MagicMock())
     monkeypatch.setattr("engram.db.create_indexes", MagicMock())
     monkeypatch.setattr("engram.db.create_memories_fts_and_triggers", MagicMock())
@@ -105,6 +107,8 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     mock_apply_tasks_column_migrations = MagicMock()
     mock_create_memories_table = MagicMock()
     mock_apply_memories_column_migrations = MagicMock()
+    mock_create_workflow_verifications_table = MagicMock()
+    mock_apply_workflow_verification_migrations = MagicMock()
     mock_create_audit_log_table = MagicMock()
     mock_create_indexes = MagicMock()
     mock_create_memories_fts_and_triggers = MagicMock()
@@ -121,6 +125,14 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     monkeypatch.setattr("engram.db.create_memories_table", mock_create_memories_table)
     monkeypatch.setattr(
         "engram.db.apply_memories_column_migrations", mock_apply_memories_column_migrations
+    )
+    monkeypatch.setattr(
+        "engram.db.create_workflow_verifications_table",
+        mock_create_workflow_verifications_table,
+    )
+    monkeypatch.setattr(
+        "engram.db.apply_workflow_verification_migrations",
+        mock_apply_workflow_verification_migrations,
     )
     monkeypatch.setattr("engram.db.create_audit_log_table", mock_create_audit_log_table)
     monkeypatch.setattr("engram.db.create_indexes", mock_create_indexes)
@@ -147,6 +159,8 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     mock_apply_tasks_column_migrations.assert_called_once_with(mock_cursor)
     mock_create_memories_table.assert_called_once_with(mock_cursor)
     mock_apply_memories_column_migrations.assert_called_once_with(mock_cursor)
+    mock_create_workflow_verifications_table.assert_called_once_with(mock_cursor)
+    mock_apply_workflow_verification_migrations.assert_called_once_with(mock_cursor)
     mock_create_audit_log_table.assert_called_once_with(mock_cursor)
     mock_create_indexes.assert_called_once_with(mock_cursor)
     mock_create_memories_fts_and_triggers.assert_called_once_with(mock_cursor)
@@ -176,6 +190,8 @@ def test_init_db_handles_fts5_error(monkeypatch):
     monkeypatch.setattr("engram.db.apply_tasks_column_migrations", MagicMock())
     monkeypatch.setattr("engram.db.create_memories_table", MagicMock())
     monkeypatch.setattr("engram.db.apply_memories_column_migrations", MagicMock())
+    monkeypatch.setattr("engram.db.create_workflow_verifications_table", MagicMock())
+    monkeypatch.setattr("engram.db.apply_workflow_verification_migrations", MagicMock())
     monkeypatch.setattr("engram.db.create_audit_log_table", MagicMock())
     monkeypatch.setattr("engram.db.create_indexes", MagicMock())
 
@@ -201,6 +217,22 @@ def test_init_db_handles_fts5_error(monkeypatch):
     mock_apply_task_status_migrations.assert_called_once_with(mock_cursor)
     mock_backfill_legacy_phase_ids.assert_called_once_with(mock_cursor)
     mock_apply_task_dependency_ref_migrations.assert_called_once_with(mock_cursor)
+
+
+def test_init_db_creates_workflow_verifications_table(tmp_db):
+    """Workflow verification persistence table exists with expected lookup columns."""
+    conn = get_db_connection(tmp_db)
+    columns = conn.execute("PRAGMA table_info(workflow_verifications)").fetchall()
+    conn.close()
+    names = {row["name"] for row in columns}
+    assert {
+        "project_id",
+        "task_id",
+        "workflow_run_ref",
+        "status",
+        "summary",
+        "verified_at",
+    } <= names
 
 
 def test_init_db_normalizes_legacy_dependency_refs(tmp_db):
