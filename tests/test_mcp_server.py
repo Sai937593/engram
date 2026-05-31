@@ -139,6 +139,11 @@ def test_run_stdio_server_initializes_db_once_and_uses_stdio_transport(monkeypat
         def run(self, *, transport: str) -> None:
             events.append(("run", transport))
 
+    class MockPath:
+        def exists(self) -> bool:
+            return True
+
+    monkeypatch.setattr("engram.services.project_path.get_repo_local_db_path", lambda: MockPath())
     monkeypatch.setattr(module, "init_db", lambda: events.append(("init_db", None)))
     monkeypatch.setattr(
         module,

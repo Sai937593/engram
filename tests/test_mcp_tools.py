@@ -1324,3 +1324,52 @@ def test_mcp_project_init_and_diagnostics_work_across_fresh_workspaces_with_same
         assert diagnostics["db"]["exists"] is True
         assert diagnostics["db"]["schema_ok"] is True
         assert diagnostics["gitignore"]["status"] == "configured"
+
+
+def test_mcp_diagnostics_repo_local_states(tmp_path, monkeypatch) -> None:
+    """Verify engram_project_current and engram_project_diagnostics produce stable, actionable states across fresh workspaces."""
+    import yaml
+
+    from engram.mcp.tools import register_tools
+
+    # 1. unresolved-workspace state (directory is NOT in a git repo)
+    unresolved_dir = tmp_path / "unresolved_dir"
+    unresolved_dir.mkdir()
+    monkeypatch.setattr("os.getcwd", lambda: str(unresolved_dir))
+
+    server = MockServer()
+    register_tools(server)
+    current_handler = server.tools["engram_project_current"]
+    diagnostics_handler = server.tools["engram_project_diagnostics"]
+
+    # In unresolved-workspace:
+    cur_unresolved = yaml.safe_load(current_handler())
+    assert cur_unresolved["ok"] is True
+    assert cur_unresolved["initialized"] is False
+    assert cur_unresolved["status"] == "unresolved-workspace"
+    assert "git init" in cur_unresolved["next"]
+
+    diag_unresolved = yaml.safe_load(diagnostics_handler())
+    assert diag_unresolved["ok"] is True
+    assert diag_unresolved["status"] == "unresolved-workspace"
+    assert diag_unresolved["repo_root_detected"] is False
+    assert "git init" in diag_unresolved["next_action"]
+
+    # 2. uninitialized state (directory IS a git repo but has no .engram dir/db)
+    repo_dir = tmp_path / "fresh_repo"
+    repo_dir.mkdir()
+    (repo_dir / ".git").mkdir()
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_dir))
+
+    # In uninitialized repository:
+    cur_uninit = yaml.safe_load(current_handler())
+    assert cur_uninit["ok"] is True
+    assert cur_uninit["initialized"] is False
+    assert cur_uninit["status"] == "uninitialized"
+    assert "engram_project_init" in cur_uninit["next"]
+
+    diag_uninit = yaml.safe_load(diagnostics_handler())
+    assert diag_uninit["ok"] is True
+    assert diag_uninit["status"] == "uninitialized"
+    assert diag_uninit["repo_root_detected"] is True
+    assert "engram_project_init" in diag_uninit["next_action"]

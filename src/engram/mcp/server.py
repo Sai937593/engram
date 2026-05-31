@@ -39,7 +39,15 @@ def create_server() -> Any:
 
 def run_stdio_server() -> None:
     """Initialize Engram storage and run MCP over STDIO transport."""
-    init_db()
+    try:
+        from engram.services.project_path import get_repo_local_db_path
+
+        db_path = get_repo_local_db_path()
+        if db_path.exists():
+            init_db()
+    except Exception:
+        pass
+
     server = create_server()
     register_resources(server)
     register_tools(server)
