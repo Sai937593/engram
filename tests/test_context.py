@@ -342,6 +342,35 @@ def test_startup_builder_guardrails_use_project_l0_l1_only_in_order(project):
     assert guardrails_section.find("L1 A") < guardrails_section.find("L1 B")
 
 
+def test_startup_builder_guardrails_are_deterministic_when_inserted_out_of_order(project):
+    Memory.create(
+        id="l1z00001",
+        project_id=project.id,
+        type="constraint",
+        title="Z Rule",
+        content="Should render after A Rule.",
+        scope="project",
+        level="L1",
+    )
+    Memory.create(
+        id="l1a00001",
+        project_id=project.id,
+        type="constraint",
+        title="A Rule",
+        content="Should render before Z Rule.",
+        scope="project",
+        level="L1",
+    )
+
+    first = build_startup_context(project=project)
+    second = build_startup_context(project=project)
+    assert first == second
+    guardrails_section = first.split("## Guardrails\n", maxsplit=1)[1].split(
+        "\n## Relevant memory", maxsplit=1
+    )[0]
+    assert guardrails_section.find("A Rule") < guardrails_section.find("Z Rule")
+
+
 def test_startup_builder_guardrails_empty_and_separate_from_task_memory_section(project):
     ctx = build_startup_context(project=project)
 
@@ -553,6 +582,32 @@ def test_startup_builder_task_memory_empty_state_compaction_is_deterministic(pro
     empty_state_line = first.split("## Relevant memory\n", maxsplit=1)[1].split("\n", maxsplit=1)[0]
     assert empty_state_line.endswith("...")
     assert len(empty_state_line.lstrip("- ")) == 40
+
+
+def test_startup_builder_task_memory_empty_state_includes_search_guidance_for_selected_task(
+    project,
+):
+    phase = Phase.create(project_id=project.id, title="Phase Memory Guidance", status="active")
+    task = Task.create(
+        project_id=project.id,
+        title="Tune startup memory guidance",
+        phase_id=phase.id,
+        status="in-progress",
+        tags=["memory", "startup", "guidance", "extra-tag"],
+    )
+    options = StartupContextOptions(task_memory_search_hint_limit=3)
+
+    ctx = build_startup_context(
+        project=project, active_phase=phase, selected_task=task, options=options
+    )
+
+    memory_section = ctx.split("## Relevant memory\n", maxsplit=1)[1].split(
+        "\n## Next action", maxsplit=1
+    )[0]
+    assert "No relevant task memories selected." in memory_section
+    assert "Search next using engram_memory_search with:" in memory_section
+    assert "- Tune startup memory guidance" in memory_section
+    assert "- Phase Memory Guidance" in memory_section
 
 
 def test_task_context_shows_title(task):

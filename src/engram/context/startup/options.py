@@ -30,6 +30,8 @@ class StartupContextOptions:
     task_memory_empty_state_char_limit: int = 220
     task_memory_item_title_char_limit: int = 100
     task_memory_item_content_char_limit: int = 260
+    task_memory_search_hint_limit: int = 3
+    task_memory_search_hint_char_limit: int = 80
     l1_guardrail_limit: int = 6
     relevant_file_limit: int = 5
     relevant_file_path_char_limit: int = 120
