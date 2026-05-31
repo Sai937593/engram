@@ -16,6 +16,7 @@ from engram.services.task.validation import validate_memory_review_outcome_field
 from engram.services.workflow_constants import CONVENTIONAL_COMMIT_TYPES
 from engram.services.workflow_helpers import (
     get_target_branch,
+    is_draft_only_pending,
     is_same_phase,
     resolve_commit_type,
     select_task_to_start,
@@ -36,7 +37,6 @@ def _run(args: list[str], cwd: str) -> str:
 
 
 def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
-    """Start or resume the next actionable task in the project."""
     project = Project.get(project_id)
     if not project:
         raise EngramServiceError(
@@ -48,6 +48,14 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
     task, is_resuming = select_task_to_start(project_id)
 
     if not task:
+        if is_draft_only_pending(project_id):
+            raise EngramServiceError(
+                code="WORKFLOW_START_DRAFT_ONLY",
+                message=(
+                    "No ready task is available to start. Remaining tasks are draft-only and must "
+                    "be promoted to ready first."
+                ),
+            )
         startup_res = orchestrate_startup_task_memory_retrieval(
             project=project, active_phase=active_phase, selected_task=None
         )
@@ -109,7 +117,6 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
 def finish_workflow(
     project_id: str, repo_path: str, commit_type: str | None = None
 ) -> dict[str, Any]:
-    """Finish the active task: commit, push, and mark done."""
     project = Project.get(project_id)
     if not project:
         raise EngramServiceError(

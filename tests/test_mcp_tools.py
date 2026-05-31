@@ -1294,6 +1294,47 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_verify_no_repo["error"] == "PROJECT_NO_REPOS"
 
 
+def test_mcp_workflow_start_returns_compact_blocked_markdown_for_draft_only(tmp_db, monkeypatch):
+    """Verify engram_workflow_start emits Start Blocked markdown when only draft tasks remain."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-workflow-draft-only")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-workflow-draft-only",
+        name="MCP Tool Workflow Draft-Only Project",
+        summary="Service tool workflow summary",
+        repo_paths=[cwd],
+    )
+
+    from engram.services.errors import EngramServiceError
+
+    def raising_start_draft_only(project_id, repo_path):
+        raise EngramServiceError(
+            code="WORKFLOW_START_DRAFT_ONLY",
+            message=(
+                "No ready task is available to start. Remaining tasks are draft-only and must "
+                "be promoted to ready first."
+            ),
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.start_workflow", raising_start_draft_only)
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    start_handler = server.tools["engram_workflow_start"]
+
+    res_start_blocked = asyncio.run(start_handler())
+    assert "# Start Blocked" in res_start_blocked
+    assert "Reason: No ready task is available to start." in res_start_blocked
+    assert "## Next action" in res_start_blocked
+    assert res_start_blocked.count("## Next action") == 1
+    assert "set status=ready via engram_task_update" in res_start_blocked
+    assert "ok:" not in res_start_blocked.lower()
+    assert "error:" not in res_start_blocked.lower()
+
+
 def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
     """Verify that flat YAML error responses include the correct fix field for all known error codes."""
     import yaml

@@ -966,6 +966,14 @@ def test_startup_context_phase_complete(tmp_db, project):
     assert "All 1 tasks are done or cancelled." in ctx
 
 
+def test_startup_context_draft_only_remaining_guidance(tmp_db, project):
+    """Startup context should explain draft-only blocked state when no ready task exists."""
+    Task.create(project_id=project.id, title="Draft Task", status="draft")
+    ctx = get_startup_context(project.id)
+    assert "Only draft tasks remain (1); no ready task can be started." in ctx
+    assert "set status=ready using engram_task_update." in ctx
+
+
 def test_task_context_includes_project_knowledge(tmp_db, project, task):
     """Task context includes project-wide constraints and lessons."""
     Memory.create(

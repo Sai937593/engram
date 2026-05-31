@@ -49,13 +49,7 @@ def register_workflow_tools(server: Any) -> None:
 
     @server.tool()
     async def engram_workflow_start() -> str:
-        """Start or resume the next actionable task in the currently bound engram project.
-
-        This tool resolves the project bound to the current directory, checks out or creates the
-        appropriate Git branch for the task, and returns the task details along with its branch,
-        resumption status, and startup context (including relevant memories and files).
-        This tool performs Git branch checkout and creation operations.
-        """
+        """Start or resume the next actionable task in the currently bound engram project."""
         try:
             project = engram.mcp.tools.resolve_current_project()
             repo_paths = project.get("repo_paths", [])
@@ -73,15 +67,22 @@ def register_workflow_tools(server: Any) -> None:
             )
             return res["context"]
         except EngramServiceError as exc:
+            if exc.code == "WORKFLOW_START_DRAFT_ONLY":
+                from engram.services.workflow_formatter import format_start_blocked
+
+                return format_start_blocked(
+                    reason=exc.message,
+                    next_guidance=(
+                        "Complete minimum execution metadata on the draft task(s) "
+                        "(description, acceptance, relevant_files), then set status=ready "
+                        "via engram_task_update and rerun engram_workflow_start."
+                    ),
+                )
             return engram.mcp.tools._respond_error(exc)
 
     @server.tool()
     async def engram_workflow_finish(commit_type: str | None = None) -> str:
-        """Finish the active task: commit, push, and mark done.
-
-        This tool stages all current changes, creates a conventional Git commit based on the active task and phase title, pushes to the remote repository, and marks the task as completed.
-        If a pre-push test/hook fails, the push (and thus this tool) will block and fail.
-        """
+        """Finish the active task: commit, push, and mark done."""
         project_id: str | None = None
         try:
             project = engram.mcp.tools.resolve_current_project()
@@ -164,11 +165,7 @@ def register_workflow_tools(server: Any) -> None:
         project_id: str | None = None,
         summary: str | None = None,
     ) -> str:
-        """Initialize a new engram project in the current workspace directory.
-
-        Creates the repo-local database inside `.engram/`, writes project metadata, and ensures
-        `.engram/` is added to the repository `.gitignore`.
-        """
+        """Initialize a new engram project in the current workspace directory."""
         try:
             project = engram.mcp.tools.initialize_project(
                 name=name, project_id=project_id, summary=summary
