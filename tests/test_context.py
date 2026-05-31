@@ -324,7 +324,9 @@ def test_startup_builder_guardrails_use_project_l0_l1_only_in_order(project):
 def test_startup_builder_guardrails_empty_and_separate_from_task_memory_section(project):
     ctx = build_startup_context(project=project)
 
-    assert "No L0/L1 project guardrails found." in ctx
+    assert "L1 Constraints:" in ctx
+    assert "Python file size limits" in ctx
+    assert "Python public symbol limit" in ctx
     guardrails_index = ctx.index("## PROJECT GUARDRAILS")
     task_memory_index = ctx.index("## TASK MEMORY CANDIDATES")
     assert guardrails_index < task_memory_index
@@ -336,7 +338,7 @@ def test_startup_builder_guardrails_empty_and_separate_from_task_memory_section(
         "\n## NEXT ACTION", maxsplit=1
     )[0]
     assert "No relevant task memories selected." in task_memory_section
-    assert "No L0/L1 project guardrails found." not in task_memory_section
+    assert "Python file size limits" not in task_memory_section
     assert "No relevant task memories selected." not in guardrails_section
 
 

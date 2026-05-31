@@ -40,6 +40,10 @@ def test_register_tools_registers_engram_project_current() -> None:
 
     assert "engram_project_current" in server.tools
     assert server.tools["engram_project_current"].__name__ == "engram_project_current"
+    assert "engram_project_init" in server.tools
+    assert server.tools["engram_project_init"].__name__ == "engram_project_init"
+    assert "engram_project_diagnostics" in server.tools
+    assert server.tools["engram_project_diagnostics"].__name__ == "engram_project_diagnostics"
     assert "engram_task_list" in server.tools
     assert server.tools["engram_task_list"].__name__ == "engram_task_list"
     assert "engram_task_get" in server.tools
@@ -74,17 +78,25 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_workflow_finish"].__name__ == "engram_workflow_finish"
 
 
-def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
+def test_mcp_tool_resolves_current_project(tmp_path, monkeypatch) -> None:
     """Verify engram_project_current returns serialized project for a bound repo."""
-    cwd = os.path.abspath("repo/bound-mcp-tool")
-    monkeypatch.setattr("os.getcwd", lambda: cwd)
+    repo_path = tmp_path / "bound_mcp_tool"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
 
-    Project.create(
-        id="proj-tool-1",
-        name="MCP Tool Project",
-        summary="Service tool project summary",
-        repo_paths=[cwd],
+    from engram.db import get_db_connection, init_db
+
+    db_path = repo_path / ".engram" / "memory.db"
+    init_db(db_path)
+    conn = get_db_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (id, name, summary, status, repo_paths) VALUES (?, ?, ?, ?, ?)",
+        ("proj-tool-1", "MCP Tool Project", "Service tool project summary", "active", "[]"),
     )
+    conn.commit()
+    conn.close()
 
     server = MockServer()
     from engram.mcp.tools import register_tools
@@ -93,20 +105,22 @@ def test_mcp_tool_resolves_current_project(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_project_current"]
 
     result = yaml.safe_load(handler())
-    assert result == {
-        "ok": True,
-        "project": {
-            "id": "proj-tool-1",
-            "name": "MCP Tool Project",
-            "status": "active",
-        },
+    assert result["ok"] is True
+    assert result["initialized"] is True
+    assert result["status"] == "ready"
+    assert result["project"] == {
+        "id": "proj-tool-1",
+        "name": "MCP Tool Project",
+        "status": "active",
     }
 
 
-def test_mcp_tool_raises_project_not_bound_for_unbound_repo(tmp_db, monkeypatch) -> None:
-    """Verify engram_project_current returns PROJECT_NOT_BOUND for unbound cwd."""
-    cwd = os.path.abspath("repo/unbound-mcp-tool")
-    monkeypatch.setattr("os.getcwd", lambda: cwd)
+def test_mcp_tool_returns_actionable_uninitialized_for_unbound_repo(tmp_path, monkeypatch) -> None:
+    """Verify engram_project_current returns actionable uninitialized status for unbound cwd."""
+    repo_path = tmp_path / "unbound_mcp_tool"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
 
     server = MockServer()
     from engram.mcp.tools import register_tools
@@ -115,8 +129,39 @@ def test_mcp_tool_raises_project_not_bound_for_unbound_repo(tmp_db, monkeypatch)
     handler = server.tools["engram_project_current"]
 
     result = yaml.safe_load(handler())
-    assert result["ok"] is False
-    assert result["error"] == "PROJECT_NOT_BOUND"
+    assert result["ok"] is True
+    assert result["initialized"] is False
+    assert result["status"] in {"uninitialized", "unresolved-workspace"}
+    assert "next" in result
+
+
+def test_mcp_project_diagnostics_reports_misconfigured_missing_gitignore_entry(
+    tmp_path, monkeypatch
+) -> None:
+    """Verify engram_project_diagnostics reports missing .engram gitignore entry."""
+    repo_path = tmp_path / "diag_missing_gitignore_entry"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+    (repo_path / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
+
+    from engram.db import init_db
+
+    init_db(repo_path / ".engram" / "memory.db")
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_project_diagnostics"]
+    result = yaml.safe_load(handler())
+
+    assert result["ok"] is True
+    assert result["status"] == "misconfigured"
+    assert result["repo_root_detected"] is True
+    assert result["gitignore"]["status"] == "missing-entry"
+    assert "engram_project_init" in result["next_action"]
 
 
 def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
@@ -1081,6 +1126,8 @@ def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
         "INVALID_TASK_STATUS",
         "PHASE_COMPLETION_BLOCKED",
         "UNFINISHED_TASKS",
+        "PROJECT_NOT_BOUND",
+        "UNRESOLVED_WORKSPACE",
     ]
 
     for code in known_codes:
@@ -1090,7 +1137,8 @@ def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
         assert res["error"] == code
         assert res["message"] == f"Test error {code}"
         assert "fix" in res
-        assert "engram_" in res["fix"]  # references MCP tool names
+        if code != "UNRESOLVED_WORKSPACE":
+            assert "engram_" in res["fix"]  # references MCP tool names
 
     # Unknown/unexpected error should not have fix field
     exc_unknown = EngramServiceError(code="SOME_UNKNOWN_ERROR", message="An unknown error")
@@ -1158,3 +1206,121 @@ def test_mcp_phase_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     )
     assert res_err2["ok"] is False
     assert res_err2["error"] == "INVALID_PHASE_STATUS"
+
+
+def test_mcp_project_init_success(tmp_path, monkeypatch) -> None:
+    """Verify engram_project_init creates project, db, and gitignore."""
+    repo_path = tmp_path / "repo_mcp_init"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    init_handler = server.tools["engram_project_init"]
+
+    res = yaml.safe_load(
+        init_handler(
+            name="MCP Bound Project",
+            project_id="mcp-bound-proj",
+            summary="MCP summary description",
+        )
+    )
+
+    assert res["ok"] is True
+    assert res["created"] is True
+    assert res["project"]["id"] == "mcp-bound-proj"
+    assert res["project"]["name"] == "MCP Bound Project"
+    assert "hint" in res
+
+    # Verify DB file is created
+    db_path = repo_path / ".engram" / "memory.db"
+    assert db_path.exists()
+
+    # Verify .gitignore is created and contains .engram/
+    gitignore_path = repo_path / ".gitignore"
+    assert gitignore_path.exists()
+    assert ".engram/" in gitignore_path.read_text(encoding="utf-8")
+
+
+def test_mcp_project_init_unbound_raises_unresolved_workspace(tmp_path, monkeypatch) -> None:
+    """Verify engram_project_init returns UNRESOLVED_WORKSPACE when run outside git repository."""
+    unbound_path = tmp_path / "unbound_dir"
+    unbound_path.mkdir()
+
+    monkeypatch.setattr("os.getcwd", lambda: str(unbound_path))
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    init_handler = server.tools["engram_project_init"]
+
+    res = yaml.safe_load(init_handler())
+    assert res["ok"] is False
+    assert res["error"] == "UNRESOLVED_WORKSPACE"
+    assert "git init" in res["fix"]
+
+
+def test_mcp_project_init_and_diagnostics_work_across_fresh_workspaces_with_same_handlers(
+    tmp_path, monkeypatch
+) -> None:
+    """Verify MCP init/status/diagnostics are workspace-based across fresh repos."""
+    repo_a = tmp_path / "repo_a"
+    repo_b = tmp_path / "repo_b"
+    repo_a.mkdir()
+    repo_b.mkdir()
+    (repo_a / ".git").mkdir()
+    (repo_b / ".git").mkdir()
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    current_handler = server.tools["engram_project_current"]
+    init_handler = server.tools["engram_project_init"]
+    diagnostics_handler = server.tools["engram_project_diagnostics"]
+
+    # Guard against accidental CLI dependency in normal MCP init/status flow.
+    def _raise_if_cli_used(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("CLI command path should not be called by MCP init/status tools.")
+
+    monkeypatch.setattr("engram.cli.project_cmds.init", _raise_if_cli_used)
+
+    for repo_path, project_id in ((repo_a, "mcp-proj-a"), (repo_b, "mcp-proj-b")):
+        monkeypatch.setattr("os.getcwd", lambda p=repo_path: str(p))
+
+        before = yaml.safe_load(current_handler())
+        assert before["ok"] is True
+        assert before["initialized"] is False
+        assert before["status"] in {"uninitialized", "unresolved-workspace"}
+        assert "next" in before
+
+        initialized = yaml.safe_load(
+            init_handler(
+                name=f"Project {project_id}",
+                project_id=project_id,
+                summary=f"Summary {project_id}",
+            )
+        )
+        assert initialized["ok"] is True
+        assert initialized["project"]["id"] == project_id
+
+        current = yaml.safe_load(current_handler())
+        assert current["ok"] is True
+        assert current["initialized"] is True
+        assert current["status"] == "ready"
+        assert current["project"]["id"] == project_id
+        assert current["repo_root"] == str(repo_path)
+
+        diagnostics = yaml.safe_load(diagnostics_handler())
+        assert diagnostics["ok"] is True
+        assert diagnostics["status"] == "healthy"
+        assert diagnostics["repo_root"] == str(repo_path)
+        assert diagnostics["repo_root_detected"] is True
+        assert diagnostics["db"]["exists"] is True
+        assert diagnostics["db"]["schema_ok"] is True
+        assert diagnostics["gitignore"]["status"] == "configured"

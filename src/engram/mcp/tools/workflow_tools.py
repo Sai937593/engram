@@ -18,18 +18,28 @@ def register_workflow_tools(server: Any) -> None:
     def engram_project_current() -> str:
         """Get details of the currently bound engram project."""
         try:
-            project = engram.mcp.tools.resolve_current_project()
-            slim_project = {
-                "id": str(project["id"]),
-                "name": str(project["name"]),
-                "status": str(project["status"]),
+            status = engram.mcp.tools.get_current_project_status()
+            response: dict[str, Any] = {
+                "ok": True,
+                "initialized": bool(status["initialized"]),
+                "status": str(status["status"]),
             }
-            return engram.mcp.tools._respond(
-                {
-                    "ok": True,
-                    "project": slim_project,
+            if status.get("repo_root"):
+                response["repo_root"] = str(status["repo_root"])
+            if status.get("db_path"):
+                response["db_path"] = str(status["db_path"])
+            if "db_exists" in status:
+                response["db_exists"] = bool(status["db_exists"])
+            if status.get("next_action"):
+                response["next"] = str(status["next_action"])
+            if status.get("project"):
+                project = status["project"]
+                response["project"] = {
+                    "id": str(project["id"]),
+                    "name": str(project["name"]),
+                    "status": str(project["status"]),
                 }
-            )
+            return engram.mcp.tools._respond(response)
         except EngramServiceError as exc:
             return engram.mcp.tools._respond_error(exc)
 
@@ -100,5 +110,45 @@ def register_workflow_tools(server: Any) -> None:
                     "next": next_guidance,
                 }
             )
+        except EngramServiceError as exc:
+            return engram.mcp.tools._respond_error(exc)
+
+    @server.tool()
+    def engram_project_init(
+        name: str | None = None,
+        project_id: str | None = None,
+        summary: str | None = None,
+    ) -> str:
+        """Initialize a new engram project in the current workspace directory.
+
+        Creates the repo-local database inside `.engram/`, writes project metadata, and ensures
+        `.engram/` is added to the repository `.gitignore`.
+        """
+        try:
+            project = engram.mcp.tools.initialize_project(
+                name=name, project_id=project_id, summary=summary
+            )
+            slim_project = {
+                "id": str(project["id"]),
+                "name": str(project["name"]),
+                "status": str(project["status"]),
+            }
+            return engram.mcp.tools._respond(
+                {
+                    "ok": True,
+                    "created": bool(project.get("created")),
+                    "project": slim_project,
+                    "hint": "Project successfully bound. Run engram_workflow_start or engram_task_list to start.",
+                }
+            )
+        except EngramServiceError as exc:
+            return engram.mcp.tools._respond_error(exc)
+
+    @server.tool()
+    def engram_project_diagnostics() -> str:
+        """Inspect repo root, DB health/schema, and .gitignore state for the current workspace."""
+        try:
+            diagnostics = engram.mcp.tools.get_project_diagnostics()
+            return engram.mcp.tools._respond({"ok": True, **diagnostics})
         except EngramServiceError as exc:
             return engram.mcp.tools._respond_error(exc)

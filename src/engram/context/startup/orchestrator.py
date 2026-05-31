@@ -5,12 +5,12 @@ from __future__ import annotations
 from engram.context.common import compact_text
 from engram.context.startup.builders import (
     _build_guardrail_frame,
-    _build_next_action,
     _build_phase_frame,
     _build_project_frame,
     _build_task_frame,
     _build_task_memory_candidates_frame,
 )
+from engram.context.startup.next_action import build_next_action as _build_next_action
 from engram.context.startup.options import (
     StartupContextOptions,
     _enforce_hard_budget,

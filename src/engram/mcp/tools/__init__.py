@@ -21,7 +21,14 @@ from engram.services.phase_service import (
     list_phases,
     start_phase,
 )
-from engram.services.project_service import resolve_current_project
+from engram.services.project_service import (
+    initialize_project,
+    resolve_current_project,
+)
+from engram.services.project_status_service import (
+    get_current_project_status,
+    get_project_diagnostics,
+)
 from engram.services.task import (
     append_task_note,
     complete_task,
@@ -50,6 +57,9 @@ __all__ = [
     "create_phase",
     "list_phases",
     "start_phase",
+    "initialize_project",
+    "get_current_project_status",
+    "get_project_diagnostics",
     "resolve_current_project",
     "append_task_note",
     "complete_task",

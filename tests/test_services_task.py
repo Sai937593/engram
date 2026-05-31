@@ -391,6 +391,28 @@ def test_create_task_invalid_priority_raises_validation_error(tmp_db):
     assert "priority" in exc.value.details
 
 
+def test_create_task_resolves_dependency_reference_to_task_id(tmp_db):
+    project = _create_project("proj-s2", "/tmp/proj-s2")
+    dep = Task.create(project_id=project.id, id="dep00001", title="Dependency task")
+
+    dto = create_task(
+        project_id=project.id,
+        title="Task with dependency",
+        depends_on="dep00001",
+    )
+
+    assert dto["depends_on"] == dep.id
+
+
+def test_create_task_rejects_missing_dependency_reference(tmp_db):
+    project = _create_project("proj-s3", "/tmp/proj-s3")
+
+    with pytest.raises(ValidationError) as exc:
+        create_task(project_id=project.id, title="Task with bad dep", depends_on="2.3")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+
+
 def test_update_task_happy_path(tmp_db):
     project = _create_project("proj-u", "/tmp/proj-u")
     Task.create(project_id=project.id, id="task0001", title="Original Title", status="todo")
@@ -537,6 +559,24 @@ def test_start_task_fails_if_dependency_unsatisfied(tmp_db):
 
     assert exc.value.code == "DEPENDENCY_UNSATISFIED"
     assert exc.value.details["depends_on"] == dep.id
+
+
+def test_start_task_fails_if_dependency_reference_is_missing(tmp_db):
+    project = _create_project("proj-start-t3", "/tmp/proj-start-t3")
+    t = Task.create(
+        project_id=project.id,
+        id="task0106",
+        title="Task 106",
+        status="todo",
+        depends_on="2.3",
+    )
+
+    with pytest.raises(ValidationError) as exc:
+        start_task(project.id, t.id)
+
+    assert exc.value.code == "DEPENDENCY_UNSATISFIED"
+    assert exc.value.details["depends_on"] == "2.3"
+    assert exc.value.details["dependency_status"] == "missing"
 
 
 def test_complete_task_success_without_evidence(tmp_db):
