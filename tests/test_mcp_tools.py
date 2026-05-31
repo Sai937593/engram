@@ -1035,6 +1035,12 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         summary="Service tool workflow summary",
         repo_paths=[cwd],
     )
+    Task.create(
+        project_id="proj-tool-workflow",
+        id="t-in-progress",
+        title="Verification-gated task",
+        status="in-progress",
+    )
 
     # Setup mock returns
     mock_start_res = {
@@ -1147,6 +1153,68 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_err["ok"] is False
     assert res_err["error"] == "TEST_ERROR"
     assert res_err["message"] == "Mock error message"
+
+    # 4b. Error path: finish_workflow verification gate returns compact blocked markdown
+    def raising_finish_verification(project_id, repo_path, commit_type=None):
+        raise EngramServiceError(
+            code="VERIFICATION_MISSING",
+            message="No verification record exists for the active task.",
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_verification)
+    res_finish_blocked = asyncio.run(finish_handler(commit_type="feat"))
+    assert "# Finish Blocked" in res_finish_blocked
+    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_blocked
+    assert "Reason: No verification record exists for the active task." in res_finish_blocked
+    assert "## Next action" in res_finish_blocked
+    assert res_finish_blocked.count("## Next action") == 1
+    assert (
+        "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
+        in res_finish_blocked
+    )
+    assert "ok:" not in res_finish_blocked.lower()
+    assert "error:" not in res_finish_blocked.lower()
+
+    # 4c. Error path: finish_workflow verification failed returns compact blocked markdown
+    def raising_finish_failed(project_id, repo_path, commit_type=None):
+        raise EngramServiceError(
+            code="VERIFICATION_FAILED",
+            message="The latest verification for the active task failed.",
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_failed)
+    res_finish_failed = asyncio.run(finish_handler(commit_type="feat"))
+    assert "# Finish Blocked" in res_finish_failed
+    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_failed
+    assert "Reason: The latest verification for the active task failed." in res_finish_failed
+    assert "## Next action" in res_finish_failed
+    assert res_finish_failed.count("## Next action") == 1
+    assert (
+        "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
+        in res_finish_failed
+    )
+
+    # 4d. Error path: finish_workflow verification stale returns compact blocked markdown
+    def raising_finish_stale(project_id, repo_path, commit_type=None):
+        raise EngramServiceError(
+            code="VERIFICATION_STALE_RELEVANT_CHANGES",
+            message="Relevant files changed after the latest successful verification.",
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_stale)
+    res_finish_stale = asyncio.run(finish_handler(commit_type="feat"))
+    assert "# Finish Blocked" in res_finish_stale
+    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_stale
+    assert (
+        "Reason: Relevant files changed after the latest successful verification."
+        in res_finish_stale
+    )
+    assert "## Next action" in res_finish_stale
+    assert res_finish_stale.count("## Next action") == 1
+    assert (
+        "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
+        in res_finish_stale
+    )
 
     # 5. Error path: Project bound but has no repo_paths configured
     monkeypatch.setattr(

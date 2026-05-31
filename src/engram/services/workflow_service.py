@@ -5,9 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from engram.context.startup import (
-    build_startup_context,
-)
+from engram.context.startup import build_startup_context
 from engram.memory_retrieval import orchestrate_startup_task_memory_retrieval
 from engram.models.phase import Phase
 from engram.models.project import Project
@@ -21,6 +19,7 @@ from engram.services.workflow_helpers import (
     select_task_to_start,
     slugify,
 )
+from engram.services.workflow_verification_service import evaluate_verification_eligibility
 from engram.services.workflow_verify_service import verify_workflow as run_workflow_verify
 
 CONVENTIONAL_COMMIT_TYPES: set[str] = {
@@ -139,6 +138,18 @@ def finish_workflow(
         )
 
     task = in_progress[0]
+    eligibility = evaluate_verification_eligibility(
+        project_id=project_id,
+        task_id=task.id,
+        repo_path=repo_path,
+        relevant_files=task.relevant_files,
+    )
+    if not eligibility["allowed"]:
+        raise EngramServiceError(
+            code=eligibility["reason_code"],
+            message=eligibility["reason"],
+        )
+
     try:
         resolved = resolve_commit_type(task, commit_type, CONVENTIONAL_COMMIT_TYPES)
     except ValueError as e:
@@ -185,6 +196,4 @@ def finish_workflow(
     }
 
 
-def verify_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
-    """Backward-compatible verification service entrypoint."""
-    return run_workflow_verify(project_id=project_id, repo_path=repo_path)
+verify_workflow = run_workflow_verify
