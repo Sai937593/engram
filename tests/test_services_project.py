@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import os
 
 import pytest
@@ -12,6 +13,20 @@ from engram.services.project_status_service import (
     get_current_project_status,
     get_project_diagnostics,
 )
+
+
+def _block_cli_imports(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail fast if project service starts importing CLI modules."""
+    real_import = builtins.__import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "engram.cli" or name.startswith("engram.cli."):
+            raise AssertionError(
+                f"Forbidden CLI import attempted during project service flow: {name}"
+            )
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
 
 
 def test_resolve_current_project_returns_serialized_project_for_bound_repo(tmp_path):
@@ -44,6 +59,29 @@ def test_resolve_current_project_returns_serialized_project_for_bound_repo(tmp_p
     }
 
 
+def test_resolve_current_project_repo_local_path_without_cli_imports(tmp_path, monkeypatch):
+    repo_path = tmp_path / "repo_bound_no_cli"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+    _block_cli_imports(monkeypatch)
+
+    from engram.db import get_db_connection, init_db
+
+    db_path = repo_path / ".engram" / "memory.db"
+    init_db(db_path)
+    conn = get_db_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (id, name, summary, status, repo_paths) VALUES (?, ?, ?, ?, ?)",
+        ("proj-no-cli", "No CLI Project", "service guard", "active", "[]"),
+    )
+    conn.commit()
+    conn.close()
+
+    payload = resolve_current_project(cwd=str(repo_path))
+    assert payload["id"] == "proj-no-cli"
+
+
 def test_resolve_current_project_raises_project_not_bound_for_unbound_repo(tmp_path):
     # Case 1: No .git directory at all
     cwd = tmp_path / "repo_unbound"
@@ -54,12 +92,16 @@ def test_resolve_current_project_raises_project_not_bound_for_unbound_repo(tmp_p
     error = raised.value
     assert error.code == "PROJECT_NOT_BOUND"
 
-    # Case 2: .git directory exists but no .engram/memory.db
-    (cwd / ".git").mkdir()
+
+def test_resolve_current_project_unbound_repo_without_cli_imports(tmp_path, monkeypatch):
+    cwd = tmp_path / "repo_unbound_no_cli"
+    cwd.mkdir()
+    (cwd / ".git").mkdir(exist_ok=True)
+    _block_cli_imports(monkeypatch)
+
     with pytest.raises(EngramServiceError) as raised:
         resolve_current_project(cwd=str(cwd))
-    error = raised.value
-    assert error.code == "PROJECT_NOT_BOUND"
+    assert raised.value.code == "PROJECT_NOT_BOUND"
 
 
 def test_resolve_current_project_uses_os_getcwd_when_cwd_is_omitted(tmp_path, monkeypatch):

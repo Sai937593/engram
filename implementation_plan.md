@@ -1,38 +1,34 @@
-# Implementation Plan - Task 7b19d707 (Phase 3.1)
+# Implementation Plan - Task a43434df (Phase 3.2)
 
 ## Scope
-Refactor retained CLI startup and diagnostics so normal CLI bootstrap is side-effect free and no longer depends on legacy global repo-path binding assumptions.
+Add regression coverage proving normal MCP-first agent workflows remain CLI-independent, with focus on startup/current/context paths and retained MCP task/phase/memory tool paths.
 
 ## Current Findings
-- `src/engram/cli/__init__.py` root Click callback calls `init_db()` unconditionally, causing DB initialization during generic CLI startup/help.
-- `src/engram/cli/__init__.py` exposes `get_current_project()` that uses `Project.find_by_repo_path()`, representing legacy global binding behavior.
-- `src/engram/cli/utils_cmds.py` `db` command reports `engram.db.DEFAULT_DB_PATH` and opens DB via global helper instead of resolving repo-local path via service-layer workspace resolution.
+- `tests/test_mcp_server.py` already enforces banned imports for MCP modules only.
+- `tests/test_services_context.py` enforces adapter-safe imports, but does not explicitly fail on runtime CLI module loading for wrapper flows.
+- `tests/test_services_project.py` validates repo-local resolution behavior, but does not assert CLI modules are unnecessary/unused during normal resolution.
+- `src/engram/mcp/server.py` currently calls `init_db()` directly before server run; this is acceptable if no CLI module is imported/called, but needs explicit regression checks.
 
 ## Planned Changes
-1. `src/engram/cli/__init__.py`
-- Remove eager `init_db()` from root CLI callback.
-- Remove legacy `get_current_project()` helper if unused by retained command surface.
-- Keep command registration and entrypoint behavior stable (`init`, `guide`, `db`).
+1. `tests/test_mcp_server.py`
+- Add assertions that MCP startup and core tool/resource registration paths do not import or invoke CLI command modules.
+- Add actionable failure messages naming the forbidden module/function path when violated.
 
-2. `src/engram/cli/utils_cmds.py`
-- Refactor `db` command to resolve workspace through `engram.services.project_path` helpers.
-- Report repo-local `.engram/memory.db` when executed inside a git repo.
-- Degrade cleanly outside a repo (clear unresolved-workspace messaging; no crash).
-- Perform explicit diagnostic DB touch/check only within command execution flow (not startup).
+2. `tests/test_services_project.py`
+- Add targeted tests proving `resolve_current_project()` succeeds on repo-local state with CLI modules intentionally blocked/unavailable.
+- Add explicit test that unbound behavior still raises `PROJECT_NOT_BOUND` without any CLI bootstrap dependency.
 
-3. Tests
-- Update/add CLI regression tests in `tests/test_cli_entrypoint.py` to cover:
-  - Startup/help path does not initialize DB eagerly.
-  - `engram db` inside repo reports/uses repo-local DB path.
-  - `engram db` outside repo degrades cleanly.
+3. `tests/test_services_context.py`
+- Add runtime guard tests for startup/snapshot/handoff/task wrappers to ensure they resolve via services/context only, with CLI modules blocked.
+- Keep checks read-only and repo-local, aligned with existing service behavior.
 
 ## Validation Plan
-- Run targeted tests:
-  - `pytest tests/test_cli_entrypoint.py -q`
-- If needed, run additional impacted suite:
-  - `pytest tests/test_cli_entrypoint.py tests/test_init_cmds.py -q`
+- Run targeted suite:
+  - `pytest tests/test_mcp_server.py tests/test_services_project.py tests/test_services_context.py -q`
+- If regressions appear in adjacent behavior, run:
+  - `pytest tests/test_mcp_server.py tests/test_services_project.py tests/test_services_context.py tests/test_context.py -q`
 
 ## Out of Scope
-- Adding new CLI workflow commands.
-- Changing MCP tool output contracts.
-- Broad docs rewrite beyond task-relevant wording discovered during this refactor.
+- Implementing `engram_workflow_verify`, finish gating changes, or new lifecycle states.
+- Refactoring CLI codepaths themselves unless required to restore existing behavior under these tests.
+- Broad documentation updates.

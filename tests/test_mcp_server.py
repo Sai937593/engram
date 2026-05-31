@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ast
+import builtins
 import importlib
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -27,6 +29,18 @@ MCP_FILES = ("__init__.py", "server.py", "resources.py", "schemas.py")
 BANNED_IMPORT_PREFIXES = ("click", "rich", "engram.cli", "engram.commands", "subprocess")
 
 
+def _block_cli_imports(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail fast with an actionable message if runtime imports hit CLI modules."""
+    real_import = builtins.__import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "engram.cli" or name.startswith("engram.cli."):
+            raise AssertionError(f"Forbidden CLI import attempted during MCP flow: {name}")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+
+
 def test_mcp_package_skeleton_files_exist():
     package_dir = Path(importlib.import_module("engram").__file__).resolve().parent / "mcp"
     for filename in MCP_FILES:
@@ -46,6 +60,71 @@ def test_mcp_modules_do_not_import_cli_or_shell_dependencies():
             elif isinstance(node, ast.ImportFrom):
                 imported_module = node.module or ""
                 assert not imported_module.startswith(BANNED_IMPORT_PREFIXES)
+
+
+def test_create_server_does_not_runtime_import_cli_modules(monkeypatch):
+    module = importlib.import_module("engram.mcp.server")
+    _block_cli_imports(monkeypatch)
+
+    class _FakeFastMCP:
+        def __init__(self, _name: str):
+            self.name = "engram"
+
+        def resource(self, *_args, **_kwargs):
+            def _decorator(func):
+                return func
+
+            return _decorator
+
+        def tool(self, **_kwargs):
+            def _decorator(func):
+                return func
+
+            return _decorator
+
+    monkeypatch.setattr(module, "_load_fastmcp_class", lambda: _FakeFastMCP)
+
+    server = module.create_server()
+    assert server.name == "engram"
+
+
+def test_project_current_tool_runs_when_cli_imports_are_blocked(monkeypatch, tmp_path):
+    from engram.db import get_db_connection, init_db
+
+    repo_path = tmp_path / "repo_bound"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+    db_path = repo_path / ".engram" / "memory.db"
+    init_db(db_path)
+    conn = get_db_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (id, name, summary, status, repo_paths) VALUES (?, ?, ?, ?, ?)",
+        ("proj-mcp-guard", "MCP Guard", "CLI guard", "active", "[]"),
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(os, "getcwd", lambda: str(repo_path))
+    _block_cli_imports(monkeypatch)
+
+    class MockServer:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self, **_kwargs):
+            def decorator(func):
+                self.tools[func.__name__] = func
+                return func
+
+            return decorator
+
+    import engram.mcp.tools
+
+    server = MockServer()
+    engram.mcp.tools.register_tools(server)
+    payload = yaml.safe_load(server.tools["engram_project_current"]())
+    assert payload["ok"] is True
+    assert payload["status"] == "ready"
 
 
 def test_run_stdio_server_initializes_db_once_and_uses_stdio_transport(monkeypatch):
