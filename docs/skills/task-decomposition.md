@@ -91,6 +91,27 @@ Use this lightweight graph method to keep task ordering correct without over-ser
 
 Use these as templates when converting a phase doc into task payloads.
 
+## Representative Walkthrough (Workflow Redesign)
+
+Use this quick pass to validate that decomposition output is execution-ready for
+`docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_REDESIGN.md` Phase 10.
+
+1. Select the phase goal and non-goals.
+- Goal: add/reinforce a Task Decomposition Skill that creates complete tasks.
+- Non-goals: do not implement Phase 11 draft-ready lifecycle or Phase 12 validation logic.
+2. Draft dependency graph with hard blockers only.
+- Node A: skill mapping and stable description-section labels.
+- Node B: dependency-graph and execution-ready templates.
+- Edge: `A -> B` only if templates depend on finalized mapping guidance.
+3. Emit execution-ready tasks (not title-only placeholders).
+- Each task must include `acceptance`, `relevant_files`, `Verification:` guidance, and `Out of scope:` boundaries.
+- Each task must include either concrete `depends_on` refs or explicit "No required dependencies."
+4. Run the quality bar before create/update.
+- Reject any candidate that only has `title` + generic `description` + dependency.
+- Reject any candidate missing testable acceptance or actionable verification commands.
+
+If any check fails, revise the task payload before calling `engram_task_create`.
+
 ### Example A: Foundation Task (No Dependencies)
 
 `title`

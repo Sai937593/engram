@@ -1,41 +1,33 @@
-# Implementation Plan - Task 3daf28c0 (Phase 10.2)
+# Implementation Plan - Task 942fe893 (Phase 10.3)
 
 ## Scope
-Implement phase-local Task Decomposition skill content and examples that convert implementation phase docs into execution-ready Engram tasks. Deliver a repeatable decomposition workflow, dependency graph guidance, and example task shapes. Keep scope strictly to documentation/skill surfaces.
+Validate the Task Decomposition Skill against workflow-redesign docs using at least one representative decomposition example. Apply only in-scope documentation or skill-surface adjustments needed to keep guidance discoverable and consistent.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `3daf28c0`.
-- Stay within current `engram_task_create` schema; no new task fields.
-- No product behavior/code changes outside docs/skill surfaces.
+- One-task session only: execute only task `942fe893`.
+- Keep changes within documentation/skill surfaces unless verification reveals a required minimal fix.
+- Stay within current task schema; no new task fields.
+- Explicitly exclude Phase 11 draft-ready lifecycle and Phase 12 task validation logic.
 - Preserve no-touch directories: `planning/`, `workflow/`, `.github/`.
 
 ## Inputs to Use
 - `docs/CODEX_HANDOFF_WORKFLOW_REDESIGN.md`
 - `docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_REDESIGN.md`
+- `docs/USER_MANUAL.md`
 - `docs/skills/task-decomposition.md`
-- `docs/skills/memory-review.md`
-- Relevant memory constraints/decisions from `engram_memory_search`.
 
 ## Planned Changes
-1. Update `docs/skills/task-decomposition.md` to add a deterministic, step-by-step decomposition workflow for phase-doc intake to task creation.
-2. Add dependency graph guidance that explains how to identify sequencing, parallelizable work, and explicit no-dependency reasoning.
-3. Add concrete example task shapes that include:
-- title
-- objective/description sections
-- acceptance criteria
-- relevant files
-- dependency mapping
-- verification guidance
-- out-of-scope boundaries
-- optional risks/search hints placement
-4. Ensure examples explicitly map non-schema metadata into structured `description` sections using stable labels.
+1. Evaluate current decomposition guidance against Phase 10 requirements and handoff acceptance language.
+2. Execute one representative decomposition walkthrough from the workflow-redesign phase docs and verify that produced tasks are execution-ready (not title-only).
+3. Identify any discoverability or consistency gaps across manuals/skill docs and patch only those docs.
+4. Add concise evidence to the active task note describing the walkthrough and resulting doc updates.
 
 ## Validation Plan
-- Verify the updated skill text is reusable and phase-agnostic.
-- Confirm all required acceptance elements are covered in the skill doc.
-- Run `engram_workflow_verify` and fix the first actionable failure if needed.
+- Confirm the representative example covers dependencies, acceptance, relevant files/search hints, verification guidance, and out-of-scope boundaries.
+- Verify resulting guidance explicitly discourages weak title-only tasks.
+- Run `engram_workflow_verify`; if it fails, fix the first actionable issue and rerun.
 
 ## Out of Scope
-- Changes to MCP tool behavior or task schema.
-- Draft/ready lifecycle or validation engine changes (Phases 11/12).
-- Any implementation outside skill/documentation surfaces.
+- Product behavior changes outside docs/skill surfaces.
+- Implementing Phase 11 or Phase 12 features.
+- Additional task execution beyond `942fe893` in this session.
