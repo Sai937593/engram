@@ -74,3 +74,50 @@ def test_resolve_current_project_uses_os_getcwd_when_cwd_is_omitted(monkeypatch)
     assert payload["name"] == "Default Cwd Project"
     assert payload["status"] == "active"
     assert payload["repo_paths"] == [os.path.abspath(raw_cwd)]
+
+
+def test_find_repo_root_success(tmp_path):
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    nested_dir = tmp_path / "sub" / "nested"
+    nested_dir.mkdir(parents=True)
+
+    from engram.services.project_path import find_repo_root
+
+    # 1. From root
+    root = find_repo_root(cwd=str(tmp_path))
+    assert root == tmp_path
+
+    # 2. From nested folder
+    root_nested = find_repo_root(cwd=str(nested_dir))
+    assert root_nested == tmp_path
+
+
+def test_find_repo_root_raises_unresolved_workspace(tmp_path):
+    nested_dir = tmp_path / "sub" / "nested"
+    nested_dir.mkdir(parents=True)
+
+    from engram.services.project_path import find_repo_root
+
+    with pytest.raises(EngramServiceError) as raised:
+        find_repo_root(cwd=str(nested_dir))
+
+    error = raised.value
+    assert error.code == "UNRESOLVED_WORKSPACE"
+    assert "Could not resolve repository root" in error.message
+    assert error.details["cwd"] == str(nested_dir.resolve())
+
+
+def test_local_state_paths_derivation(tmp_path):
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    nested_dir = tmp_path / "sub" / "nested"
+    nested_dir.mkdir(parents=True)
+
+    from engram.services.project_path import get_repo_local_db_path, get_repo_local_engram_dir
+
+    engram_dir = get_repo_local_engram_dir(cwd=str(nested_dir))
+    assert engram_dir == tmp_path / ".engram"
+
+    db_path = get_repo_local_db_path(cwd=str(nested_dir))
+    assert db_path == tmp_path / ".engram" / "memory.db"
