@@ -83,12 +83,11 @@ def test_startup_builder_accepts_project_phase_and_task(project):
     ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
 
     assert "# Work Order" in ctx
-    assert "Status: current" in ctx
-    assert f"Task: `{task.id}`" in ctx
-    assert "Phase: Phase Builder" in ctx
     assert "## Objective" in ctx
     assert "## Acceptance" in ctx
     assert "## Guardrails" in ctx
+    assert "## Boundaries" in ctx
+    assert "## Required gates" in ctx
     assert "## Relevant memory" in ctx
     assert "## Next action" in ctx
     assert "Implement startup builder" in ctx
@@ -116,7 +115,6 @@ def test_startup_builder_renders_branch_and_is_resuming(project):
         is_resuming=True,
     )
 
-    assert "Status: resuming" in ctx
     assert "Branch: `feat/refactor-branch`" in ctx
     assert (
         "Before coding: run engram_memory_search with keywords from the task. Create implementation_plan.md and await user approval before writing code."
@@ -133,7 +131,7 @@ def test_startup_builder_renders_branch_and_is_resuming(project):
         branch="feat/refactor-branch",
         is_resuming=False,
     )
-    assert "Status: starting" in ctx_starting
+    assert "Branch: `feat/refactor-branch`" in ctx_starting
 
 
 def test_startup_builder_handles_no_task_input(project):
@@ -165,7 +163,7 @@ def test_startup_builder_renders_selected_task_relevant_files(project):
     assert "- tests/test_context.py" in task_section
 
 
-def test_startup_builder_hides_relevant_files_label_when_selected_task_has_none(project):
+def test_startup_builder_renders_search_hints_when_selected_task_has_no_relevant_files(project):
     phase = Phase.create(project_id=project.id, title="Phase No Files", status="active")
     task = Task.create(
         project_id=project.id,
@@ -176,7 +174,11 @@ def test_startup_builder_hides_relevant_files_label_when_selected_task_has_none(
 
     ctx = build_startup_context(project=project, active_phase=phase, selected_task=task)
 
-    assert "## Start here" not in ctx
+    assert "## Start here" in ctx
+    assert (
+        "Search the codebase using engram_memory_search to find relevant memories or context."
+        in ctx
+    )
 
 
 def test_startup_builder_caps_and_truncates_relevant_file_paths(project):

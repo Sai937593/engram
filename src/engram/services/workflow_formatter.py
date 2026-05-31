@@ -19,21 +19,9 @@ def format_work_order(
 ) -> str:
     """Format a compact Work Order as a Markdown-first string."""
     lines = ["# Work Order", ""]
-    lines.append(f"Status: {status}")
-    if task_id and task_title:
-        lines.append(f"Task: `{task_id}` — {task_title}")
-    elif task_id:
-        lines.append(f"Task: `{task_id}`")
-
-    if phase_title and phase_id:
-        lines.append(f"Phase: {phase_title} ({phase_id})")
-    elif phase_title:
-        lines.append(f"Phase: {phase_title}")
-
     if branch:
         lines.append(f"Branch: `{branch}`")
-
-    lines.append("")
+        lines.append("")
 
     if objective:
         lines.append("## Objective")
@@ -45,22 +33,49 @@ def format_work_order(
         lines.append(acceptance)
         lines.append("")
 
+    lines.append("## Start here")
     if relevant_files:
-        lines.append("## Start here")
         for f in relevant_files:
             lines.append(f"- {f}")
-        lines.append("")
+    else:
+        lines.append(
+            "- Search the codebase using engram_memory_search to find relevant memories or context."
+        )
+    lines.append("")
 
+    lines.append("## Guardrails")
     if guardrails:
-        lines.append("## Guardrails")
         for g in guardrails:
-            lines.append(f"- {g}")
-        lines.append("")
+            # Ensure we don't double-prepend hyphens if the builder already added them
+            line_str = g if g.startswith("- ") else f"- {g}"
+            lines.append(line_str)
+    else:
+        lines.append("- Keep non-test Python files within structure limits.")
+    lines.append("")
+
+    lines.append("## Boundaries")
+    lines.append(
+        "- No-touch folders: Do not edit, create, or delete files inside planning/, workflow/, or .github/ directories."
+    )
+    lines.append(
+        "- CLI boundary: Services under `src/engram/services` must not import Click, Rich, CLI command modules, subprocess, or MCP adapter code."
+    )
+    lines.append("")
+
+    lines.append("## Required gates")
+    lines.append(
+        "- Pre-coding: Create `implementation_plan.md` and await user approval before writing code."
+    )
+    lines.append(
+        "- Pre-commit: Rerun unit tests and ensure zero failures before invoking `engram_workflow_finish`."
+    )
+    lines.append("")
 
     if memories:
         lines.append("## Relevant memory")
         for m in memories:
-            lines.append(f"- {m}")
+            line_str = m if m.startswith("- ") else f"- {m}"
+            lines.append(line_str)
         lines.append("")
 
     if next_action:
