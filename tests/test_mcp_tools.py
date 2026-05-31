@@ -1175,6 +1175,47 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "ok:" not in res_finish_blocked.lower()
     assert "error:" not in res_finish_blocked.lower()
 
+    # 4c. Error path: finish_workflow verification failed returns compact blocked markdown
+    def raising_finish_failed(project_id, repo_path, commit_type=None):
+        raise EngramServiceError(
+            code="VERIFICATION_FAILED",
+            message="The latest verification for the active task failed.",
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_failed)
+    res_finish_failed = asyncio.run(finish_handler(commit_type="feat"))
+    assert "# Finish Blocked" in res_finish_failed
+    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_failed
+    assert "Reason: The latest verification for the active task failed." in res_finish_failed
+    assert "## Next action" in res_finish_failed
+    assert res_finish_failed.count("## Next action") == 1
+    assert (
+        "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
+        in res_finish_failed
+    )
+
+    # 4d. Error path: finish_workflow verification stale returns compact blocked markdown
+    def raising_finish_stale(project_id, repo_path, commit_type=None):
+        raise EngramServiceError(
+            code="VERIFICATION_STALE_RELEVANT_CHANGES",
+            message="Relevant files changed after the latest successful verification.",
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_stale)
+    res_finish_stale = asyncio.run(finish_handler(commit_type="feat"))
+    assert "# Finish Blocked" in res_finish_stale
+    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_stale
+    assert (
+        "Reason: Relevant files changed after the latest successful verification."
+        in res_finish_stale
+    )
+    assert "## Next action" in res_finish_stale
+    assert res_finish_stale.count("## Next action") == 1
+    assert (
+        "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
+        in res_finish_stale
+    )
+
     # 5. Error path: Project bound but has no repo_paths configured
     monkeypatch.setattr(
         "engram.mcp.tools.resolve_current_project",

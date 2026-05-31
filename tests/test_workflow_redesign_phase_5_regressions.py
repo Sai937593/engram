@@ -401,3 +401,104 @@ def test_finish_failures_contract(tmp_db: Any, monkeypatch: Any) -> None:
 
     assert res_mcp_push_fail["ok"] is False
     assert res_mcp_push_fail["error"] == "GIT_OPERATION_FAILED"
+
+
+def test_finish_verification_gate_e2e_contract(tmp_db: Any, monkeypatch: Any) -> None:
+    """Verify that engram_workflow_finish MCP tool handles all verification gating states end-to-end."""
+    import os
+    from pathlib import Path
+
+    cwd = os.path.abspath("repo/bound-mcp-workflow-finish-gate-e2e")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-finish-gate",
+        name="Finish Gate Project",
+        summary="End-to-end verification gate contract testing",
+        repo_paths=[cwd],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-gate",
+        title="Verification gate task",
+        phase="Phase One",
+        status="in-progress",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    finish_handler = server.tools["engram_workflow_finish"]
+
+    # 1. Never-Verified (Missing)
+    res_missing = asyncio.run(finish_handler())
+    assert "# Finish Blocked" in res_missing
+    assert "Task: `t-gate` - Verification gate task" in res_missing
+    assert "Reason: No verification record exists for the active task." in res_missing
+    assert "## Next action" in res_missing
+    assert res_missing.count("## Next action") == 1
+    assert "Run or rerun engram_workflow_verify" in res_missing
+
+    # 2. Failed Verification
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=False,
+        summary="unit tests failed",
+        verified_at="2026-05-31 09:00:00",
+    )
+    res_failed = asyncio.run(finish_handler())
+    assert "# Finish Blocked" in res_failed
+    assert "Reason: The latest verification for the active task failed." in res_failed
+    assert "## Next action" in res_failed
+    assert res_failed.count("## Next action") == 1
+
+    # 3. Stale Verification
+    # Set relevant_files and write a file to disk
+    task.update(relevant_files=["src/helper.py"])
+    candidate = Path(cwd) / "src" / "helper.py"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text("print('original')\n", encoding="utf-8")
+
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+        verified_at="2026-05-31 10:00:00",
+    )
+
+    # Make the file modification time in the future
+    os.utime(candidate, (1880000000.0, 1880000000.0))
+
+    res_stale = asyncio.run(finish_handler())
+    assert "# Finish Blocked" in res_stale
+    assert "Reason: Relevant files changed after the latest successful verification." in res_stale
+    assert "## Next action" in res_stale
+    assert res_stale.count("## Next action") == 1
+
+    # 4. Verified Success
+    # Record a newer verification (in 2029) to override stale state
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+        verified_at="2029-08-01 10:00:00",
+    )
+
+    git_mock = GitMock()
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        res_success = asyncio.run(finish_handler(commit_type="feat"))
+
+    assert res_success.startswith("# Task Finished")
+    assert "Task: `t-gate` - Verification gate task" in res_success
+    assert "Commit: `feat(phase-one): Verification gate task [t-gate]`" in res_success
+    assert "Phase complete: True" in res_success
+    assert "## Next action" in res_success
+    assert res_success.count("## Next action") == 1
+    assert (
+        "Phase complete. Ask the user for permission to run the engram-phase-transition skill."
+        in res_success
+    )

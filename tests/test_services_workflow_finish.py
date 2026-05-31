@@ -180,6 +180,77 @@ def test_finish_workflow_requires_verification(tmp_db: Any) -> None:
     assert exc_info.value.code == "VERIFICATION_MISSING"
 
 
+def test_finish_workflow_failed_verification(tmp_db: Any) -> None:
+    """Verify finish_workflow blocks when the latest verification failed."""
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=False,
+        summary="unit tests failed",
+    )
+
+    with pytest.raises(EngramServiceError) as exc_info:
+        finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
+    assert exc_info.value.code == "VERIFICATION_FAILED"
+
+
+def test_finish_workflow_stale_verification(tmp_db: Any, tmp_path: Any) -> None:
+    """Verify finish_workflow blocks when relevant files were modified after the latest verification."""
+    repo_path = str(tmp_path)
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=[repo_path],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+        relevant_files=["src/helper.py"],
+    )
+
+    # Create relevant file and record a verification at an older timestamp
+    candidate = tmp_path / "src" / "helper.py"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text("print('initial')\n", encoding="utf-8")
+
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+        verified_at="2026-05-31 10:00:00",
+    )
+
+    # Set the file modification time to be in the future (compared to verified_at)
+    import os
+
+    future_time = 1880000000.0  # in 2029, long after 2026-05-31
+    os.utime(candidate, (future_time, future_time))
+
+    git_mock = GitMock()
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        with pytest.raises(EngramServiceError) as exc_info:
+            finish_workflow("proj-1", repo_path, commit_type="feat")
+    assert exc_info.value.code == "VERIFICATION_STALE_RELEVANT_CHANGES"
+
+
 def test_format_finish_success() -> None:
     """Verify format_finish_success produces the correct Markdown-first response."""
     from engram.services.workflow_formatter import format_finish_success
