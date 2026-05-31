@@ -1,34 +1,40 @@
-# Implementation Plan - Task a43434df (Phase 3.2)
+# Implementation Plan - Task b26fc802 (Phase 3.3)
 
 ## Scope
-Add regression coverage proving normal MCP-first agent workflows remain CLI-independent, with focus on startup/current/context paths and retained MCP task/phase/memory tool paths.
+Rewrite published manuals for repo-local, MCP-first workflow behavior without changing product code. Keep CLI documentation trimmed to optional human utilities (`init`, `guide`, `db`) and remove wording that implies normal agent workflows depend on CLI.
 
 ## Current Findings
-- `tests/test_mcp_server.py` already enforces banned imports for MCP modules only.
-- `tests/test_services_context.py` enforces adapter-safe imports, but does not explicitly fail on runtime CLI module loading for wrapper flows.
-- `tests/test_services_project.py` validates repo-local resolution behavior, but does not assert CLI modules are unnecessary/unused during normal resolution.
-- `src/engram/mcp/server.py` currently calls `init_db()` directly before server run; this is acceptable if no CLI module is imported/called, but needs explicit regression checks.
+- `README.md` still describes storage as user-level `~/.engram/memory.db` and architecture diagram references `~/.engram/`.
+- `docs/USER_MANUAL.md` and `src/engram/USER_MANUAL.md` still describe central/global storage and global DB diagnostics.
+- Workflow sections already emphasize MCP tools, but some wording still mixes CLI and MCP in ways that can imply CLI dependency.
+- `docs/PROJECT_BRIEF.md` appears mostly aligned but will be checked for consistency-only updates if required by acceptance framing.
 
 ## Planned Changes
-1. `tests/test_mcp_server.py`
-- Add assertions that MCP startup and core tool/resource registration paths do not import or invoke CLI command modules.
-- Add actionable failure messages naming the forbidden module/function path when violated.
+1. `README.md`
+- Update storage model to repo-local `.engram/memory.db` as normal behavior.
+- Update architecture diagram labels and supporting bullets to match repo-local project state.
+- Keep MCP-first workflow guidance and clarify CLI as optional human utility only.
 
-2. `tests/test_services_project.py`
-- Add targeted tests proving `resolve_current_project()` succeeds on repo-local state with CLI modules intentionally blocked/unavailable.
-- Add explicit test that unbound behavior still raises `PROJECT_NOT_BOUND` without any CLI bootstrap dependency.
+2. `docs/USER_MANUAL.md`
+- Rewrite overview and project model sections to remove global-storage language.
+- Update `engram db` description to reflect repo-local diagnostics.
+- Tighten workflow narrative so normal agent execution is MCP tool/resource driven.
 
-3. `tests/test_services_context.py`
-- Add runtime guard tests for startup/snapshot/handoff/task wrappers to ensure they resolve via services/context only, with CLI modules blocked.
-- Keep checks read-only and repo-local, aligned with existing service behavior.
+3. `src/engram/USER_MANUAL.md`
+- Mirror `docs/USER_MANUAL.md` updates so packaged and top-level manuals stay synchronized.
+
+4. `docs/PROJECT_BRIEF.md` (if needed)
+- Apply only minimal wording adjustments needed to remain consistent with repo-local MCP-first claims.
 
 ## Validation Plan
-- Run targeted suite:
-  - `pytest tests/test_mcp_server.py tests/test_services_project.py tests/test_services_context.py -q`
-- If regressions appear in adjacent behavior, run:
-  - `pytest tests/test_mcp_server.py tests/test_services_project.py tests/test_services_context.py tests/test_context.py -q`
+- Search for stale global-path phrasing:
+  - `rg -n "~/.engram|global database|globally outside the repository" README.md docs/USER_MANUAL.md src/engram/USER_MANUAL.md docs/PROJECT_BRIEF.md`
+- Ensure manuals remain in sync:
+  - `fc /N docs\\USER_MANUAL.md src\\engram\\USER_MANUAL.md` (or equivalent diff)
+- Run documentation-related checks if available in project tooling:
+  - `pytest -q` subset only if docs assertions exist.
 
 ## Out of Scope
-- Implementing `engram_workflow_verify`, finish gating changes, or new lifecycle states.
-- Refactoring CLI codepaths themselves unless required to restore existing behavior under these tests.
-- Broad documentation updates.
+- Future-phase output-contract or verification-gate documentation updates.
+- Any CLI or MCP implementation refactors.
+- Non-task documentation cleanup unrelated to repo-local MCP-first behavior.

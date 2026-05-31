@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/Sai937593/engram/actions/workflows/ci.yml/badge.svg)](https://github.com/Sai937593/engram/actions/workflows/ci.yml)
 
-Engram is a local-first, agent-agnostic persistent memory system for AI coding assistants and developers. It is built primarily around a **Model Context Protocol (MCP)** server that exposes project-level memory, tasks, phases, and workflows directly to AI agents, with a trimmed, lightweight companion CLI (`init`, `guide`, `db`) for initial setup and diagnostic utilities.
+Engram is a local-first, agent-agnostic persistent memory system for AI coding assistants and developers. It is built primarily around a **Model Context Protocol (MCP)** server that exposes project-level memory, tasks, phases, and workflows directly to AI agents, with a trimmed companion CLI (`init`, `guide`, `db`) kept for optional human setup and diagnostics.
 
 ## The Problem
 
@@ -25,7 +25,7 @@ graph TD
         CLI[engram CLI]
     end
 
-    subgraph Engram Architecture ["~/.engram/"]
+    subgraph Engram Architecture ["<repo>/.engram/"]
         MCPServer[MCP Server - STDIO]
         DB[(memory.db - SQLite3)]
         FTS5[FTS5 Search Index]
@@ -34,7 +34,7 @@ graph TD
     Agent -->|Connect via STDIO| MCPServer
     MCPServer -->|Query & persist| DB
     MCPServer -->|Full-text search| FTS5
-    CLI -->|Initialize & diagnose| DB
+    CLI -->|Optional setup & diagnostics| DB
 ```
 
 ## Features
@@ -43,9 +43,9 @@ graph TD
 - **Project-aware task tracking:** Programmatic task states (`todo`, `in-progress`, `done`, `blocked`, and `cancelled`) mapped automatically to the current workspace.
 - **Task-scoped relevant file path hints:** Faster startup navigation for agents without code parsing overhead.
 - **Persistent memories:** Categorized memories for notes, decisions, lessons, constraints, and reusable snippets.
-- **Full-text search:** In-memory and global SQLite FTS5 search index over all captured memories.
+- **Full-text search:** In-memory and SQLite FTS5 search index over all captured memories.
 - **Guardrail controls:** Multi-level project policy controls (L0 to L3) with explicit demotion audits.
-- **Packaged user manual:** Interactive, console-rendered manual accessible via `engram guide`.
+- **Packaged user manual:** Interactive, console-rendered manual accessible via `engram guide` for human reference.
 
 ## Installation
 
@@ -113,12 +113,12 @@ Once verification passes, the agent calls `engram_workflow_finish` to stage chan
 
 ## Admin and Utility Commands
 
-The companion CLI is kept intentionally minimal and focused on system utilities:
+The companion CLI is intentionally minimal and focused on optional human utilities:
 
 ```bash
-engram init              # Bind the current working directory to an Engram project
+engram init              # Initialize repo-local Engram state in the current repository
 engram guide             # Open the interactive packaged User Manual
-engram db                # Inspect database path, size, and integrity health
+engram db                # Inspect repo-local database path, size, and integrity health
 ```
 
 ---
@@ -142,7 +142,7 @@ Engram exposes the following interface to connected AI agents:
 
 ## Design Choices
 
-- **Local first:** all data is stored in a user-level SQLite database at `~/.engram/memory.db`.
+- **Local first:** normal project state is stored in repo-local SQLite at `.engram/memory.db`.
 - **Zero repository clutter:** no planning files, task logs, or configuration blobs are committed to the codebase.
 - **On-demand context:** agents pull specific details only when needed, minimizing prompt token consumption.
 
