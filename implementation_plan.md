@@ -1,50 +1,59 @@
-# Implementation Plan - Task 8e1172e6 (Phase 6.3)
+﻿# Implementation Plan - Task d8d0574d (Phase 7.4)
 
 ## Scope
-Add regression tests for `engram_workflow_start` Work Order output in dense and sparse startup states after Phase 6 refinements. Lock behavior for compact high-signal context, sparse-memory guidance, single `Next action` rendering, and deterministic output budget behavior across service and MCP-visible paths.
+Add regression coverage for Phase 7 verification behavior only: pass/fail execution outcomes, persisted verification state, and concise deterministic MCP-visible verification Markdown. Do not introduce Phase 8 stale-verification blocking, memory-review gates, or finish gating.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `8e1172e6`.
-- Test-focused scope: no new workflow lifecycle states, no finish gating, no verify-phase behavior.
-- Keep edits within currently implemented workflow-start surface.
-- Respect no-touch directories: `planning/`, `workflow/`, `.github/`.
-- Preserve service/adapter boundaries in `src/engram/services`.
+- One-task session only: execute only task `d8d0574d`.
+- Phase boundary: stay strictly inside `engram_workflow_verify` + verification-state recording behavior.
+- Output boundary: verification output must remain compact, deterministic, and fix-focused.
+- Startup boundary: keep repo-local startup/MCP behavior protected from verification regressions.
+- No-touch directories: `planning/`, `workflow/`, `.github/`.
+- Service safety: no CLI/Click/Rich/subprocess/MCP adapter imports inside service-layer modules unless already part of existing verify service behavior.
 
 ## Investigation Plan
-1. Review existing startup and workflow-start regression tests:
-- `tests/test_context.py`
-- `tests/test_services_workflow_start_basic.py`
-- `tests/test_mcp_tools.py`
+1. Inspect current verification coverage and identify gaps against acceptance:
+- `tests/test_services_workflow_verify.py`
 - `tests/test_workflow_redesign_phase_5_regressions.py`
 
-2. Map acceptance criteria to concrete assertions:
-- Dense guardrail + memory rendering remains compact and deterministic.
-- Sparse task metadata/memory path shows useful guidance without duplication.
-- Exactly one `Next action` section is emitted.
-- Budget/truncation behavior stays deterministic.
+2. Inspect MCP verification contract coverage and startup integration assertions:
+- `tests/test_mcp_tools.py`
+- `tests/test_mcp_server.py`
 
-3. Identify whether any small fixture/helper additions are needed to avoid brittle assertions.
+3. Inspect verification formatter/service contract needed for deterministic Markdown assertions:
+- `src/engram/services/workflow_formatter.py`
+- `src/engram/services/workflow_service.py`
+- `src/engram/services/workflow_verification_service.py`
 
 ## Planned Changes
-1. Add or refine tests for dense startup state:
-- Verify compact Work Order sections with high-signal guardrail/memory content.
-- Verify no duplicated obvious task metadata.
+1. Service-layer regression tests (`tests/test_services_workflow_verify.py`):
+- Ensure explicit coverage for both pass and fail runs.
+- Assert persisted verification state captures status + summary/details shape for both outcomes.
+- Keep assertions independent of Phase 8/9 behaviors.
 
-2. Add or refine tests for sparse startup state:
-- Verify fallback guidance when relevant memories/files are absent.
-- Verify output still includes one actionable `Next action`.
+2. MCP tool contract tests (`tests/test_mcp_tools.py`):
+- Strengthen `engram_workflow_verify` response checks for deterministic concise Markdown:
+  - status line present and stable (`PASSED`/`FAILED`)
+  - single `## Next action` section
+  - concise details summary (no long log dump assumptions)
+- Preserve actionable error behavior when project has no repo binding/path.
 
-3. Add/adjust budget stability assertions:
-- Lock deterministic truncation/ordering behavior under constrained output budgets.
-
-4. If needed, make minimal production adjustments only to satisfy validated regression expectations and keep behavior consistent across service + MCP entry points.
+3. MCP server/startup regression tests (`tests/test_mcp_server.py` and/or `tests/test_workflow_redesign_phase_5_regressions.py`):
+- Add or tighten assertions that verification tool registration and startup-facing behavior do not regress while adding Phase 7.4 coverage.
+- Keep tests repo-local and deterministic.
 
 ## Validation Plan
-- Run targeted tests for edited modules first.
-- Run the full related workflow-start test set listed above.
-- Ensure zero failures before any finish step.
+- Run targeted tests first:
+- `pytest tests/test_services_workflow_verify.py`
+- `pytest tests/test_mcp_tools.py -k workflow_verify`
+- `pytest tests/test_mcp_server.py`
+- `pytest tests/test_workflow_redesign_phase_5_regressions.py`
+
+- Then run an aggregate verification-focused pass if needed:
+- `pytest tests/test_services_workflow_verify.py tests/test_mcp_tools.py tests/test_mcp_server.py tests/test_workflow_redesign_phase_5_regressions.py`
 
 ## Out of Scope
-- Implementing later-phase verification or readiness gates.
-- Changing `engram_workflow_finish` behavior.
-- Broad refactors outside startup Work Order regression coverage.
+- Blocking `engram_workflow_finish` based on verification state age/result.
+- Any memory-review requirement changes.
+- Broad workflow redesign changes outside verification tests.
+- Refactoring production behavior unrelated to test coverage required by this task.

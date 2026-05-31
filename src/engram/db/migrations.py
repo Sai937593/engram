@@ -189,3 +189,11 @@ def apply_task_status_migrations(cursor: sqlite3.Cursor) -> None:
     """Normalize legacy task statuses."""
     cursor.execute("UPDATE tasks SET status = 'todo' WHERE status = 'backlog'")
     cursor.execute("UPDATE tasks SET status = 'done' WHERE status = 'completed'")
+
+
+def apply_workflow_verification_migrations(cursor: sqlite3.Cursor) -> None:
+    """Ensure workflow verification table columns exist for legacy upgrades."""
+    if not column_exists(cursor, "workflow_verifications", "details"):
+        cursor.execute("ALTER TABLE workflow_verifications ADD COLUMN details TEXT")
+    if not column_exists(cursor, "workflow_verifications", "verified_at"):
+        cursor.execute("ALTER TABLE workflow_verifications ADD COLUMN verified_at TEXT")

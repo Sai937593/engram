@@ -287,7 +287,7 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
         res_mcp_a = asyncio.run(finish_handler(commit_type="feat"))
 
     assert res_mcp_a.startswith("# Task Finished")
-    assert "Task: `t-1` — Refactor auth" in res_mcp_a
+    assert "Task: `t-1` - Refactor auth" in res_mcp_a
     assert "Commit: `feat(phase-one): Refactor auth [t-1]`" in res_mcp_a
     assert "Phase complete: False" in res_mcp_a
     assert res_mcp_a.count("## Next action") == 1
@@ -312,7 +312,7 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
         res_mcp_b = asyncio.run(finish_handler(commit_type="test"))
 
     assert res_mcp_b.startswith("# Task Finished")
-    assert "Task: `t-2` — Write tests" in res_mcp_b
+    assert "Task: `t-2` - Write tests" in res_mcp_b
     assert "Commit: `test(phase-one): Write tests [t-2]`" in res_mcp_b
     assert "Phase complete: True" in res_mcp_b
     assert res_mcp_b.count("## Next action") == 1

@@ -114,6 +114,41 @@ def register_workflow_tools(server: Any) -> None:
             return engram.mcp.tools._respond_error(exc)
 
     @server.tool()
+    async def engram_workflow_verify() -> str:
+        """Run repo-local workflow verification checks for the active task."""
+        try:
+            project = engram.mcp.tools.resolve_current_project()
+            repo_paths = project.get("repo_paths", [])
+            if not repo_paths:
+                raise EngramServiceError(
+                    code="PROJECT_NO_REPOS",
+                    message="No repository paths configured for this project.",
+                )
+            res = await anyio.to_thread.run_sync(
+                functools.partial(
+                    engram.mcp.tools.verify_workflow,
+                    project_id=str(project["id"]),
+                    repo_path=repo_paths[0],
+                )
+            )
+            from engram.services.workflow_formatter import format_verify_result
+
+            next_guidance = (
+                "Verification passed. Continue implementation and run engram_workflow_finish when ready."
+                if res["passed"]
+                else "Fix the first actionable target, then rerun engram_workflow_verify."
+            )
+            return format_verify_result(
+                task_id=res["task_id"],
+                task_title=res.get("task_title"),
+                passed=bool(res["passed"]),
+                details=res["summary"],
+                next_guidance=next_guidance,
+            )
+        except EngramServiceError as exc:
+            return engram.mcp.tools._respond_error(exc)
+
+    @server.tool()
     def engram_project_init(
         name: str | None = None,
         project_id: str | None = None,

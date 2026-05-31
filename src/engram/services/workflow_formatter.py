@@ -122,7 +122,7 @@ def format_verify_result(
     status = "PASSED" if passed else "FAILED"
     lines = ["# Verification Result", ""]
     if task_title:
-        lines.append(f"Task: `{task_id}` — {task_title}")
+        lines.append(f"Task: `{task_id}` - {task_title}")
     else:
         lines.append(f"Task: `{task_id}`")
     lines.append(f"Status: {status}")
@@ -145,7 +145,7 @@ def format_finish_blocked(
     """Format a blocked finish response as a Markdown-first string."""
     lines = ["# Finish Blocked", ""]
     if task_title:
-        lines.append(f"Task: `{task_id}` — {task_title}")
+        lines.append(f"Task: `{task_id}` - {task_title}")
     else:
         lines.append(f"Task: `{task_id}`")
     lines.append(f"Reason: {reason}")
@@ -166,7 +166,7 @@ def format_finish_success(
     """Format a successful finish response as a Markdown-first string."""
     lines = ["# Task Finished", ""]
     if task_title:
-        lines.append(f"Task: `{task_id}` — {task_title}")
+        lines.append(f"Task: `{task_id}` - {task_title}")
     else:
         lines.append(f"Task: `{task_id}`")
     lines.append(f"Commit: `{commit_msg}`")
