@@ -738,6 +738,28 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "error" in res_err
     assert res_err["error"] == "INVALID_TASK_STATUS"
 
+    # 3. Memory review outcome happy path
+    res_mro = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={"memory_review_outcome": "created"},
+        )
+    )
+    assert res_mro["ok"] is True
+    assert res_mro["id"] == "task-to-update"
+    assert res_mro["updated_fields"] == ["memory_review_outcome"]
+
+    # 4. Memory review outcome invalid value rejection
+    res_mro_err = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={"memory_review_outcome": "invalid-outcome-value"},
+        )
+    )
+    assert res_mro_err["ok"] is False
+    assert "error" in res_mro_err
+    assert res_mro_err["error"] == "INVALID_MEMORY_REVIEW_OUTCOME"
+
 
 def test_mcp_task_note_append_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     """Verify engram_task_note_append tool appends notes and gracefully handles service validation errors."""
