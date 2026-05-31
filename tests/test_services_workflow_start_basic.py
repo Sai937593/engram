@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+from engram.db import get_db_connection, init_db
 from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task
@@ -140,3 +141,47 @@ def test_start_workflow_unbound_repo(tmp_db: Any, mock_startup_context: None) ->
             start_workflow("proj-1", tmpdir)
 
         assert exc_info.value.code == "GIT_OPERATION_FAILED"
+
+
+def test_start_workflow_picks_task_after_legacy_dependency_normalization(
+    tmp_db: Any, mock_startup_context: None
+) -> None:
+    """Legacy depends_on like '2.3' is normalized during init_db and becomes selectable."""
+    project = Project.create(
+        id="proj-legacy-dep",
+        name="Project Legacy Dep",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-legacy-dep"],
+    )
+    Phase.create(project_id=project.id, id="ph-2", title="Phase Two", status="active")
+
+    conn = get_db_connection(tmp_db)
+    conn.execute(
+        """
+        INSERT INTO tasks (id, project_id, title, status, priority, phase, phase_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("dep20001", project.id, "2.3 Prerequisite task", "done", "high", "Phase Two", "ph-2"),
+    )
+    conn.execute(
+        """
+        INSERT INTO tasks (id, project_id, title, status, priority, phase, phase_id, depends_on)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("tsk20001", project.id, "2.4 Target task", "todo", "high", "Phase Two", "ph-2", "2.3"),
+    )
+    conn.commit()
+    conn.close()
+
+    init_db(tmp_db)
+
+    git_mock = GitMock()
+    git_mock.branch = "main"
+    git_mock.status = ""
+    git_mock.show_ref_returncode = 0
+
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        res = start_workflow(project.id, "/tmp/proj-legacy-dep")
+
+    assert res["task"] is not None
+    assert res["task"]["id"] == "tsk20001"

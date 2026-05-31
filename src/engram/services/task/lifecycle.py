@@ -33,7 +33,17 @@ def start_task(project_id: str, task_ref: str) -> dict[str, object]:
     # Validate dependencies
     if task_item.depends_on:
         dep_task = Task.get(task_item.depends_on)
-        if dep_task and dep_task.status != "done":
+        if dep_task is None:
+            raise ValidationError(
+                code="DEPENDENCY_UNSATISFIED",
+                message=f"Cannot start task '{task_item.title}' because its dependency reference '{task_item.depends_on}' cannot be resolved.",
+                details={
+                    "task_id": task_item.id,
+                    "depends_on": task_item.depends_on,
+                    "dependency_status": "missing",
+                },
+            )
+        if dep_task.status != "done":
             raise ValidationError(
                 code="DEPENDENCY_UNSATISFIED",
                 message=f"Cannot start task '{task_item.title}' because its dependency '{dep_task.title}' ({dep_task.id}) is not done.",

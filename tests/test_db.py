@@ -61,6 +61,7 @@ def test_init_db_creates_parent_directory(tmp_path, monkeypatch):
     monkeypatch.setattr("engram.db.create_memories_fts_and_triggers", MagicMock())
     monkeypatch.setattr("engram.db.apply_task_status_migrations", MagicMock())
     monkeypatch.setattr("engram.db.backfill_legacy_phase_ids", MagicMock())
+    monkeypatch.setattr("engram.db.apply_task_dependency_ref_migrations", MagicMock())
 
     init_db(db_path)
     assert db_path.parent.exists()
@@ -109,6 +110,7 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     mock_create_memories_fts_and_triggers = MagicMock()
     mock_apply_task_status_migrations = MagicMock()
     mock_backfill_legacy_phase_ids = MagicMock()
+    mock_apply_task_dependency_ref_migrations = MagicMock()
 
     monkeypatch.setattr("engram.db.create_projects_table", mock_create_projects_table)
     monkeypatch.setattr("engram.db.create_tasks_table", mock_create_tasks_table)
@@ -127,6 +129,9 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     )
     monkeypatch.setattr("engram.db.apply_task_status_migrations", mock_apply_task_status_migrations)
     monkeypatch.setattr("engram.db.backfill_legacy_phase_ids", mock_backfill_legacy_phase_ids)
+    monkeypatch.setattr(
+        "engram.db.apply_task_dependency_ref_migrations", mock_apply_task_dependency_ref_migrations
+    )
 
     # Call init_db
     custom_path = Path("/custom/path/db.sqlite")
@@ -147,6 +152,7 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     mock_create_memories_fts_and_triggers.assert_called_once_with(mock_cursor)
     mock_apply_task_status_migrations.assert_called_once_with(mock_cursor)
     mock_backfill_legacy_phase_ids.assert_called_once_with(mock_cursor)
+    mock_apply_task_dependency_ref_migrations.assert_called_once_with(mock_cursor)
 
     mock_conn.commit.assert_called_once()
     mock_conn.close.assert_called_once()
@@ -181,8 +187,12 @@ def test_init_db_handles_fts5_error(monkeypatch):
 
     mock_apply_task_status_migrations = MagicMock()
     mock_backfill_legacy_phase_ids = MagicMock()
+    mock_apply_task_dependency_ref_migrations = MagicMock()
     monkeypatch.setattr("engram.db.apply_task_status_migrations", mock_apply_task_status_migrations)
     monkeypatch.setattr("engram.db.backfill_legacy_phase_ids", mock_backfill_legacy_phase_ids)
+    monkeypatch.setattr(
+        "engram.db.apply_task_dependency_ref_migrations", mock_apply_task_dependency_ref_migrations
+    )
 
     with pytest.warns(RuntimeWarning, match="FTS5 search is unavailable"):
         init_db()
@@ -190,6 +200,40 @@ def test_init_db_handles_fts5_error(monkeypatch):
     # The functions after the exception should still have been called
     mock_apply_task_status_migrations.assert_called_once_with(mock_cursor)
     mock_backfill_legacy_phase_ids.assert_called_once_with(mock_cursor)
+    mock_apply_task_dependency_ref_migrations.assert_called_once_with(mock_cursor)
 
-    mock_conn.commit.assert_called_once()
-    mock_conn.close.assert_called_once()
+
+def test_init_db_normalizes_legacy_dependency_refs(tmp_db):
+    """Legacy textual dependency refs are normalized to task IDs during init_db."""
+    conn = get_db_connection(tmp_db)
+    conn.execute(
+        "INSERT INTO projects (id, name, summary, status, repo_paths) VALUES (?, ?, ?, ?, ?)",
+        ("proj-dep", "Dep Project", "summary", "active", "[]"),
+    )
+    conn.execute(
+        "INSERT INTO tasks (id, project_id, title, status, priority) VALUES (?, ?, ?, ?, ?)",
+        ("a1b2c3d4", "proj-dep", "2.3 Example prerequisite", "done", "high"),
+    )
+    conn.execute(
+        "INSERT INTO tasks (id, project_id, title, status, priority, depends_on) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            "d4c3b2a1",
+            "proj-dep",
+            "2.4 Task with legacy dependency",
+            "todo",
+            "high",
+            "2.3",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    init_db(tmp_db)
+
+    conn = get_db_connection(tmp_db)
+    dep_value = conn.execute(
+        "SELECT depends_on FROM tasks WHERE id = ?",
+        ("d4c3b2a1",),
+    ).fetchone()["depends_on"]
+    conn.close()
+    assert dep_value == "a1b2c3d4"

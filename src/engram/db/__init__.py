@@ -18,6 +18,7 @@ from .schema import (
     create_projects_table,
     create_tasks_table,
 )
+from .task_dependency_migrations import apply_task_dependency_ref_migrations
 
 
 def get_default_db_path() -> Path:
@@ -81,6 +82,7 @@ def init_db(db_path=None):
 
     apply_task_status_migrations(cursor)
     backfill_legacy_phase_ids(cursor)
+    apply_task_dependency_ref_migrations(cursor)
 
     conn.commit()
     conn.close()
