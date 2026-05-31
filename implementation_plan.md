@@ -1,46 +1,34 @@
-# Implementation Plan - Task 4ad16046
+# Implementation Plan - Task c63c5495
 
 ## Scope
-Restrict workflow-start task selection so new execution starts only from `ready` tasks, while still resuming genuine `in-progress` work. When no ready tasks exist but draft tasks remain, return compact blocked guidance explaining that required task metadata must be completed first.
+Add regression coverage for the draft-to-ready execution path so Phase 11 lifecycle behavior remains stable: draft task creation, promotion to ready, blocked workflow start when only drafts remain, and successful selection/resumption once a ready task exists.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `4ad16046`.
+- One-task session only: execute only task `c63c5495`.
 - No edits in `planning/`, `workflow/`, or `.github/`.
-- Service layers must remain adapter-safe (no CLI/MCP adapter imports in services).
-- Preserve Phase 11 minimal ready-gate behavior; do not add Phase 12 quality heuristics.
+- Keep changes test-focused unless a missing test seam requires minimal production adjustment.
+- Preserve Phase 11 minimal ready-gate behavior; do not introduce richer Phase 12 heuristics.
 
 ## Inputs to Use
-- `src/engram/models/task/queries.py`
-- `src/engram/services/workflow_helpers.py`
-- `src/engram/services/workflow_service.py`
-- `src/engram/services/workflow_formatter.py`
-- `src/engram/context/startup/next_action.py`
-- `src/engram/mcp/tools/workflow_tools.py`
-- `tests/test_services_workflow_start_basic.py`
-- `tests/test_services_workflow_helpers.py`
 - `tests/test_mcp_tools.py`
-- `tests/test_context.py`
+- `tests/test_services_workflow_start_basic.py`
+- `tests/test_services_task.py`
+- `tests/test_workflow_redesign_phase_5_regressions.py`
 
 ## Planned Changes
-1. Add explicit task-status counting/selection helpers so workflow-start logic can distinguish:
-   - resumable `in-progress` work,
-   - actionable `ready` work,
-   - draft-only remaining work.
-2. Keep resumption priority for real `in-progress` tasks, but ensure any non-resume new start path selects only `ready` tasks.
-3. Introduce a draft-only blocked condition from start selection (service-level signal), then format a compact startup-blocked response with clear next action.
-4. Update startup next-action wording so draft-only states tell Codex to complete minimum metadata and promote tasks to `ready`.
-5. Add targeted tests for:
-   - selecting/resuming in-progress tasks,
-   - selecting ready tasks only for new starts,
-   - blocked response when only draft tasks remain,
-   - unchanged behavior for zero-task / all-done cases.
+1. Review existing lifecycle coverage in the listed test modules and map gaps against the acceptance criteria.
+2. Add/adjust tests validating draft task creation and promotion to `ready` with minimum required metadata.
+3. Add/adjust workflow-start tests for blocked messaging when only `draft` tasks remain.
+4. Add/adjust selection/resumption tests confirming a `ready` task is selected for new starts while true `in-progress` work is resumed.
+5. Keep assertions deterministic and focused on observable service/MCP behavior, avoiding implementation-coupled expectations.
 
 ## Validation Plan
-- Run: `uv run pytest tests/test_services_workflow_start_basic.py -q tests/test_mcp_tools.py -q tests/test_context.py -q tests/test_services_workflow_helpers.py -q`
-- Run: `engram_workflow_verify`
-- If verification fails, fix the first actionable issue and rerun verification.
+- Run targeted tests:
+  - `uv run pytest tests/test_mcp_tools.py -q tests/test_services_workflow_start_basic.py -q tests/test_services_task.py -q tests/test_workflow_redesign_phase_5_regressions.py -q`
+- Run full workflow verification: `engram_workflow_verify`
+- If verification fails, fix the first actionable issue and rerun.
 
 ## Out of Scope
-- Any richer metadata-quality scoring (Phase 12).
-- Changes unrelated to workflow-start/task-next selection.
-- Any work on tasks other than `4ad16046` in this session.
+- Any non-regression feature work in workflow/task services.
+- Any edits outside the accepted lifecycle regression scope.
+- Work on tasks other than `c63c5495` in this session.
