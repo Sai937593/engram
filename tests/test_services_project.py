@@ -8,7 +8,10 @@ import pytest
 
 from engram.services.errors import EngramServiceError
 from engram.services.project_service import resolve_current_project
-from engram.services.project_status_service import get_current_project_status
+from engram.services.project_status_service import (
+    get_current_project_status,
+    get_project_diagnostics,
+)
 
 
 def test_resolve_current_project_returns_serialized_project_for_bound_repo(tmp_path):
@@ -388,3 +391,44 @@ def test_get_current_project_status_returns_uninitialized_for_repo_without_db(tm
     assert payload["status"] == "uninitialized"
     assert payload["db_exists"] is False
     assert "engram_project_init" in str(payload["next_action"])
+
+
+def test_get_project_diagnostics_returns_unresolved_workspace_without_git(tmp_path):
+    cwd = tmp_path / "diag_unresolved"
+    cwd.mkdir()
+
+    payload = get_project_diagnostics(cwd=str(cwd))
+    assert payload["status"] == "unresolved-workspace"
+    assert payload["repo_root_detected"] is False
+    assert "git init" in str(payload["next_action"])
+
+
+def test_get_project_diagnostics_returns_uninitialized_when_db_missing(tmp_path):
+    repo_path = tmp_path / "diag_uninitialized"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+
+    payload = get_project_diagnostics(cwd=str(repo_path))
+    assert payload["status"] == "uninitialized"
+    assert payload["repo_root_detected"] is True
+    assert payload["db"]["exists"] is False
+    assert payload["gitignore"]["status"] == "missing-file"
+    assert "engram_project_init" in str(payload["next_action"])
+
+
+def test_get_project_diagnostics_returns_healthy_state(tmp_path):
+    repo_path = tmp_path / "diag_healthy"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+
+    from engram.services.project_service import initialize_project
+
+    initialize_project(cwd=str(repo_path), name="Diag Healthy", project_id="diag-healthy")
+    payload = get_project_diagnostics(cwd=str(repo_path))
+
+    assert payload["status"] == "healthy"
+    assert payload["repo_root_detected"] is True
+    assert payload["db"]["status"] == "healthy"
+    assert payload["db"]["schema_ok"] is True
+    assert payload["gitignore"]["status"] == "configured"
+    assert payload["next_action"] is None

@@ -42,6 +42,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_project_current"].__name__ == "engram_project_current"
     assert "engram_project_init" in server.tools
     assert server.tools["engram_project_init"].__name__ == "engram_project_init"
+    assert "engram_project_diagnostics" in server.tools
+    assert server.tools["engram_project_diagnostics"].__name__ == "engram_project_diagnostics"
     assert "engram_task_list" in server.tools
     assert server.tools["engram_task_list"].__name__ == "engram_task_list"
     assert "engram_task_get" in server.tools
@@ -131,6 +133,35 @@ def test_mcp_tool_returns_actionable_uninitialized_for_unbound_repo(tmp_path, mo
     assert result["initialized"] is False
     assert result["status"] in {"uninitialized", "unresolved-workspace"}
     assert "next" in result
+
+
+def test_mcp_project_diagnostics_reports_misconfigured_missing_gitignore_entry(
+    tmp_path, monkeypatch
+) -> None:
+    """Verify engram_project_diagnostics reports missing .engram gitignore entry."""
+    repo_path = tmp_path / "diag_missing_gitignore_entry"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+    (repo_path / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
+
+    from engram.db import init_db
+
+    init_db(repo_path / ".engram" / "memory.db")
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_project_diagnostics"]
+    result = yaml.safe_load(handler())
+
+    assert result["ok"] is True
+    assert result["status"] == "misconfigured"
+    assert result["repo_root_detected"] is True
+    assert result["gitignore"]["status"] == "missing-entry"
+    assert "engram_project_init" in result["next_action"]
 
 
 def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:

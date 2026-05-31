@@ -143,3 +143,12 @@ def register_workflow_tools(server: Any) -> None:
             )
         except EngramServiceError as exc:
             return engram.mcp.tools._respond_error(exc)
+
+    @server.tool()
+    def engram_project_diagnostics() -> str:
+        """Inspect repo root, DB health/schema, and .gitignore state for the current workspace."""
+        try:
+            diagnostics = engram.mcp.tools.get_project_diagnostics()
+            return engram.mcp.tools._respond({"ok": True, **diagnostics})
+        except EngramServiceError as exc:
+            return engram.mcp.tools._respond_error(exc)
