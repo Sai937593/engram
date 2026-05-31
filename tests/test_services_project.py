@@ -6,74 +6,84 @@ import os
 
 import pytest
 
-import engram.services.project_service as project_service
-from engram.models.project import Project
 from engram.services.errors import EngramServiceError
 from engram.services.project_service import resolve_current_project
 
 
-def test_resolve_current_project_returns_serialized_project_for_bound_repo(tmp_db):
-    repo_path = os.path.abspath("repo/bound")
-    Project.create(
-        id="proj1234",
-        name="Bound Project",
-        summary="Service test project",
-        repo_paths=[repo_path],
-    )
+def test_resolve_current_project_returns_serialized_project_for_bound_repo(tmp_path):
+    repo_path = tmp_path / "repo_bound"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
 
-    payload = resolve_current_project(cwd=repo_path)
+    from engram.db import get_db_connection, init_db
+
+    db_path = repo_path / ".engram" / "memory.db"
+    init_db(db_path)
+
+    conn = get_db_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (id, name, summary, status, repo_paths) VALUES (?, ?, ?, ?, ?)",
+        ("proj1234", "Bound Project", "Service test project", "active", "[]"),
+    )
+    conn.commit()
+    conn.close()
+
+    payload = resolve_current_project(cwd=str(repo_path))
 
     assert payload == {
         "id": "proj1234",
         "name": "Bound Project",
         "summary": "Service test project",
         "status": "active",
-        "repo_paths": [repo_path],
+        "repo_paths": [str(repo_path)],
     }
 
 
-def test_resolve_current_project_raises_project_not_bound_for_unbound_repo(tmp_db):
-    cwd = os.path.abspath("repo/unbound")
+def test_resolve_current_project_raises_project_not_bound_for_unbound_repo(tmp_path):
+    # Case 1: No .git directory at all
+    cwd = tmp_path / "repo_unbound"
+    cwd.mkdir()
 
     with pytest.raises(EngramServiceError) as raised:
-        resolve_current_project(cwd=cwd)
+        resolve_current_project(cwd=str(cwd))
     error = raised.value
     assert error.code == "PROJECT_NOT_BOUND"
-    assert error.message == "No project is bound to the current repository path."
-    assert error.details == {"cwd": cwd}
+
+    # Case 2: .git directory exists but no .engram/memory.db
+    (cwd / ".git").mkdir()
+    with pytest.raises(EngramServiceError) as raised:
+        resolve_current_project(cwd=str(cwd))
+    error = raised.value
+    assert error.code == "PROJECT_NOT_BOUND"
 
 
-def test_resolve_current_project_uses_os_getcwd_when_cwd_is_omitted(monkeypatch):
-    captured: dict[str, str] = {}
-    raw_cwd = "./repo/default-cwd"
+def test_resolve_current_project_uses_os_getcwd_when_cwd_is_omitted(tmp_path, monkeypatch):
+    repo_path = tmp_path / "repo_cwd"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
 
-    monkeypatch.setattr(project_service.os, "getcwd", lambda: raw_cwd)
+    from engram.db import get_db_connection, init_db
 
-    expected = Project(
-        id="proj-default",
-        name="Default Cwd Project",
-        summary=None,
-        status="active",
-        repo_paths=[os.path.abspath(raw_cwd)],
+    db_path = repo_path / ".engram" / "memory.db"
+    init_db(db_path)
+
+    conn = get_db_connection(db_path)
+    conn.execute(
+        "INSERT INTO projects (id, name, summary, status, repo_paths) VALUES (?, ?, ?, ?, ?)",
+        ("proj-cwd", "Cwd Project", None, "active", "[]"),
     )
+    conn.commit()
+    conn.close()
 
-    def _find_by_repo_path(cls, path: str) -> Project:
-        captured["path"] = path
-        return expected
-
-    monkeypatch.setattr(
-        project_service.Project,
-        "find_by_repo_path",
-        classmethod(_find_by_repo_path),
-    )
+    monkeypatch.setattr(os, "getcwd", lambda: str(repo_path))
 
     payload = resolve_current_project()
 
-    assert captured["path"] == os.path.abspath(raw_cwd)
-    assert payload["id"] == "proj-default"
-    assert payload["name"] == "Default Cwd Project"
-    assert payload["status"] == "active"
-    assert payload["repo_paths"] == [os.path.abspath(raw_cwd)]
+    assert payload["id"] == "proj-cwd"
+    assert payload["name"] == "Cwd Project"
+    assert payload["repo_paths"] == [str(repo_path)]
 
 
 def test_find_repo_root_success(tmp_path):
