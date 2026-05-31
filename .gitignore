@@ -186,3 +186,4 @@ cython_debug/
 
 # Engram local database and state
 .engram/
+implementation.md
