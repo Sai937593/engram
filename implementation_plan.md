@@ -1,49 +1,46 @@
-# Implementation Plan - Task 7774e488 (Phase 8.2)
+# Implementation Plan - Task 21b5e71e (Phase 9.4)
 
 ## Scope
-Enforce the verification gate in `workflow_finish` output behavior so missing/failed/stale verification blocks finish with compact markdown and exactly one `## Next action` section instructing Codex to run or rerun workflow verification. Keep successful finish output concise and do not auto-start the next task.
+Gate `engram_workflow_finish` on `memory_review_outcome` for the active task. If missing, finish must block with a compact next action. On successful finish, output must include the recorded memory review outcome and must not include auto-start guidance.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `7774e488`.
-- Keep scope limited to finish-time verification gate and MCP finish output.
-- Do not add memory review gates, stale-memory policies, or phase transition automation.
-- Service modules must remain adapter-safe.
+- One-task session only: execute only task `21b5e71e`.
+- Keep changes limited to finish gating and finish output formatting.
+- Preserve service/adapter boundaries (no CLI/MCP imports in `src/engram/services`).
 - No-touch directories: `planning/`, `workflow/`, `.github/`.
 
 ## Investigation Plan
-1. Confirm current finish-time eligibility behavior and emitted error codes/messages:
+1. Review finish eligibility and finish flow in:
 - `src/engram/services/workflow_service.py`
-- `src/engram/services/workflow_verification_service.py`
 
-2. Confirm formatting helpers for blocked/success finish responses:
+2. Review finish blocked/success formatting contracts in:
 - `src/engram/services/workflow_formatter.py`
 
-3. Confirm MCP tool mapping from service errors to final finish response:
+3. Review MCP finish tool error handling and output composition in:
 - `src/engram/mcp/tools/workflow_tools.py`
 
+4. Inspect tests covering finish gating/formatting and identify minimal updates.
+
 ## Planned Changes
-1. Ensure blocked finish states (missing/failed/stale) are surfaced as compact markdown via `format_finish_blocked` with:
-- task context line
-- compact reason line
-- exactly one `## Next action` section
-- next action text explicitly telling Codex to run or rerun `engram_workflow_verify`
+1. Add/adjust service-level finish eligibility check to require non-null valid `memory_review_outcome` before any git side effects.
 
-2. Keep verification gate execution before any git side effects (`git add/commit/push`) and preserve existing behavior for successful eligible finishes.
+2. Ensure missing `memory_review_outcome` returns a deterministic blocked reason that MCP/tool formatter can map to a compact `## Next action` instructing the user/agent to record memory review outcome first.
 
-3. Keep successful finish response concise via `format_finish_success`, with no automatic workflow start behavior.
+3. Update finish success formatter path so the final success output includes the recorded memory review outcome explicitly.
 
-4. Add or update focused tests for MCP finish output covering:
-- missing verification -> blocked format + next action
-- failed verification -> blocked format + next action
-- stale verification -> blocked format + next action
-- successful eligible finish -> concise success format unchanged
+4. Preserve existing compact finish style and no auto-start guidance.
+
+5. Add/update focused tests for:
+- finish blocked when memory review outcome is missing
+- finish success includes memory review outcome
+- no regressions in existing verification-gate behavior
 
 ## Validation Plan
-- Run targeted workflow tool/service tests for finish and formatter behavior.
-- Run any affected tests for workflow verification eligibility integration.
-- Confirm zero test failures before invoking `engram_workflow_finish`.
+- Run targeted unit tests for workflow service/formatter/tool modules.
+- Run a broader relevant test slice if targeted tests indicate cross-module impact.
+- Ensure zero failing tests before invoking `engram_workflow_finish`.
 
 ## Out of Scope
-- Memory review gates or broader task readiness policies.
-- New automation for PR/phase transitions.
-- Refactoring unrelated workflow command surfaces.
+- Changing memory review taxonomy or allowed enum values.
+- New phase automation behavior.
+- Unrelated workflow output refactors.

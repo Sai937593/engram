@@ -9,7 +9,7 @@ import anyio.to_thread
 
 import engram.mcp.tools
 from engram.mcp.tools.workflow_tool_helpers import (
-    VERIFICATION_GATE_ERROR_CODES,
+    FINISH_GATE_ERROR_CODES,
     format_verification_finish_blocked,
 )
 from engram.services.errors import EngramServiceError
@@ -114,10 +114,13 @@ def register_workflow_tools(server: Any) -> None:
                 phase_complete=phase_complete,
                 next_guidance=next_guidance,
                 task_title=res.get("task_title"),
+                memory_review_outcome=res.get("memory_review_outcome"),
             )
         except EngramServiceError as exc:
-            if exc.code in VERIFICATION_GATE_ERROR_CODES and project_id:
-                return format_verification_finish_blocked(project_id=project_id, reason=exc.message)
+            if exc.code in FINISH_GATE_ERROR_CODES and project_id:
+                return format_verification_finish_blocked(
+                    project_id=project_id, reason=exc.message, code=exc.code
+                )
             return engram.mcp.tools._respond_error(exc)
 
     @server.tool()

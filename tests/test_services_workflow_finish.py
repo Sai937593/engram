@@ -29,6 +29,7 @@ def test_finish_workflow_happy_path(tmp_db: Any) -> None:
         title="Refactor auth",
         phase="Phase One",
         status="in-progress",
+        memory_review_outcome="created",
     )
     record_workflow_verification(
         project_id=project.id,
@@ -44,6 +45,7 @@ def test_finish_workflow_happy_path(tmp_db: Any) -> None:
 
     assert res["id"] == "t-1"
     assert res["commit"] == "feat(phase-one): Refactor auth [t-1]"
+    assert res["memory_review_outcome"] == "created"
 
     # Task should be marked done
     refreshed = Task.get(task.id)
@@ -91,6 +93,7 @@ def test_finish_workflow_git_push_fails(tmp_db: Any) -> None:
         title="Refactor auth",
         phase="Phase One",
         status="in-progress",
+        memory_review_outcome="created",
     )
     record_workflow_verification(
         project_id=project.id,
@@ -130,6 +133,7 @@ def test_finish_workflow_nothing_to_commit(tmp_db: Any) -> None:
         title="Refactor auth",
         phase="Phase One",
         status="in-progress",
+        memory_review_outcome="created",
     )
     record_workflow_verification(
         project_id=project.id,
@@ -174,6 +178,7 @@ def test_finish_workflow_requires_verification(tmp_db: Any) -> None:
         title="Refactor auth",
         phase="Phase One",
         status="in-progress",
+        memory_review_outcome="created",
     )
     with pytest.raises(EngramServiceError) as exc_info:
         finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
@@ -194,6 +199,7 @@ def test_finish_workflow_failed_verification(tmp_db: Any) -> None:
         title="Refactor auth",
         phase="Phase One",
         status="in-progress",
+        memory_review_outcome="created",
     )
     record_workflow_verification(
         project_id=project.id,
@@ -223,6 +229,7 @@ def test_finish_workflow_stale_verification(tmp_db: Any, tmp_path: Any) -> None:
         phase="Phase One",
         status="in-progress",
         relevant_files=["src/helper.py"],
+        memory_review_outcome="created",
     )
 
     # Create relevant file and record a verification at an older timestamp
@@ -261,12 +268,14 @@ def test_format_finish_success() -> None:
         phase_complete=False,
         next_guidance="Stop here. The active task is finished and committed. Await further instructions.",
         task_title="Add Feature",
+        memory_review_outcome="created",
     )
 
     assert res.startswith("# Task Finished")
     assert "Task: `t-123` - Add Feature" in res
     assert "Commit: `feat(scope): add feature [t-123]`" in res
     assert "Phase complete: False" in res
+    assert "Memory review outcome: `created`" in res
     assert "## Next action" in res
     assert (
         "Stop here. The active task is finished and committed. Await further instructions." in res
@@ -289,3 +298,30 @@ def test_format_finish_blocked() -> None:
     assert "Reason: Branch dirty" in res
     assert "## Next action" in res
     assert "Commit or stash changes before proceeding." in res
+
+
+def test_finish_workflow_blocks_without_memory_review_outcome(tmp_db: Any) -> None:
+    """Verify finish_workflow blocks when active task lacks memory_review_outcome."""
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
+
+    with pytest.raises(EngramServiceError) as exc_info:
+        finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
+    assert exc_info.value.code == "MEMORY_REVIEW_OUTCOME_MISSING"

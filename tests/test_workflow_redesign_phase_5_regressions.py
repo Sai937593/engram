@@ -67,6 +67,7 @@ def test_format_functions_have_exactly_one_next_action() -> None:
         phase_complete=False,
         next_guidance="Stop here",
         task_title="Test Task",
+        memory_review_outcome="created",
     )
     assert fs.count("## Next action") == 1
     assert fs.startswith("# Task Finished")
@@ -266,6 +267,7 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
         phase="Phase One",
         phase_id="ph-1",
         status="in-progress",
+        memory_review_outcome="created",
     )
     record_workflow_verification(
         project_id=project.id,
@@ -280,6 +282,7 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
         phase="Phase One",
         phase_id="ph-1",
         status="todo",
+        memory_review_outcome="created",
     )
 
     git_mock = GitMock()
@@ -297,6 +300,7 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
     assert "Task: `t-1` - Refactor auth" in res_mcp_a
     assert "Commit: `feat(phase-one): Refactor auth [t-1]`" in res_mcp_a
     assert "Phase complete: False" in res_mcp_a
+    assert "Memory review outcome: `created`" in res_mcp_a
     assert res_mcp_a.count("## Next action") == 1
     assert (
         "Stop here. The active task is finished and committed. Await further instructions."
@@ -328,6 +332,7 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
     assert "Task: `t-2` - Write tests" in res_mcp_b
     assert "Commit: `test(phase-one): Write tests [t-2]`" in res_mcp_b
     assert "Phase complete: True" in res_mcp_b
+    assert "Memory review outcome: `created`" in res_mcp_b
     assert res_mcp_b.count("## Next action") == 1
     assert (
         "Phase complete. Ask the user for permission to run the engram-phase-transition skill."
@@ -377,6 +382,7 @@ def test_finish_failures_contract(tmp_db: Any, monkeypatch: Any) -> None:
         title="Broken push",
         phase="Phase One",
         status="in-progress",
+        memory_review_outcome="created",
     )
     record_workflow_verification(
         project_id=project.id,
@@ -423,6 +429,7 @@ def test_finish_verification_gate_e2e_contract(tmp_db: Any, monkeypatch: Any) ->
         title="Verification gate task",
         phase="Phase One",
         status="in-progress",
+        memory_review_outcome="created",
     )
 
     server = MockServer()
