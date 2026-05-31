@@ -1178,3 +1178,44 @@ def test_load_fastmcp_class_returns_class(monkeypatch):
 
     monkeypatch.setattr(module, "import_module", lambda x: FakeFastMCPModule())
     assert module._load_fastmcp_class() == "FakeClass"
+
+
+def test_mcp_server_main_missing_dependency_exits_cleanly(monkeypatch):
+    """Verify that main() catches missing dependency errors and exits with code 1."""
+    import importlib
+    import sys
+
+    module = importlib.import_module("engram.mcp.server")
+
+    # 1. Test RuntimeError case
+    mock_run_stdio_server = MagicMock(
+        side_effect=RuntimeError(module.MISSING_MCP_DEPENDENCY_MESSAGE)
+    )
+    monkeypatch.setattr(module, "run_stdio_server", mock_run_stdio_server)
+
+    stderr_writes = []
+    monkeypatch.setattr(sys.stderr, "write", lambda s: stderr_writes.append(s))
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main()
+
+    assert exc_info.value.code == 1
+    full_stderr = "".join(stderr_writes)
+    assert module.MISSING_MCP_DEPENDENCY_MESSAGE in full_stderr
+
+    # 2. Test ModuleNotFoundError case
+    mock_run_stdio_server.side_effect = ModuleNotFoundError("No module named 'mcp'", name="mcp")
+    stderr_writes.clear()
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main()
+
+    assert exc_info.value.code == 1
+    full_stderr = "".join(stderr_writes)
+    assert "No module named 'mcp'" in full_stderr
+
+    # 3. Verify that unrelated RuntimeErrors are propagated
+    mock_run_stdio_server.side_effect = RuntimeError("Something else went wrong")
+    with pytest.raises(RuntimeError) as exc_info_unrelated:
+        module.main()
+    assert str(exc_info_unrelated.value) == "Something else went wrong"
