@@ -1,47 +1,41 @@
-# Implementation Plan - Task 9ccc3b0f (Phase 10.1)
+# Implementation Plan - Task 3daf28c0 (Phase 10.2)
 
 ## Scope
-Define the Task Decomposition skill contract for turning implementation phase docs into executable Engram tasks, and map required planning metadata into currently supported task fields without inventing new schema fields.
+Implement phase-local Task Decomposition skill content and examples that convert implementation phase docs into execution-ready Engram tasks. Deliver a repeatable decomposition workflow, dependency graph guidance, and example task shapes. Keep scope strictly to documentation/skill surfaces.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `9ccc3b0f`.
-- Keep scope to contract and field mapping only.
-- Exclude draft/ready lifecycle handling and task validation changes (phases 11/12).
+- One-task session only: execute only task `3daf28c0`.
+- Stay within current `engram_task_create` schema; no new task fields.
+- No product behavior/code changes outside docs/skill surfaces.
 - Preserve no-touch directories: `planning/`, `workflow/`, `.github/`.
 
-## Investigation Plan
-1. Read target workflow docs and memory-review skill reference:
+## Inputs to Use
 - `docs/CODEX_HANDOFF_WORKFLOW_REDESIGN.md`
 - `docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_REDESIGN.md`
+- `docs/skills/task-decomposition.md`
 - `docs/skills/memory-review.md`
-
-2. Inspect existing task schema and creation surfaces:
-- Task model / supported fields in `src/engram/models/task.py`
-- Task creation/update service interfaces in `src/engram/services/`
-- Any decomposition/skill docs under `docs/skills/` for consistency
-
-3. Identify destination file for the skill contract and update it with explicit mappings and fallback placements.
+- Relevant memory constraints/decisions from `engram_memory_search`.
 
 ## Planned Changes
-1. Author or update the Task Decomposition skill contract doc in the identified target location.
-2. Require and define these elements in the contract:
+1. Update `docs/skills/task-decomposition.md` to add a deterministic, step-by-step decomposition workflow for phase-doc intake to task creation.
+2. Add dependency graph guidance that explains how to identify sequencing, parallelizable work, and explicit no-dependency reasoning.
+3. Add concrete example task shapes that include:
 - title
-- objective/description
+- objective/description sections
 - acceptance criteria
 - relevant files
-- dependency reasoning
+- dependency mapping
 - verification guidance
 - out-of-scope boundaries
-3. Add explicit field mapping table:
-- Map each required concept to existing `engram_task_create` fields.
-- For concepts without direct fields (search hints, risk notes, extra verification detail), define documented fallback placement (for example: structured sections in `description` or task evidence notes) without schema expansion.
+- optional risks/search hints placement
+4. Ensure examples explicitly map non-schema metadata into structured `description` sections using stable labels.
 
 ## Validation Plan
-- Verify mapping aligns with actual current task model and create-tool contract in code.
-- Run `engram_workflow_verify`.
-- If verification fails, fix first actionable issue and rerun.
+- Verify the updated skill text is reusable and phase-agnostic.
+- Confirm all required acceptance elements are covered in the skill doc.
+- Run `engram_workflow_verify` and fix the first actionable failure if needed.
 
 ## Out of Scope
-- Adding new task columns/fields.
-- Implementing draft/ready lifecycle.
-- Implementing runtime task validation changes.
+- Changes to MCP tool behavior or task schema.
+- Draft/ready lifecycle or validation engine changes (Phases 11/12).
+- Any implementation outside skill/documentation surfaces.
