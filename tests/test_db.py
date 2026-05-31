@@ -16,6 +16,63 @@ def test_get_db_connection_default_path(monkeypatch):
     mock_create.assert_called_once_with(DEFAULT_DB_PATH)
 
 
+def test_get_default_db_path_resolves_repo_local():
+    """Test that get_default_db_path resolves to repo-local path in git repo."""
+    from engram.db import get_default_db_path
+
+    path = get_default_db_path()
+    assert ".engram" in path.parts
+    assert path.name == "memory.db"
+
+
+def test_get_default_db_path_fallback_outside_repo(monkeypatch):
+    """Test that get_default_db_path falls back to home directory if outside a repo."""
+    from engram.services.errors import EngramServiceError
+
+    def mock_raise(*args, **kwargs):
+        raise EngramServiceError("UNRESOLVED_WORKSPACE", "No git repo found")
+
+    monkeypatch.setattr("engram.services.project_path.get_repo_local_db_path", mock_raise)
+
+    from engram.db import get_default_db_path
+
+    path = get_default_db_path()
+    assert path == Path.home() / ".engram" / "memory.db"
+
+
+def test_init_db_creates_parent_directory(tmp_path, monkeypatch):
+    """Test that init_db automatically creates the parent directory of the DB path."""
+    db_path = tmp_path / "new_subdir" / "test_memory.db"
+    assert not db_path.parent.exists()
+
+    # Mock all internal init_db steps to avoid schema creation errors during simple dir test
+    monkeypatch.setattr("engram.db.get_db_connection", MagicMock())
+    monkeypatch.setattr("engram.db.create_projects_table", MagicMock())
+    monkeypatch.setattr("engram.db.create_tasks_table", MagicMock())
+    monkeypatch.setattr("engram.db.create_phases_table", MagicMock())
+    monkeypatch.setattr("engram.db.apply_tasks_column_migrations", MagicMock())
+    monkeypatch.setattr("engram.db.create_memories_table", MagicMock())
+    monkeypatch.setattr("engram.db.apply_memories_column_migrations", MagicMock())
+    monkeypatch.setattr("engram.db.create_audit_log_table", MagicMock())
+    monkeypatch.setattr("engram.db.create_indexes", MagicMock())
+    monkeypatch.setattr("engram.db.create_memories_fts_and_triggers", MagicMock())
+    monkeypatch.setattr("engram.db.apply_task_status_migrations", MagicMock())
+    monkeypatch.setattr("engram.db.backfill_legacy_phase_ids", MagicMock())
+
+    init_db(db_path)
+    assert db_path.parent.exists()
+
+
+def test_monkeypatch_override_works(monkeypatch):
+    """Test that standard monkeypatch overrides of DEFAULT_DB_PATH are successful."""
+    custom_path = Path("/mock/test/db.sqlite")
+    monkeypatch.setattr("engram.db.DEFAULT_DB_PATH", custom_path)
+
+    from engram.db import DEFAULT_DB_PATH
+
+    assert DEFAULT_DB_PATH == custom_path
+
+
 def test_get_db_connection_custom_path(monkeypatch):
     """Test get_db_connection passes the provided custom path."""
     mock_create = MagicMock()
