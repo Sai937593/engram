@@ -7,6 +7,7 @@ from engram.context.startup.options import (
     _compact_with_limit,
     _render_section,
 )
+from engram.hooks.py_structure import L1_GUARDRAIL_RULES
 from engram.memory_retrieval import (
     StartupTaskMemoryRetrievalResult,
     orchestrate_startup_task_memory_retrieval,
@@ -98,11 +99,12 @@ def _build_guardrail_frame(project_id: str, options: StartupContextOptions) -> s
     guardrails = Memory.list_project_guardrail_candidates(project_id)
     l0_guardrails = [memory for memory in guardrails if memory.level == "L0"]
     l1_guardrails = [memory for memory in guardrails if memory.level == "L1"]
+    py_structure_l1 = L1_GUARDRAIL_RULES
     capped_l1 = l1_guardrails[: options.l1_guardrail_limit]
     hidden_l1_count = max(0, len(l1_guardrails) - len(capped_l1))
 
     lines: list[str] = []
-    if not l0_guardrails and not capped_l1:
+    if not l0_guardrails and not capped_l1 and not py_structure_l1:
         lines.append("No L0/L1 project guardrails found.")
         return _render_section("PROJECT GUARDRAILS", lines)
 
@@ -117,6 +119,12 @@ def _build_guardrail_frame(project_id: str, options: StartupContextOptions) -> s
         for memory in capped_l1:
             content = _compact_with_limit(memory.content, options.guardrail_text_char_limit)
             lines.append(f"- {memory.title}: {content}")
+    elif py_structure_l1:
+        lines.append("L1 Constraints:")
+
+    for title, content_raw in py_structure_l1:
+        content = _compact_with_limit(content_raw, options.guardrail_text_char_limit)
+        lines.append(f"- {title}: {content}")
 
     if hidden_l1_count:
         lines.append(f"... {hidden_l1_count} additional L1 guardrail(s) hidden by cap.")
@@ -167,56 +175,3 @@ def _build_task_memory_candidates_frame(
         lines.append(f"... {hidden_count} additional task memory candidate(s) hidden by cap.")
 
     return _render_section("TASK MEMORY CANDIDATES", lines)
-
-
-def _build_next_action(project: Project, selected_task: Task | None) -> str:
-    """Build the next action instruction section."""
-    if selected_task:
-        return _render_section(
-            "NEXT ACTION",
-            [
-                f"Use this startup context to implement: {selected_task.title} ({selected_task.id}).",
-                f"If deeper context is needed: engram_task_get {selected_task.id}",
-                "Before coding: run engram_memory_search with keywords from the task. Create implementation_plan.md and await user approval before writing code.",
-            ],
-        )
-
-    counts = Task.count_by_status(project.id)
-    total = sum(counts.values())
-    pending = sum(count for status, count in counts.items() if status not in ("done", "cancelled"))
-
-    if total == 0:
-        return _render_section(
-            "NEXT ACTION",
-            [
-                "No tasks are defined yet.",
-                "Ask the user for the next phase and start it using engram_phase_start, then create a task using engram_task_create.",
-            ],
-        )
-
-    if pending == 0:
-        return _render_section(
-            "NEXT ACTION",
-            [
-                f"All {total} tasks are done or cancelled.",
-                "Confirm whether to continue planning: create a new task using engram_task_create.",
-            ],
-        )
-
-    blocked = counts.get("blocked", 0)
-    if blocked == pending:
-        return _render_section(
-            "NEXT ACTION",
-            [
-                f"All remaining tasks are blocked ({blocked}).",
-                "Resolve blockers or re-plan task ordering using engram_task_update.",
-            ],
-        )
-
-    return _render_section(
-        "NEXT ACTION",
-        [
-            "No startup task selection was provided.",
-            "Run engram_workflow_start or engram_task_start to select and start the next actionable task.",
-        ],
-    )

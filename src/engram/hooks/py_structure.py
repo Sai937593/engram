@@ -10,6 +10,19 @@ from pathlib import Path
 MAX_LINES_TOPLEVEL = 150  # src/<pkg>/file.py (depth-3 paths)
 MAX_LINES_SUBPACKAGE = 200  # src/<pkg>/<sub>/file.py (depth-4+ paths)
 MAX_PUBLIC_SYMBOLS = 8
+L1_GUARDRAIL_RULES: tuple[tuple[str, str], ...] = (
+    (
+        "Python file size limits",
+        "Keep non-test Python files within py-structure limits: "
+        f"<= {MAX_LINES_TOPLEVEL} lines for top-level src files and "
+        f"<= {MAX_LINES_SUBPACKAGE} lines for subpackage files.",
+    ),
+    (
+        "Python public symbol limit",
+        "Keep non-test Python files within the py-structure public symbol limit: "
+        f"<= {MAX_PUBLIC_SYMBOLS} top-level def/class symbols per file.",
+    ),
+)
 
 
 def get_staged_python_files(repo_root: Path | None = None) -> list[Path]:
