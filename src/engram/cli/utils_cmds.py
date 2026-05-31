@@ -52,21 +52,28 @@ def guide(section):
 @cli_root.cli.command(name="db")
 def db() -> None:
     """Show database path, size, and health status."""
-    from engram.db import DEFAULT_DB_PATH, get_db_connection
-
-    cli_root.console.print(f"[cyan]Database Path:[/cyan] {DEFAULT_DB_PATH}")
-    exists = DEFAULT_DB_PATH.exists()
-    cli_root.console.print(f"[cyan]Database Exists:[/cyan] {'Yes' if exists else 'No'}")
-
-    if exists:
-        try:
-            size_kb = DEFAULT_DB_PATH.stat().st_size / 1024
-            cli_root.console.print(f"[cyan]Database Size:[/cyan] {size_kb:.2f} KB")
-        except Exception as e:
-            cli_root.console.print(f"[red]Error reading size:[/red] {str(e)}")
+    from engram.db import get_db_connection, init_db
+    from engram.services.errors import EngramServiceError
+    from engram.services.project_path import get_repo_local_db_path
 
     try:
-        conn = get_db_connection()
+        db_path = get_repo_local_db_path()
+    except EngramServiceError as exc:
+        cli_root.console.print("[yellow]Workspace:[/yellow] Not in a git repository")
+        cli_root.console.print(f"[yellow]Info:[/yellow] {exc.message}")
+        return
+
+    try:
+        init_db(db_path)
+        exists = db_path.exists()
+
+        cli_root.console.print(f"[cyan]Database Path:[/cyan] {db_path}")
+        cli_root.console.print(f"[cyan]Database Exists:[/cyan] {'Yes' if exists else 'No'}")
+        if exists:
+            size_kb = db_path.stat().st_size / 1024
+            cli_root.console.print(f"[cyan]Database Size:[/cyan] {size_kb:.2f} KB")
+
+        conn = get_db_connection(db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA integrity_check")
         status = cursor.fetchone()[0]

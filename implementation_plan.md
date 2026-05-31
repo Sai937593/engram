@@ -1,39 +1,40 @@
-# Implementation Plan - Task 2.4 (4b1a8e06)
+# Implementation Plan - Task b26fc802 (Phase 3.3)
 
 ## Scope
-Add/adjust regression tests only to prove MCP-first initialization and diagnostics across fresh workspaces. No product-scope expansion.
+Rewrite published manuals for repo-local, MCP-first workflow behavior without changing product code. Keep CLI documentation trimmed to optional human utilities (`init`, `guide`, `db`) and remove wording that implies normal agent workflows depend on CLI.
 
-## Observed Gap vs Acceptance
-Existing tests cover:
-- `engram_project_init` success and unbound error behavior.
-- `engram_project_current` actionable uninitialized behavior.
-- diagnostics healthy/misconfigured/unresolved states.
-
-What remains to prove explicitly:
-- Same MCP handlers work across multiple fresh repo workspaces in one test flow (workspace-based behavior, no per-project command changes).
-- End-to-end repo lifecycle in MCP terms: fresh repo -> init -> current/diagnostics ready.
-- Explicit regression check that normal init/status flow does not rely on CLI commands.
+## Current Findings
+- `README.md` still describes storage as user-level `~/.engram/memory.db` and architecture diagram references `~/.engram/`.
+- `docs/USER_MANUAL.md` and `src/engram/USER_MANUAL.md` still describe central/global storage and global DB diagnostics.
+- Workflow sections already emphasize MCP tools, but some wording still mixes CLI and MCP in ways that can imply CLI dependency.
+- `docs/PROJECT_BRIEF.md` appears mostly aligned but will be checked for consistency-only updates if required by acceptance framing.
 
 ## Planned Changes
-1. `tests/test_mcp_tools.py`
-- Add a multi-workspace regression test that:
-  - Creates two fresh git repos.
-  - Uses identical MCP handlers (no tool reconfiguration between repos).
-  - Runs `engram_project_current` before init (expects actionable uninitialized response).
-  - Runs `engram_project_init` in each repo.
-  - Runs `engram_project_current` + `engram_project_diagnostics` after init (expects ready/healthy).
-- Add a guard assertion in that flow by monkeypatching key CLI entrypoints (if imported) to raise, proving MCP path remains service-driven and CLI-independent for normal init/status.
+1. `README.md`
+- Update storage model to repo-local `.engram/memory.db` as normal behavior.
+- Update architecture diagram labels and supporting bullets to match repo-local project state.
+- Keep MCP-first workflow guidance and clarify CLI as optional human utility only.
 
-2. `tests/test_services_project.py` (only if needed after step 1)
-- Add a focused service-level cross-workspace status regression if MCP test alone does not adequately prove workspace switching semantics.
+2. `docs/USER_MANUAL.md`
+- Rewrite overview and project model sections to remove global-storage language.
+- Update `engram db` description to reflect repo-local diagnostics.
+- Tighten workflow narrative so normal agent execution is MCP tool/resource driven.
 
-## Validation
-- Run targeted tests first:
-  - `pytest tests/test_mcp_tools.py -k "project_init or project_current or diagnostics or workspace"`
-- Then run full impacted set:
-  - `pytest tests/test_mcp_tools.py tests/test_services_project.py tests/test_mcp_server.py`
+3. `src/engram/USER_MANUAL.md`
+- Mirror `docs/USER_MANUAL.md` updates so packaged and top-level manuals stay synchronized.
+
+4. `docs/PROJECT_BRIEF.md` (if needed)
+- Apply only minimal wording adjustments needed to remain consistent with repo-local MCP-first claims.
+
+## Validation Plan
+- Search for stale global-path phrasing:
+  - `rg -n "~/.engram|global database|globally outside the repository" README.md docs/USER_MANUAL.md src/engram/USER_MANUAL.md docs/PROJECT_BRIEF.md`
+- Ensure manuals remain in sync:
+  - `fc /N docs\\USER_MANUAL.md src\\engram\\USER_MANUAL.md` (or equivalent diff)
+- Run documentation-related checks if available in project tooling:
+  - `pytest -q` subset only if docs assertions exist.
 
 ## Out of Scope
-- No lifecycle/verification-gate changes (later phases).
-- No workflow output contract changes (later phases).
-- No CLI feature additions.
+- Future-phase output-contract or verification-gate documentation updates.
+- Any CLI or MCP implementation refactors.
+- Non-task documentation cleanup unrelated to repo-local MCP-first behavior.

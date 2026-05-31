@@ -1,13 +1,13 @@
 # Engram User Manual
 
-Engram is a local-first, agent-agnostic persistent memory system for AI coding assistants and developers. It stores durable project context in a central SQLite database (`~/.engram/memory.db`) and exposes it programmatically through a custom Model Context Protocol (MCP) server, alongside a minimal companion CLI for workspace management.
+Engram is a local-first, agent-agnostic persistent memory system for AI coding assistants and developers. It stores durable project context in a repo-local SQLite database (`.engram/memory.db`) and exposes it programmatically through a custom Model Context Protocol (MCP) server, alongside a trimmed companion CLI for optional human setup and diagnostics.
 
 ---
 
 ## 1. Core Concepts
 
 ### Projects
-A project binds one or more local repository absolute paths to a unique database record. When the MCP server or CLI is invoked, it dynamically resolves the active project using the current working directory. Memory and task states live globally outside the repository, surviving branch checkouts, resets, and folder moves.
+A project maps to repo-local Engram state rooted in the current repository. When the MCP server or CLI utility commands are invoked from that workspace, Engram resolves the active project using the current working directory. Memory and task state are persisted in `.engram/memory.db` inside the repository.
 
 ### Phases
 Phases are first-class project milestones that group related tasks.
@@ -33,7 +33,7 @@ Memories are persistent facts designed to survive across coding sessions.
 ## 2. Command Reference
 
 ### Companion CLI Reference
-The Engram command-line interface has been trimmed to three essential workspace setup and utility commands:
+The Engram command-line interface is trimmed to three optional human-facing workspace setup and utility commands:
 
 #### `engram init`
 ```bash
@@ -51,7 +51,7 @@ Opens this interactive user manual directly in the terminal, rendered as beautif
 ```bash
 engram db
 ```
-Utility command to print the absolute path, disk size, and SQLite integrity connection status of the global database at `~/.engram/memory.db`.
+Utility command to print the absolute path, disk size, and SQLite integrity connection status of the repo-local database for the current workspace.
 
 ### Deprecated & Removed CLI Commands
 To preserve clean separation of concerns and maintain a single source of truth, **all programmatic memory, task, phase, and workflow management commands have been removed from the CLI**. All agent interactions must go through the MCP server.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import builtins
 import importlib
 import os
 from pathlib import Path
@@ -29,6 +30,20 @@ def _table_rows(table_name: str) -> list[dict[str, object]]:
     rows = conn.execute(f"SELECT * FROM {table_name} ORDER BY rowid ASC").fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def _block_cli_imports(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail fast if context wrappers start importing CLI modules."""
+    real_import = builtins.__import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "engram.cli" or name.startswith("engram.cli."):
+            raise AssertionError(
+                f"Forbidden CLI import attempted during context service flow: {name}"
+            )
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
 
 
 def test_services_package_exports_context_wrappers():
@@ -92,6 +107,44 @@ def test_context_service_wrappers_default_cwd_to_project_service(monkeypatch):
 
     assert payload == "ok"
     assert captured["cwd"] is None
+
+
+def test_context_wrappers_resolve_without_cli_imports(monkeypatch):
+    _block_cli_imports(monkeypatch)
+    monkeypatch.setattr(
+        context_service.project_service,
+        "resolve_current_project",
+        lambda cwd=None: {"id": "proj-no-cli"},
+    )
+    monkeypatch.setattr(
+        context_service.context, "get_startup_context", lambda project_id: f"startup:{project_id}"
+    )
+    monkeypatch.setattr(
+        context_service.context,
+        "get_snapshot_context",
+        lambda project_id: f"snapshot:{project_id}",
+    )
+    monkeypatch.setattr(
+        context_service.context, "get_handoff_context", lambda project_id: f"handoff:{project_id}"
+    )
+    monkeypatch.setattr(
+        context_service.task_service,
+        "resolve_task_ref",
+        lambda project_id, task_ref: "task-no-cli",
+    )
+    monkeypatch.setattr(
+        context_service.context,
+        "get_task_context",
+        lambda task_id, hard_constraints_only=False: f"task:{task_id}",
+    )
+
+    assert get_startup_context_for_current_project(cwd="/tmp/no-cli") == "startup:proj-no-cli"
+    assert get_snapshot_context_for_current_project(cwd="/tmp/no-cli") == "snapshot:proj-no-cli"
+    assert get_handoff_context_for_current_project(cwd="/tmp/no-cli") == "handoff:proj-no-cli"
+    assert (
+        get_task_context_for_current_project(task_ref="task", cwd="/tmp/no-cli")
+        == "task:task-no-cli"
+    )
 
 
 @pytest.mark.parametrize(

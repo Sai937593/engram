@@ -47,6 +47,21 @@ def test_console_entrypoint_command_surface_loads():
     assert sorted(exposed_commands) == sorted(["init", "guide", "db"])
 
 
+def test_console_help_does_not_eagerly_initialize_db(monkeypatch):
+    """CLI startup/help should not initialize a database."""
+    called = {"value": False}
+
+    def fail_init(*_args, **_kwargs):
+        called["value"] = True
+        raise AssertionError("init_db should not run during CLI help bootstrap")
+
+    monkeypatch.setattr("engram.db.init_db", fail_init)
+
+    result = CliRunner().invoke(cli, ["--help"])
+    assert result.exit_code == 0, result.output
+    assert called["value"] is False
+
+
 def test_guide_command_runs_successfully():
     """The guide command should render and exit successfully."""
     result = CliRunner().invoke(cli, ["guide"])
@@ -62,10 +77,25 @@ def test_guide_command_with_sections():
         assert "Engram Guide" in result.output
 
 
-def test_db_command_runs_successfully(tmp_db):
-    """The db command should execute health checks on the database."""
+def test_db_command_runs_successfully(monkeypatch, tmp_path):
+    """The db command should execute health checks inside a git repo."""
+    repo_root = tmp_path
+    (repo_root / ".git").mkdir(exist_ok=True)
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_root))
     result = CliRunner().invoke(cli, ["db"])
     assert result.exit_code == 0, result.output
     assert "Database Path:" in result.output
+    assert ".engram" in result.output
+    assert "memory.db" in result.output
     assert "Database Exists: Yes" in result.output
     assert "Database Connection & Integrity: Healthy" in result.output
+    assert (repo_root / ".engram" / "memory.db").exists()
+
+
+def test_db_command_outside_repo_degrades_cleanly(monkeypatch, tmp_path):
+    """The db command should report unresolved workspace outside a git repo."""
+    monkeypatch.setattr("os.getcwd", lambda: str(tmp_path))
+    result = CliRunner().invoke(cli, ["db"])
+    assert result.exit_code == 0, result.output
+    assert "Workspace: Not in a git repository" in result.output
+    assert "Could not resolve repository root from the current path." in result.output
