@@ -34,8 +34,13 @@ def _block_cli_imports(monkeypatch: pytest.MonkeyPatch) -> None:
     real_import = builtins.__import__
 
     def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "engram.cli" or name.startswith("engram.cli."):
-            raise AssertionError(f"Forbidden CLI import attempted during MCP flow: {name}")
+        if name in ("engram.cli", "click", "rich") or name.startswith(
+            ("engram.cli.", "click.", "rich.")
+        ):
+            raise AssertionError(
+                f"Forbidden CLI or adapter import attempted during MCP flow: {name}. "
+                "Keep MCP modules and services adapter-safe."
+            )
         return real_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
@@ -1224,3 +1229,22 @@ def test_mcp_server_main_missing_dependency_exits_cleanly(monkeypatch):
     with pytest.raises(RuntimeError) as exc_info_unrelated:
         module.main()
     assert str(exc_info_unrelated.value) == "Something else went wrong"
+
+
+def test_mcp_flow_fails_fast_on_forbidden_imports(monkeypatch):
+    """Verify that the guarded import raises AssertionError for click/rich/cli inside MCP flow."""
+    _block_cli_imports(monkeypatch)
+
+    with pytest.raises(AssertionError) as exc_info:
+        import click  # noqa: F401
+    assert "Forbidden CLI or adapter import attempted during MCP flow: click" in str(exc_info.value)
+
+    with pytest.raises(AssertionError) as exc_info:
+        import rich  # noqa: F401
+    assert "Forbidden CLI or adapter import attempted during MCP flow: rich" in str(exc_info.value)
+
+    with pytest.raises(AssertionError) as exc_info:
+        import engram.cli  # noqa: F401
+    assert "Forbidden CLI or adapter import attempted during MCP flow: engram.cli" in str(
+        exc_info.value
+    )
