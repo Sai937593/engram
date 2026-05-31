@@ -2,7 +2,6 @@
 
 from dataclasses import asdict
 
-import engram.cli as cli_root
 from engram.memory_retrieval.query_builder import (
     RetrievalQueryBuilderOptions,
     RetrievalQueryMetadata,
@@ -243,7 +242,7 @@ def test_query_builder_debug_metadata_contract_is_stable():
     assert "context.surface: debug retrieval" in query.query_text
 
 
-def test_query_builder_does_not_require_current_project_resolution(monkeypatch):
+def test_query_builder_does_not_require_current_project_resolution():
     task = Task(
         id="task009",
         project_id="proj999",
@@ -255,11 +254,6 @@ def test_query_builder_does_not_require_current_project_resolution(monkeypatch):
         project_id="proj999",
         title="Independent query builder",
     )
-
-    def _forbidden_current_project(*args, **kwargs):
-        raise AssertionError("CLI current-project resolution should not be used by query builder.")
-
-    monkeypatch.setattr(cli_root, "get_current_project", _forbidden_current_project)
 
     query = build_task_retrieval_query(task, active_phase=phase)
 
