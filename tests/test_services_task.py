@@ -475,6 +475,32 @@ def test_update_task_invalid_status_and_priority(tmp_db):
     assert exc.value.code == "INVALID_TASK_PRIORITY"
 
 
+def test_update_task_ready_promotion_requires_minimum_metadata(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0003b", title="Task title", status="draft")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(project_id=project.id, task_ref="task0003b", status="ready")
+
+    assert exc.value.code == "READY_METADATA_INCOMPLETE"
+    assert exc.value.details["missing_fields"] == ["description", "acceptance", "relevant_files"]
+
+
+def test_update_task_ready_promotion_succeeds_with_minimum_metadata(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0003c", title="Task title", status="draft")
+
+    updated = update_task(
+        project_id=project.id,
+        task_ref="task0003c",
+        status="ready",
+        description="Implement the metadata gate.",
+        acceptance="Promotion only succeeds when minimum metadata exists.",
+        relevant_files=["src/engram/services/task/update_resolution.py"],
+    )
+    assert updated["status"] == "ready"
+
+
 def test_update_task_prevents_direct_cycle_and_self_dependency(tmp_db):
     project = _create_project("proj-u", "/tmp/proj-u")
     Task.create(project_id=project.id, id="task0004", title="Task title")

@@ -47,6 +47,7 @@ def _respond_error(exc: EngramServiceError) -> str:
         "TASK_AMBIGUOUS": "Use the exact 8-character task ID instead of the title. Run engram_task_list to find the task ID.",
         "DIRTY_WORKING_TREE": "Commit your changes using engram_workflow_finish or stash them before starting a new task.",
         "INVALID_TASK_STATUS": "Use a valid task status (draft, ready, in-progress, done, blocked, or cancelled) and update using engram_task_update.",
+        "READY_METADATA_INCOMPLETE": "Add task description, acceptance criteria, and relevant_files, then retry engram_task_update with status=ready.",
         "PHASE_COMPLETION_BLOCKED": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
         "UNFINISHED_TASKS": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
         "PROJECT_NOT_BOUND": "Run engram_project_init to initialize Engram in this repository.",

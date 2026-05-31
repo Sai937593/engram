@@ -738,7 +738,17 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "error" in res_err
     assert res_err["error"] == "INVALID_TASK_STATUS"
 
-    # 3. Memory review outcome happy path
+    # 3. Ready promotion is gated by minimum execution metadata
+    res_ready_err = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={"status": "ready"},
+        )
+    )
+    assert res_ready_err["ok"] is False
+    assert res_ready_err["error"] == "READY_METADATA_INCOMPLETE"
+
+    # 4. Memory review outcome happy path
     res_mro = yaml.safe_load(
         update_handler(
             task_ref="task-to-update",
@@ -749,7 +759,7 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_mro["id"] == "task-to-update"
     assert res_mro["updated_fields"] == ["memory_review_outcome"]
 
-    # 4. Memory review outcome no_change path
+    # 5. Memory review outcome no_change path
     res_mro_no_change = yaml.safe_load(
         update_handler(
             task_ref="task-to-update",
@@ -760,7 +770,7 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_mro_no_change["id"] == "task-to-update"
     assert res_mro_no_change["updated_fields"] == ["memory_review_outcome"]
 
-    # 5. Memory review outcome invalid value rejection
+    # 6. Memory review outcome invalid value rejection
     res_mro_err = yaml.safe_load(
         update_handler(
             task_ref="task-to-update",
