@@ -21,6 +21,7 @@ from engram.services.workflow_helpers import (
     select_task_to_start,
     slugify,
 )
+from engram.services.workflow_verify_service import verify_workflow as run_workflow_verify
 
 CONVENTIONAL_COMMIT_TYPES: set[str] = {
     "feat",
@@ -182,3 +183,8 @@ def finish_workflow(
         "phase_complete": phase_complete,
         "task_title": task.title,
     }
+
+
+def verify_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
+    """Backward-compatible verification service entrypoint."""
+    return run_workflow_verify(project_id=project_id, repo_path=repo_path)
