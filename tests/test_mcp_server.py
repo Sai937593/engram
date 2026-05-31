@@ -34,8 +34,13 @@ def _block_cli_imports(monkeypatch: pytest.MonkeyPatch) -> None:
     real_import = builtins.__import__
 
     def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "engram.cli" or name.startswith("engram.cli."):
-            raise AssertionError(f"Forbidden CLI import attempted during MCP flow: {name}")
+        if name in ("engram.cli", "click", "rich") or name.startswith(
+            ("engram.cli.", "click.", "rich.")
+        ):
+            raise AssertionError(
+                f"Forbidden CLI or adapter import attempted during MCP flow: {name}. "
+                "Keep MCP modules and services adapter-safe."
+            )
         return real_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
@@ -139,6 +144,11 @@ def test_run_stdio_server_initializes_db_once_and_uses_stdio_transport(monkeypat
         def run(self, *, transport: str) -> None:
             events.append(("run", transport))
 
+    class MockPath:
+        def exists(self) -> bool:
+            return True
+
+    monkeypatch.setattr("engram.services.project_path.get_repo_local_db_path", lambda: MockPath())
     monkeypatch.setattr(module, "init_db", lambda: events.append(("init_db", None)))
     monkeypatch.setattr(
         module,
@@ -1178,3 +1188,63 @@ def test_load_fastmcp_class_returns_class(monkeypatch):
 
     monkeypatch.setattr(module, "import_module", lambda x: FakeFastMCPModule())
     assert module._load_fastmcp_class() == "FakeClass"
+
+
+def test_mcp_server_main_missing_dependency_exits_cleanly(monkeypatch):
+    """Verify that main() catches missing dependency errors and exits with code 1."""
+    import importlib
+    import sys
+
+    module = importlib.import_module("engram.mcp.server")
+
+    # 1. Test RuntimeError case
+    mock_run_stdio_server = MagicMock(
+        side_effect=RuntimeError(module.MISSING_MCP_DEPENDENCY_MESSAGE)
+    )
+    monkeypatch.setattr(module, "run_stdio_server", mock_run_stdio_server)
+
+    stderr_writes = []
+    monkeypatch.setattr(sys.stderr, "write", lambda s: stderr_writes.append(s))
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main()
+
+    assert exc_info.value.code == 1
+    full_stderr = "".join(stderr_writes)
+    assert module.MISSING_MCP_DEPENDENCY_MESSAGE in full_stderr
+
+    # 2. Test ModuleNotFoundError case
+    mock_run_stdio_server.side_effect = ModuleNotFoundError("No module named 'mcp'", name="mcp")
+    stderr_writes.clear()
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.main()
+
+    assert exc_info.value.code == 1
+    full_stderr = "".join(stderr_writes)
+    assert "No module named 'mcp'" in full_stderr
+
+    # 3. Verify that unrelated RuntimeErrors are propagated
+    mock_run_stdio_server.side_effect = RuntimeError("Something else went wrong")
+    with pytest.raises(RuntimeError) as exc_info_unrelated:
+        module.main()
+    assert str(exc_info_unrelated.value) == "Something else went wrong"
+
+
+def test_mcp_flow_fails_fast_on_forbidden_imports(monkeypatch):
+    """Verify that the guarded import raises AssertionError for click/rich/cli inside MCP flow."""
+    _block_cli_imports(monkeypatch)
+
+    with pytest.raises(AssertionError) as exc_info:
+        import click  # noqa: F401
+    assert "Forbidden CLI or adapter import attempted during MCP flow: click" in str(exc_info.value)
+
+    with pytest.raises(AssertionError) as exc_info:
+        import rich  # noqa: F401
+    assert "Forbidden CLI or adapter import attempted during MCP flow: rich" in str(exc_info.value)
+
+    with pytest.raises(AssertionError) as exc_info:
+        import engram.cli  # noqa: F401
+    assert "Forbidden CLI or adapter import attempted during MCP flow: engram.cli" in str(
+        exc_info.value
+    )

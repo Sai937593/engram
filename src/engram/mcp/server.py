@@ -34,18 +34,39 @@ def create_server() -> Any:
     """Create the MCP server skeleton with no tools/resources registered yet."""
     fastmcp_class = _load_fastmcp_class()
     server = fastmcp_class(SERVER_NAME)
-    register_resources(server)
-    register_tools(server)
     return server
 
 
 def run_stdio_server() -> None:
     """Initialize Engram storage and run MCP over STDIO transport."""
-    init_db()
+    try:
+        from engram.services.project_path import get_repo_local_db_path
+
+        db_path = get_repo_local_db_path()
+        if db_path.exists():
+            init_db()
+    except Exception:
+        pass
+
     server = create_server()
+    register_resources(server)
+    register_tools(server)
     server.run(transport="stdio")
 
 
 def main() -> None:
     """Console entrypoint for ``engram-mcp``."""
-    run_stdio_server()
+    try:
+        run_stdio_server()
+    except (RuntimeError, ModuleNotFoundError) as exc:
+        import sys
+
+        err_msg = str(exc)
+        if (
+            MISSING_MCP_DEPENDENCY_MESSAGE in err_msg
+            or "Installed MCP SDK is missing" in err_msg
+            or (isinstance(exc, ModuleNotFoundError) and exc.name and exc.name.startswith("mcp"))
+        ):
+            sys.stderr.write(f"Error: {err_msg}\n")
+            sys.exit(1)
+        raise
