@@ -738,6 +738,39 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "error" in res_err
     assert res_err["error"] == "INVALID_TASK_STATUS"
 
+    # 3. Memory review outcome happy path
+    res_mro = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={"memory_review_outcome": "created"},
+        )
+    )
+    assert res_mro["ok"] is True
+    assert res_mro["id"] == "task-to-update"
+    assert res_mro["updated_fields"] == ["memory_review_outcome"]
+
+    # 4. Memory review outcome no_change path
+    res_mro_no_change = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={"memory_review_outcome": "no_change"},
+        )
+    )
+    assert res_mro_no_change["ok"] is True
+    assert res_mro_no_change["id"] == "task-to-update"
+    assert res_mro_no_change["updated_fields"] == ["memory_review_outcome"]
+
+    # 5. Memory review outcome invalid value rejection
+    res_mro_err = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={"memory_review_outcome": "invalid-outcome-value"},
+        )
+    )
+    assert res_mro_err["ok"] is False
+    assert "error" in res_mro_err
+    assert res_mro_err["error"] == "INVALID_MEMORY_REVIEW_OUTCOME"
+
 
 def test_mcp_task_note_append_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     """Verify engram_task_note_append tool appends notes and gracefully handles service validation errors."""
@@ -1054,6 +1087,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         "id": "t1",
         "commit": "feat: Test Task",
         "phase_complete": False,
+        "memory_review_outcome": "created",
     }
     mock_verify_res = {
         "task_id": "t1",
@@ -1104,6 +1138,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "Task: `t1`" in res_finish
     assert "Commit: `feat: Test Task`" in res_finish
     assert "Phase complete: False" in res_finish
+    assert "Memory review outcome: `created`" in res_finish
     assert "## Next action" in res_finish
     assert (
         "Stop here. The active task is finished and committed. Await further instructions."
@@ -1214,6 +1249,25 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert (
         "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
         in res_finish_stale
+    )
+
+    # 4e. Error path: missing memory review outcome returns compact blocked markdown
+    def raising_finish_memory_review_missing(project_id, repo_path, commit_type=None):
+        raise EngramServiceError(
+            code="MEMORY_REVIEW_OUTCOME_MISSING",
+            message="Active task is missing memory_review_outcome.",
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_memory_review_missing)
+    res_finish_memory_blocked = asyncio.run(finish_handler(commit_type="feat"))
+    assert "# Finish Blocked" in res_finish_memory_blocked
+    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_memory_blocked
+    assert "Reason: Active task is missing memory_review_outcome." in res_finish_memory_blocked
+    assert "## Next action" in res_finish_memory_blocked
+    assert res_finish_memory_blocked.count("## Next action") == 1
+    assert (
+        "Record memory_review_outcome on the active task via engram_task_update, then call "
+        "engram_workflow_finish again." in res_finish_memory_blocked
     )
 
     # 5. Error path: Project bound but has no repo_paths configured

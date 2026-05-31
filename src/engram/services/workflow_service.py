@@ -12,6 +12,8 @@ from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title
 from engram.services.errors import EngramServiceError
 from engram.services.serializers import task_to_dict
+from engram.services.task.validation import validate_memory_review_outcome_field
+from engram.services.workflow_constants import CONVENTIONAL_COMMIT_TYPES
 from engram.services.workflow_helpers import (
     get_target_branch,
     is_same_phase,
@@ -21,18 +23,6 @@ from engram.services.workflow_helpers import (
 )
 from engram.services.workflow_verification_service import evaluate_verification_eligibility
 from engram.services.workflow_verify_service import verify_workflow as run_workflow_verify
-
-CONVENTIONAL_COMMIT_TYPES: set[str] = {
-    "feat",
-    "fix",
-    "docs",
-    "chore",
-    "refactor",
-    "test",
-    "ci",
-    "style",
-    "perf",
-}
 
 
 def _run(args: list[str], cwd: str) -> str:
@@ -53,7 +43,6 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
             code="PROJECT_NOT_FOUND",
             message=f"Project with ID '{project_id}' not found.",
         )
-
     phases = Phase.list_by_project(project_id)
     active_phase = next((p for p in phases if p.status == "active"), None)
     task, is_resuming = select_task_to_start(project_id)
@@ -81,7 +70,6 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
             code="DIRTY_WORKING_TREE",
             message=f"Git working tree is dirty, and starting this task requires branch '{target_branch}'.",
         )
-
     if not is_resuming:
         task.update(status="in-progress")
 
@@ -128,7 +116,6 @@ def finish_workflow(
             code="PROJECT_NOT_FOUND",
             message=f"Project with ID '{project_id}' not found.",
         )
-
     tasks = Task.list_by_project(project_id)
     in_progress = [t for t in tasks if t.status == "in-progress"]
     if not in_progress:
@@ -138,6 +125,12 @@ def finish_workflow(
         )
 
     task = in_progress[0]
+    if not task.memory_review_outcome:
+        raise EngramServiceError(
+            code="MEMORY_REVIEW_OUTCOME_MISSING",
+            message="Active task is missing memory_review_outcome.",
+        )
+    validate_memory_review_outcome_field(task.memory_review_outcome)
     eligibility = evaluate_verification_eligibility(
         project_id=project_id,
         task_id=task.id,
@@ -149,7 +142,6 @@ def finish_workflow(
             code=eligibility["reason_code"],
             message=eligibility["reason"],
         )
-
     try:
         resolved = resolve_commit_type(task, commit_type, CONVENTIONAL_COMMIT_TYPES)
     except ValueError as e:
@@ -159,7 +151,6 @@ def finish_workflow(
         ) from e
 
     _run(["git", "add", "-A"], repo_path)
-
     phase_title = get_effective_phase_title(task)
     commit_msg = f"{resolved}({slugify(phase_title) or 'misc'}): {task.title} [{task.id}]"
 
@@ -193,6 +184,7 @@ def finish_workflow(
         "commit": commit_msg,
         "phase_complete": phase_complete,
         "task_title": task.title,
+        "memory_review_outcome": task.memory_review_outcome,
     }
 
 

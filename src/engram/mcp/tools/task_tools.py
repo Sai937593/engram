@@ -105,7 +105,7 @@ def register_task_tools(server: Any) -> None:
 
     @server.tool()
     def engram_task_update(task_ref: str, updates: dict[str, Any]) -> str:
-        """Update an existing task in the currently bound engram project."""
+        """Update an existing task in the currently bound engram project, including memory_review_outcome."""
         try:
             project = engram.mcp.tools.resolve_current_project()
             project_id = str(project["id"])

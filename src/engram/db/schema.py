@@ -35,6 +35,7 @@ def create_tasks_table(cursor: sqlite3.Cursor) -> None:
         evidence    TEXT,
         tags        TEXT,
         relevant_files TEXT,
+        memory_review_outcome TEXT,
         created_at  TEXT DEFAULT (datetime('now')),
         updated_at  TEXT DEFAULT (datetime('now'))
     )

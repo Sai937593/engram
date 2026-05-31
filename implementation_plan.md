@@ -1,49 +1,49 @@
-# Implementation Plan - Task 7774e488 (Phase 8.2)
+# Implementation Plan - Task 17692daf (Phase 9.5)
 
 ## Scope
-Enforce the verification gate in `workflow_finish` output behavior so missing/failed/stale verification blocks finish with compact markdown and exactly one `## Next action` section instructing Codex to run or rerun workflow verification. Keep successful finish output concise and do not auto-start the next task.
+Add regression coverage for memory review outcome recording and finish-time gating across service and MCP paths. Cover missing outcome blocking, valid outcomes, invalid outcome rejection, and the no-memory-change path.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `7774e488`.
-- Keep scope limited to finish-time verification gate and MCP finish output.
-- Do not add memory review gates, stale-memory policies, or phase transition automation.
-- Service modules must remain adapter-safe.
+- One-task session only: execute only task `17692daf`.
+- Test-focused changes only unless a test exposes a true product bug in-scope.
+- Preserve service/adapter boundaries (no CLI/MCP imports in `src/engram/services`).
 - No-touch directories: `planning/`, `workflow/`, `.github/`.
 
 ## Investigation Plan
-1. Confirm current finish-time eligibility behavior and emitted error codes/messages:
+1. Review existing memory review assertions in:
+- `tests/test_services_workflow_finish.py`
+- `tests/test_mcp_tools.py`
+- `tests/test_workflow_redesign_phase_5_regressions.py`
+
+2. Inspect implementation contracts for allowed outcomes and update path:
+- `src/engram/models/task.py`
 - `src/engram/services/workflow_service.py`
-- `src/engram/services/workflow_verification_service.py`
-
-2. Confirm formatting helpers for blocked/success finish responses:
-- `src/engram/services/workflow_formatter.py`
-
-3. Confirm MCP tool mapping from service errors to final finish response:
 - `src/engram/mcp/tools/workflow_tools.py`
 
+3. Identify exact missing scenarios versus acceptance and add minimal tests.
+
 ## Planned Changes
-1. Ensure blocked finish states (missing/failed/stale) are surfaced as compact markdown via `format_finish_blocked` with:
-- task context line
-- compact reason line
-- exactly one `## Next action` section
-- next action text explicitly telling Codex to run or rerun `engram_workflow_verify`
+1. Service regressions (`tests/test_services_workflow_finish.py`):
+- Add/extend test coverage for all valid `memory_review_outcome` enum values passing finish gate.
+- Add/extend explicit invalid outcome rejection coverage at update/model/service boundary.
+- Keep missing-outcome block assertion deterministic (`MEMORY_REVIEW_OUTCOME_MISSING`).
 
-2. Keep verification gate execution before any git side effects (`git add/commit/push`) and preserve existing behavior for successful eligible finishes.
+2. MCP regressions (`tests/test_mcp_tools.py`):
+- Add/extend `engram_task_update` coverage for valid outcomes and invalid outcome rejection through MCP handler contract.
+- Assert no-memory-change path is accepted when outcome is `no_change` and reflected in response.
 
-3. Keep successful finish response concise via `format_finish_success`, with no automatic workflow start behavior.
-
-4. Add or update focused tests for MCP finish output covering:
-- missing verification -> blocked format + next action
-- failed verification -> blocked format + next action
-- stale verification -> blocked format + next action
-- successful eligible finish -> concise success format unchanged
+3. End-to-end contract regressions (`tests/test_workflow_redesign_phase_5_regressions.py`):
+- Add/extend finish-gate E2E flow to include `no_change` success path and ensure compact output remains stable.
+- Keep one `## Next action` section and deterministic blocked guidance.
 
 ## Validation Plan
-- Run targeted workflow tool/service tests for finish and formatter behavior.
-- Run any affected tests for workflow verification eligibility integration.
-- Confirm zero test failures before invoking `engram_workflow_finish`.
+- Run targeted tests:
+- `uv run pytest tests/test_services_workflow_finish.py -q`
+- `uv run pytest tests/test_mcp_tools.py -q`
+- `uv run pytest tests/test_workflow_redesign_phase_5_regressions.py -q`
+- If all pass, run `engram_workflow_verify` before finish.
 
 ## Out of Scope
-- Memory review gates or broader task readiness policies.
-- New automation for PR/phase transitions.
-- Refactoring unrelated workflow command surfaces.
+- Changing memory review outcome taxonomy.
+- Refactoring unrelated workflow formatting.
+- Multi-task or phase-transition execution.

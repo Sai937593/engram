@@ -12,9 +12,7 @@ def column_exists(cursor: sqlite3.Cursor, table_name: str, column_name: str) -> 
 
 def normalize_phase_title(phase: str | None) -> str:
     """Normalize phase titles for matching and deduplication."""
-    if phase is None:
-        return ""
-    return " ".join(phase.split()).casefold()
+    return "" if phase is None else " ".join(phase.split()).casefold()
 
 
 def apply_tasks_column_migrations(cursor: sqlite3.Cursor) -> None:
@@ -25,6 +23,8 @@ def apply_tasks_column_migrations(cursor: sqlite3.Cursor) -> None:
         cursor.execute("ALTER TABLE tasks ADD COLUMN phase_id TEXT REFERENCES phases(id)")
     if not column_exists(cursor, "tasks", "relevant_files"):
         cursor.execute("ALTER TABLE tasks ADD COLUMN relevant_files TEXT")
+    if not column_exists(cursor, "tasks", "memory_review_outcome"):
+        cursor.execute("ALTER TABLE tasks ADD COLUMN memory_review_outcome TEXT")
 
 
 def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:

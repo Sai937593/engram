@@ -269,3 +269,60 @@ def test_init_db_normalizes_legacy_dependency_refs(tmp_db):
     ).fetchone()["depends_on"]
     conn.close()
     assert dep_value == "a1b2c3d4"
+
+
+def test_init_db_creates_memory_review_outcome_column(tmp_db):
+    """Test that init_db creates tasks table with memory_review_outcome column."""
+    conn = get_db_connection(tmp_db)
+    columns = conn.execute("PRAGMA table_info(tasks)").fetchall()
+    conn.close()
+    names = {row["name"] for row in columns}
+    assert "memory_review_outcome" in names
+
+
+def test_migration_adds_memory_review_outcome_column(tmp_path):
+    """Test that migrations add memory_review_outcome to legacy tasks table missing it."""
+    db_path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db_path)
+    # Create the projects and tasks table without memory_review_outcome but with status
+    conn.execute("""
+    CREATE TABLE projects (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        summary     TEXT,
+        status      TEXT DEFAULT 'active',
+        repo_paths  TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    conn.execute("""
+    CREATE TABLE tasks (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL REFERENCES projects(id),
+        title       TEXT NOT NULL,
+        description TEXT,
+        status      TEXT DEFAULT 'todo',
+        priority    TEXT DEFAULT 'medium',
+        phase       TEXT,
+        acceptance  TEXT,
+        evidence    TEXT,
+        tags        TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        updated_at  TEXT DEFAULT (datetime('now'))
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+    # Now initialize DB on this legacy database
+    init_db(db_path)
+
+    # Check that memory_review_outcome column has been added
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    columns = cursor.execute("PRAGMA table_info(tasks)").fetchall()
+    conn.close()
+
+    names = {col[1] for col in columns}
+    assert "memory_review_outcome" in names
