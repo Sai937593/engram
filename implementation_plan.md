@@ -1,23 +1,27 @@
-## Implementation Plan - Task c2b08d27
+# Implementation Plan - Task eb75ad51
 
-### Scope
-- Update phase-review guidance in:
-  - `docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md`
-  - `docs/USER_MANUAL.md`
-  - `src/engram/USER_MANUAL.md`
-- Keep `AGENTS.md` unchanged unless a stable repo-wide rule is required.
+## Scope
+Run a final repo-wide documentation audit for phase-review regressions and resolve any remaining active guidance that conflicts with the simplified workflow.
 
-### Planned Changes
-1. Align all three docs to describe phase review as phase-level memory curation using existing memory tools.
-2. Ensure phase completion flow explicitly points to `engram_phase_complete` after memory review and cleanup.
-3. Remove or correct contradictory guidance about:
-   - raw SQLite access by agents,
-   - dedicated/special phase memory-review start tools.
-4. Sync tool lists so memory batch helpers are consistently documented where phase review instructions appear.
+## Findings from initial audit
+- `AGENTS.md` and `agent-files/root-agents-template.md` contain valid guardrails forbidding raw SQLite / direct `.engram/memory.db` inspection.
+- `docs/skills/memory-review.md` and `agent-files/skills/engram-phase-review-template.md` correctly require normal memory CRUD tools and explicitly forbid any special phase-memory-review start tool.
+- Matches in `docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_MVP_SIMPLIFICATION.md` and `docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md` are historical planning/handoff context, not active operational guidance.
+- `docs/USER_MANUAL.md` references `.engram/memory.db` as product architecture/storage, not as an instruction for agents to query it directly.
 
-### Verification
-1. Run the task-provided grep check:
-   - `rg -n "phase review|memory review|engram_phase_complete|engram_memory_(list|get|create|update|delete|update_many|delete_many)|special phase memory review|raw SQLite" docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md docs/USER_MANUAL.md src/engram/USER_MANUAL.md AGENTS.md`
-2. Run `engram_workflow_verify`.
-3. If verify passes, run `engram_workflow_finish_and_commit`.
+## Planned edits
+1. Perform one more targeted scan for nearby wording variants (e.g., `phase_memory_review_start`, `memory review gate`, `draft/ready/todo` references tied to task finish) across `docs/`, `agent-files/`, and root `AGENTS.md`.
+2. If any active contradictory wording exists, apply minimal text edits to align with:
+   - phase-level memory review only,
+   - no special phase-review startup tool,
+   - no direct raw SQLite guidance for agent operations.
+3. Preserve historical docs as historical; avoid rewriting implementation history unless needed for clarity labels.
 
+## Verification
+- Run the required task grep:
+  - `rg -n "raw SQLite|memory\.db|special phase memory review|phase memory review start|per-task memory review" docs agent-files AGENTS.md`
+- Run one supplemental grep for adjacent legacy phrasing to confirm no active regressions remain.
+- Then run `engram_workflow_verify` as required workflow verification before finish.
+
+## Deliverable
+A concise repo-audit outcome with any minimal doc fixes needed, verified via workflow checks.
