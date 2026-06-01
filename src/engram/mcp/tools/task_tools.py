@@ -71,6 +71,9 @@ def register_task_tools(server: Any) -> None:
         acceptance: str | None = None,
         tags: list[str] | None = None,
         relevant_files: list[str] | None = None,
+        verification: str | None = None,
+        search_hints: list[str] | None = None,
+        objective: str | None = None,
     ) -> str:
         """Create a new task in the currently bound engram project."""
         try:
@@ -93,6 +96,9 @@ def register_task_tools(server: Any) -> None:
                 acceptance=acceptance,
                 tags=tags,
                 relevant_files=relevant_files,
+                verification=verification,
+                search_hints=search_hints,
+                objective=objective,
             )
             resp = {"ok": True, "id": task["id"], "title": task["title"]}
             if has_in_progress:

@@ -13,7 +13,6 @@ from engram.services.task.validation import (
     _normalize_phase_title,
     validate_memory_review_outcome_field,
     validate_priority_field,
-    validate_ready_promotion_metadata,
     validate_status_field,
 )
 
@@ -25,6 +24,9 @@ def validate_and_resolve_update(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """Validate and resolve all update payload fields, returning resolved update kwargs."""
+    if "objective" in kwargs:
+        kwargs["description"] = kwargs.pop("objective")
+
     has_explicit_phase = "phase" in kwargs
 
     unknown = set(kwargs) - VALID_TASK_UPDATE_FIELDS
@@ -66,15 +68,26 @@ def validate_and_resolve_update(
             details={"task_id": task_id, "phase_id": eff_phase_id},
         )
 
-    current_status = task_item.status
-    target_status = kwargs.get("status", current_status)
-    if current_status != "ready" and target_status == "ready":
-        validate_ready_promotion_metadata(
-            status=target_status,
-            description=kwargs.get("description", task_item.description),
-            acceptance=kwargs.get("acceptance", task_item.acceptance),
-            relevant_files=kwargs.get("relevant_files", task_item.relevant_files),
-        )
+    # Perform strict executable task validation on the merged state
+    merged_title = kwargs.get("title", task_item.title)
+    merged_description = kwargs.get("description", task_item.description)
+    merged_acceptance = kwargs.get("acceptance", task_item.acceptance)
+    merged_phase_id = kwargs.get("phase_id", task_item.phase_id)
+    merged_verification = kwargs.get("verification", task_item.verification)
+    merged_relevant_files = kwargs.get("relevant_files", task_item.relevant_files)
+    merged_search_hints = kwargs.get("search_hints", task_item.search_hints)
+
+    from engram.services.task.validation import validate_executable_task_metadata
+    validate_executable_task_metadata(
+        title=merged_title,
+        description=merged_description,
+        acceptance=merged_acceptance,
+        phase_id=merged_phase_id,
+        verification=merged_verification,
+        relevant_files=merged_relevant_files,
+        search_hints=merged_search_hints,
+    )
+
     return kwargs
 
 

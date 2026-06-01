@@ -23,6 +23,9 @@ from engram.services.task.validation import (
     resolve_task_ref as _resolve_task_ref,
 )
 from engram.services.task.validation import (
+    validate_executable_task_metadata as _validate_executable_task_metadata,
+)
+from engram.services.task.validation import (
     validate_priority_field as _validate_priority_field,
 )
 from engram.services.task.validation import (
@@ -130,11 +133,27 @@ def create_task(
     tags: list[str] | None = None,
     relevant_files: list[str] | None = None,
     id: str | None = None,
+    verification: str | None = None,
+    search_hints: list[str] | None = None,
+    objective: str | None = None,
 ) -> dict[str, object]:
+    if description is None:
+        description = objective
+
     if status in {"draft", "ready", "todo"}:
         status = "open"
     elif status == "in-progress":
         status = "in_progress"
+
+    _validate_executable_task_metadata(
+        title=title,
+        description=description,
+        acceptance=acceptance,
+        phase_id=phase_id,
+        verification=verification,
+        relevant_files=relevant_files,
+        search_hints=search_hints,
+    )
 
     _validate_status_field(status)
     _validate_priority_field(priority)
@@ -152,6 +171,8 @@ def create_task(
         tags=tags,
         relevant_files=relevant_files,
         id=id,
+        verification=verification,
+        search_hints=search_hints,
     )
     return _task_to_dict(t)
 

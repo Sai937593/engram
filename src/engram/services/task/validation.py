@@ -19,6 +19,7 @@ VALID_TASK_UPDATE_FIELDS = {
     "status",
     "priority",
     "description",
+    "objective",
     "tags",
     "acceptance",
     "phase",
@@ -26,6 +27,8 @@ VALID_TASK_UPDATE_FIELDS = {
     "evidence",
     "depends_on",
     "relevant_files",
+    "verification",
+    "search_hints",
     "memory_review_outcome",
 }
 
@@ -155,4 +158,65 @@ def validate_ready_promotion_metadata(
     relevant_files: list[str] | None,
 ) -> None:
     """Validate metadata quality required to promote a task into ready."""
-    return
+    from engram.services.task.ready_metadata_quality import evaluate_ready_metadata_quality
+    missing, weak, reasons = evaluate_ready_metadata_quality(
+        description=description,
+        acceptance=acceptance,
+        relevant_files=relevant_files,
+    )
+    if missing or weak:
+        raise _ValidationError(
+            code="READY_METADATA_INCOMPLETE",
+            message="Ready promotion metadata is incomplete or too weak.",
+            details={
+                "evaluated_fields": ["description", "acceptance", "relevant_files"],
+                "missing_fields": missing,
+                "weak_fields": weak,
+                "weak_field_reasons": reasons,
+            },
+        )
+
+
+def validate_executable_task_metadata(
+    *,
+    title: str | None,
+    description: str | None,
+    acceptance: str | None,
+    phase_id: str | None,
+    verification: str | None,
+    relevant_files: list[str] | None,
+    search_hints: list[str] | None,
+) -> None:
+    """Validate that task metadata is present and strong enough for execution."""
+    from engram.services.task.ready_metadata_quality import evaluate_executable_task_quality
+
+    missing, weak, reasons = evaluate_executable_task_quality(
+        title=title,
+        description=description,
+        acceptance=acceptance,
+        phase_id=phase_id,
+        verification=verification,
+        relevant_files=relevant_files,
+        search_hints=search_hints,
+    )
+
+    if missing or weak:
+        raise _ValidationError(
+            code="TASK_METADATA_INCOMPLETE",
+            message="Task metadata is incomplete or too weak for immediate execution.",
+            details={
+                "evaluated_fields": [
+                    "title",
+                    "description",
+                    "acceptance",
+                    "phase_id",
+                    "verification",
+                    "relevant_files",
+                    "search_hints",
+                ],
+                "missing_fields": missing,
+                "weak_fields": weak,
+                "weak_field_reasons": reasons,
+            },
+        )
+

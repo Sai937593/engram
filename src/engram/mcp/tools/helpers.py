@@ -48,6 +48,7 @@ def _respond_error(exc: EngramServiceError) -> str:
         "DIRTY_WORKING_TREE": "Commit your changes using engram_workflow_finish or stash them before starting a new task.",
         "INVALID_TASK_STATUS": "Use a valid task status (draft, ready, in-progress, done, blocked, or cancelled) and update using engram_task_update.",
         "READY_METADATA_INCOMPLETE": "Add or strengthen task description, acceptance criteria, and relevant_files, then retry engram_task_update with status=ready.",
+        "TASK_METADATA_INCOMPLETE": "Add or strengthen task title, description, acceptance, phase_id, verification, and relevant_files/search_hints, then retry.",
         "PHASE_COMPLETION_BLOCKED": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
         "UNFINISHED_TASKS": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
         "PROJECT_NOT_BOUND": "Run engram_project_init to initialize Engram in this repository.",
@@ -82,7 +83,7 @@ def _compact_error_details(exc: EngramServiceError) -> dict[str, Any]:
     """Return compact, deterministic detail payload for actionable MCP errors."""
     if not exc.details:
         return {}
-    if exc.code == "READY_METADATA_INCOMPLETE":
+    if exc.code in {"READY_METADATA_INCOMPLETE", "TASK_METADATA_INCOMPLETE"}:
         keys = ("evaluated_fields", "missing_fields", "weak_fields", "weak_field_reasons")
         return {k: exc.details[k] for k in keys if k in exc.details}
     if exc.code == "INVALID_TASK_STATUS":
@@ -95,7 +96,7 @@ def _resolve_error_fix(exc: EngramServiceError, known_fixes: dict[str, str]) -> 
     """Prefer explicit fix; otherwise derive deterministic, field-specific guidance."""
     if getattr(exc, "fix", None):
         return exc.fix
-    if exc.code != "READY_METADATA_INCOMPLETE":
+    if exc.code not in {"READY_METADATA_INCOMPLETE", "TASK_METADATA_INCOMPLETE"}:
         return known_fixes.get(exc.code)
 
     missing = sorted(
@@ -112,7 +113,11 @@ def _resolve_error_fix(exc: EngramServiceError, known_fixes: dict[str, str]) -> 
             if isinstance(reason, str) and reason.strip():
                 reason_list.append(f"{field} ({reason.strip()})")
 
-    segments = ["Retry engram_task_update with status=ready after improving task metadata."]
+    if exc.code == "TASK_METADATA_INCOMPLETE":
+        segments = ["Retry task creation or update with complete and strong metadata."]
+    else:
+        segments = ["Retry engram_task_update with status=ready after improving task metadata."]
+
     if missing:
         segments.append(f"Missing: {', '.join(missing)}.")
     if weak:

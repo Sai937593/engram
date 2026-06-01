@@ -25,6 +25,10 @@ def apply_tasks_column_migrations(cursor: sqlite3.Cursor) -> None:
         cursor.execute("ALTER TABLE tasks ADD COLUMN relevant_files TEXT")
     if not column_exists(cursor, "tasks", "memory_review_outcome"):
         cursor.execute("ALTER TABLE tasks ADD COLUMN memory_review_outcome TEXT")
+    if not column_exists(cursor, "tasks", "verification"):
+        cursor.execute("ALTER TABLE tasks ADD COLUMN verification TEXT")
+    if not column_exists(cursor, "tasks", "search_hints"):
+        cursor.execute("ALTER TABLE tasks ADD COLUMN search_hints TEXT")
 
 
 def apply_memories_column_migrations(cursor: sqlite3.Cursor) -> None:

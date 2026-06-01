@@ -102,6 +102,7 @@ def task_to_dict(task: Task) -> dict[str, JsonValue]:
         "project_id": str(task.project_id),
         "title": str(task.title),
         "description": _none_if_blank(task.description),
+        "objective": _none_if_blank(task.description),
         "status": str(task.status),
         "effective_status": _get_effective_status(task),
         "priority": str(task.priority),
@@ -112,6 +113,8 @@ def task_to_dict(task: Task) -> dict[str, JsonValue]:
         "evidence": _none_if_blank(task.evidence),
         "tags": _string_list(task.tags),
         "relevant_files": _string_list(task.relevant_files),
+        "verification": _none_if_blank(task.verification),
+        "search_hints": _string_list(task.search_hints),
         "memory_review_outcome": _none_if_blank(task.memory_review_outcome),
     }
 

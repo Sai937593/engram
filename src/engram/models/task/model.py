@@ -9,8 +9,11 @@ from engram.models.audit import AuditLog
 from engram.models.task import queries as _q
 from engram.models.task.serialization import (
     deserialize_relevant_files,
+    deserialize_search_hints,
     normalize_relevant_files,
+    normalize_search_hints,
     serialize_relevant_files,
+    serialize_search_hints,
 )
 
 
@@ -31,6 +34,8 @@ class Task:
         tags=None,
         relevant_files=None,
         memory_review_outcome=None,
+        verification=None,
+        search_hints=None,
     ):
         self.id = id
         self.project_id = project_id
@@ -46,6 +51,17 @@ class Task:
         self.tags = tags or []
         self.relevant_files = normalize_relevant_files(relevant_files)
         self.memory_review_outcome = memory_review_outcome
+        self.verification = verification
+        self.search_hints = normalize_search_hints(search_hints)
+
+    @property
+    def objective(self) -> str | None:
+        """Alias for description/objective."""
+        return self.description
+
+    @objective.setter
+    def objective(self, value: str | None) -> None:
+        self.description = value
 
     @classmethod
     def create(
@@ -63,15 +79,20 @@ class Task:
         relevant_files=None,
         memory_review_outcome=None,
         id=None,
+        verification=None,
+        search_hints=None,
+        objective=None,
     ):
+        if description is None:
+            description = objective
         if not id:
             id = uuid.uuid4().hex[:8]
 
         conn = get_db_connection()
         conn.execute(
             "INSERT INTO tasks (id, project_id, title, description, status, priority, "
-            "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome, verification, search_hints) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 id,
                 project_id,
@@ -86,6 +107,8 @@ class Task:
                 ",".join(tags or []),
                 serialize_relevant_files(normalize_relevant_files(relevant_files)),
                 memory_review_outcome,
+                verification,
+                serialize_search_hints(normalize_search_hints(search_hints)),
             ),
         )
         conn.commit()
@@ -107,6 +130,8 @@ class Task:
             tags,
             relevant_files,
             memory_review_outcome,
+            verification,
+            search_hints,
         ]
         return cls(*args)
 
@@ -118,6 +143,12 @@ class Task:
             else []
         )
         mro = row["memory_review_outcome"] if "memory_review_outcome" in row.keys() else None
+        ver = row["verification"] if "verification" in row.keys() else None
+        sh = (
+            deserialize_search_hints(row["search_hints"])
+            if "search_hints" in row.keys()
+            else []
+        )
         args = [
             row["id"],
             row["project_id"],
@@ -133,10 +164,14 @@ class Task:
             row["tags"].split(",") if row["tags"] else [],
             rf,
             mro,
+            ver,
+            sh,
         ]
         return cls(*args)
 
     def update(self, **kwargs):
+        if "objective" in kwargs:
+            kwargs["description"] = kwargs.pop("objective")
         updates, params = [], []
         for key, val in kwargs.items():
             if not hasattr(self, key):
@@ -147,13 +182,21 @@ class Task:
                     val = "open"
                 elif val == "in-progress":
                     val = "in_progress"
-            new = normalize_relevant_files(val) if key == "relevant_files" else val
+            new = (
+                normalize_relevant_files(val)
+                if key == "relevant_files"
+                else (normalize_search_hints(val) if key == "search_hints" else val)
+            )
             if old != new:
                 updates.append(f"{key} = ?")
                 p_val = (
                     serialize_relevant_files(new)
                     if key == "relevant_files"
-                    else (val if not isinstance(val, list) else ",".join(val))
+                    else (
+                        serialize_search_hints(new)
+                        if key == "search_hints"
+                        else (val if not isinstance(val, list) else ",".join(val))
+                    )
                 )
                 params.append(p_val)
                 setattr(self, key, new)

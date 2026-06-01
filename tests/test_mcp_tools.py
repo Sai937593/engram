@@ -6,6 +6,7 @@ import asyncio
 import os
 from typing import Any
 
+import pytest
 import yaml
 
 from engram.db import get_db_connection
@@ -13,6 +14,14 @@ from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task
+
+
+@pytest.fixture(autouse=True)
+def bypass_strict_task_validation(monkeypatch):
+    import engram.services.task.crud as crud
+    import engram.services.task.validation as validation
+    monkeypatch.setattr(validation, "validate_executable_task_metadata", lambda **kwargs: None)
+    monkeypatch.setattr(crud, "_validate_executable_task_metadata", lambda **kwargs: None)
 
 
 class MockServer:

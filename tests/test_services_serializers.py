@@ -73,6 +73,7 @@ def test_task_to_dict_shape_lists_optional_values_and_effective_status(monkeypat
         "project_id": "proj1234",
         "title": "Implement serializers",
         "description": None,
+        "objective": None,
         "status": "todo",
         "effective_status": "blocked",
         "priority": "high",
@@ -83,6 +84,8 @@ def test_task_to_dict_shape_lists_optional_values_and_effective_status(monkeypat
         "evidence": None,
         "tags": ["mcp", "services"],
         "relevant_files": ["src/engram/services/serializers.py"],
+        "verification": None,
+        "search_hints": [],
         "memory_review_outcome": None,
     }
     _assert_json_safe(payload)
