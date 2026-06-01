@@ -487,7 +487,7 @@ def test_e2e_workflow_verify_records_pass_and_fail(disposable_git_repo):
 
     verify_res_str = asyncio.run(mock_server.tools["engram_workflow_verify"]())
     assert "Verification passed" in verify_res_str
-    assert "All local quality checks passed." in verify_res_str
+    assert "staged current worktree and marked task verified" in verify_res_str
 
     # --- 2. Failing verification scenario ---
     dummy_test.write_text(

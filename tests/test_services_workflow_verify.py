@@ -58,6 +58,7 @@ def test_verify_workflow_records_pass(tmp_db: Any, tmp_path: Any) -> None:
         SimpleNamespace(returncode=0, stdout="ruff check ok", stderr=""),
         SimpleNamespace(returncode=0, stdout="py_structure ok", stderr=""),
         SimpleNamespace(returncode=0, stdout="pytest ok", stderr=""),
+        SimpleNamespace(returncode=0, stdout="", stderr=""),
     ]
 
     (tmp_path / "uv.lock").write_text("", encoding="utf-8")
@@ -68,7 +69,10 @@ def test_verify_workflow_records_pass(tmp_db: Any, tmp_path: Any) -> None:
 
     assert res["passed"] is True
     assert res["task_id"] == task.id
-    assert res["summary"] == "All local quality checks passed."
+    assert (
+        res["summary"]
+        == "All local quality checks passed; staged current worktree and marked task verified."
+    )
     assert res["actionable_target"] is None
     called = [list(call.args[0]) for call in run_mock.call_args_list]
     assert called == [
@@ -76,16 +80,25 @@ def test_verify_workflow_records_pass(tmp_db: Any, tmp_path: Any) -> None:
         ["uv", "run", "ruff", "check", ".", "--fix"],
         ["uv", "run", "python", "-m", "engram.hooks.py_structure"],
         ["uv", "run", "pytest", "tests/", "-m", "not slow", "-x", "--tb=short", "-q"],
+        ["git", "add", "-A"],
     ]
+    refreshed_task = Task.get(task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.is_verified is True
     latest = get_latest_workflow_verification(project_id=project.id, task_id=task.id)
     assert latest is not None
     assert latest["status"] == "passed"
-    assert latest["summary"] == "All local quality checks passed."
+    assert (
+        latest["summary"]
+        == "All local quality checks passed; staged current worktree and marked task verified."
+    )
     details = str(latest["details"])
     assert "uv run ruff format ." in details
     assert "uv run ruff check . --fix" in details
     assert "uv run python -m engram.hooks.py_structure" in details
     assert 'uv run pytest tests/ -m "not slow" -x --tb=short -q' in details
+    assert "git add -A" in details
+    assert "is_verified = true" in details
 
 
 def test_verify_workflow_records_failure_with_actionable_target(tmp_db: Any, tmp_path: Any) -> None:
@@ -156,6 +169,51 @@ def test_verify_workflow_failure_does_not_stage_files(tmp_db: Any, tmp_path: Any
     called = [list(call.args[0]) for call in run_mock.call_args_list]
     assert called == [["uv", "run", "ruff", "format", "."]]
     assert not any(cmd[:2] == ["git", "add"] for cmd in called)
+
+
+def test_verify_workflow_stage_failure_records_failed_verification(
+    tmp_db: Any, tmp_path: Any
+) -> None:
+    project = Project.create(
+        id="proj-verify-stage-fail",
+        name="Verify Stage Fail Project",
+        summary="Service verify stage fail",
+        repo_paths=[str(tmp_path)],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="task-verify-stage-fail",
+        title="Run verification",
+        status="in-progress",
+    )
+
+    responses = [
+        SimpleNamespace(returncode=0, stdout="ruff ok", stderr=""),
+        SimpleNamespace(returncode=0, stdout="ruff check ok", stderr=""),
+        SimpleNamespace(returncode=0, stdout="py_structure ok", stderr=""),
+        SimpleNamespace(returncode=0, stdout="pytest ok", stderr=""),
+        SimpleNamespace(returncode=1, stdout="", stderr="fatal: not a git repository"),
+    ]
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    with patch(
+        "engram.services.workflow_verify_service.subprocess.run", side_effect=responses
+    ) as run_mock:
+        res = verify_workflow(project.id, str(tmp_path))
+
+    assert res["passed"] is False
+    assert res["summary"] == "`git add -A` failed."
+    called = [list(call.args[0]) for call in run_mock.call_args_list]
+    assert called[-1] == ["git", "add", "-A"]
+    refreshed_task = Task.get(task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.is_verified is False
+    latest = get_latest_workflow_verification(project_id=project.id, task_id=task.id)
+    assert latest is not None
+    assert latest["status"] == "failed"
+    assert latest["summary"] == "`git add -A` failed."
+    details = str(latest["details"])
+    assert "Command: `git add -A`" in details
+    assert "Exit code: 1" in details
 
 
 def test_verify_workflow_requires_in_progress_task(tmp_db: Any) -> None:
