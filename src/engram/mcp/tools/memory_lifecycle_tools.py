@@ -41,16 +41,24 @@ def register_memory_lifecycle_tools(server: Any) -> None:
 
     @server.tool()
     def engram_memory_update(
-        memory_ref: str | None = None, updates: dict[str, Any] | None = None
+        memory_ref: str | None = None,
+        content: str | None = None,
+        title: str | None = None,
+        updates: dict[str, Any] | None = None,
     ) -> str:
         try:
             project = resolve_current_project()
             _require_arg("memory_ref", memory_ref)
-            _require_arg("updates", updates)
+            merged_updates = dict(updates or {})
+            if title is not None:
+                merged_updates["title"] = title
+            if content is not None:
+                merged_updates["content"] = content
+            _require_arg("updates", merged_updates)
             memory_item = update_memory(
                 project_id=str(project["id"]),
                 memory_ref=memory_ref,
-                **updates,
+                **merged_updates,
             )
             return _respond({"ok": True, "memory": memory_item})
         except EngramServiceError as exc:

@@ -337,9 +337,9 @@ def test_create_memory_happy_path_project_scope(tmp_db):
     project = _create_project("proj-create-a", "/tmp/proj-create-a")
     dto = create_memory(
         project_id=project.id,
-        type="lesson",
-        title="Valid lesson title",
         content="Valid lesson content",
+        title="Valid lesson title",
+        type="lesson",
         scope="project",
         level="L2",
         tags=["foo", "bar"],
@@ -365,9 +365,9 @@ def test_create_memory_happy_path_task_scope(tmp_db):
     project = _create_project("proj-create-b", "/tmp/proj-create-b")
     dto = create_memory(
         project_id=project.id,
-        type="note",
-        title="Valid note title",
         content="Valid note content",
+        title="Valid note title",
+        type="note",
         scope="task",
         task_id="task0001",
         level=None,
@@ -389,9 +389,9 @@ def test_create_memory_invalid_type_raises_validation_error(tmp_db):
     with pytest.raises(ValidationError) as exc:
         create_memory(
             project_id=project.id,
+            content="Content",
             type="invalid_type",
             title="Title",
-            content="Content",
             scope="project",
             level="L1",
         )
@@ -404,9 +404,9 @@ def test_create_memory_invalid_scope_raises_validation_error(tmp_db):
     with pytest.raises(ValidationError) as exc:
         create_memory(
             project_id=project.id,
+            content="Content",
             type="lesson",
             title="Title",
-            content="Content",
             scope="invalid_scope",
             level="L1",
         )
@@ -414,27 +414,25 @@ def test_create_memory_invalid_scope_raises_validation_error(tmp_db):
     assert "scope" in exc.value.details
 
 
-def test_create_memory_project_scope_without_level_raises_validation_error(tmp_db):
+def test_create_memory_project_scope_without_level_defaults_to_l3(tmp_db):
     project = _create_project("proj-create-e", "/tmp/proj-create-e")
-    # Empty level
-    with pytest.raises(ValidationError) as exc:
-        create_memory(
-            project_id=project.id,
-            type="lesson",
-            title="Title",
-            content="Content",
-            scope="project",
-            level=None,
-        )
-    assert exc.value.code == "INVALID_MEMORY_LEVEL"
+    created = create_memory(
+        project_id=project.id,
+        content="Content",
+        type="lesson",
+        title="Title",
+        scope="project",
+        level=None,
+    )
+    assert created["level"] == "L3"
 
     # Invalid level
     with pytest.raises(ValidationError) as exc:
         create_memory(
             project_id=project.id,
+            content="Content",
             type="lesson",
             title="Title",
-            content="Content",
             scope="project",
             level="L5",
         )
@@ -446,13 +444,24 @@ def test_create_memory_task_scope_with_level_raises_validation_error(tmp_db):
     with pytest.raises(ValidationError) as exc:
         create_memory(
             project_id=project.id,
+            content="Content",
             type="note",
             title="Title",
-            content="Content",
             scope="task",
             level="L1",
         )
     assert exc.value.code == "INVALID_MEMORY_LEVEL"
+
+
+def test_create_memory_minimal_payload_uses_defaults(tmp_db):
+    project = _create_project("proj-create-g", "/tmp/proj-create-g")
+    dto = create_memory(project_id=project.id, content="   Minimal memory content.   ")
+
+    assert dto["type"] == "note"
+    assert dto["scope"] == "project"
+    assert dto["level"] == "L3"
+    assert dto["title"] == "Minimal memory content."
+    assert dto["content"] == "Minimal memory content."
 
 
 def test_get_memory_returns_project_scoped_memory_dto(tmp_db):

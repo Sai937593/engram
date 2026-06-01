@@ -6,8 +6,11 @@ from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.services.errors import EngramServiceError, JsonValue, ValidationError
 from engram.services.memory_update_support import (
+    DEFAULT_MEMORY_SCOPE,
+    DEFAULT_MEMORY_TYPE,
     VALID_MEMORY_TYPES,
     get_project_memory,
+    normalize_memory_create_payload,
     validate_memory_updates,
 )
 from engram.services.serializers import compact_memory_to_dict, memory_to_dict
@@ -123,61 +126,62 @@ def list_memories(
 
 def create_memory(
     project_id: str,
-    type: str,
-    title: str,
     content: str,
-    scope: str = "project",
+    title: str | None = None,
+    type: str = DEFAULT_MEMORY_TYPE,
+    scope: str = DEFAULT_MEMORY_SCOPE,
+    level: str | None = None,
     task_id: str | None = None,
     tags: list[str] | None = None,
     always_include: bool = False,
-    level: str | None = None,
     id: str | None = None,
     supersedes: str | None = None,
 ) -> dict[str, JsonValue]:
-    """Create a new memory with validation and return its JSON-safe DTO."""
-    if type not in VALID_MEMORY_TYPES:
+    """Create a new memory with defaults and return its JSON-safe DTO."""
+    normalized_type, normalized_title, normalized_scope, normalized_level = (
+        normalize_memory_create_payload(
+            content=content,
+            title=title,
+            type=type,
+            scope=scope,
+            level=level,
+        )
+    )
+
+    if normalized_type not in VALID_MEMORY_TYPES:
         raise ValidationError(
             code="INVALID_MEMORY_TYPE",
             message="Memory type is invalid.",
-            details={"type": type, "allowed_types": sorted(list(VALID_MEMORY_TYPES))},
+            details={"type": normalized_type, "allowed_types": sorted(list(VALID_MEMORY_TYPES))},
         )
 
-    if scope not in {"project", "task"}:
+    if normalized_scope not in {"project", "task"}:
         raise ValidationError(
             code="INVALID_MEMORY_SCOPE",
             message="Memory scope is invalid.",
-            details={"scope": scope, "allowed_scopes": ["project", "task"]},
+            details={"scope": normalized_scope, "allowed_scopes": ["project", "task"]},
         )
 
-    normalized_level = level.strip() if level else None
-    if scope == "project":
-        if not normalized_level or normalized_level not in {"L0", "L1", "L2", "L3"}:
-            raise ValidationError(
-                code="INVALID_MEMORY_LEVEL",
-                message="Project-scope memories require a valid level (L0, L1, L2, or L3).",
-                details={"level": level, "allowed_levels": ["L0", "L1", "L2", "L3"]},
-            )
-    elif scope == "task":
-        if normalized_level is not None:
-            raise ValidationError(
-                code="INVALID_MEMORY_LEVEL",
-                message="Task-scope memories must not define a level.",
-                details={"level": level},
-            )
-
-    memory_item = Memory.create(
-        project_id=project_id,
-        type=type,
-        title=title,
-        content=content,
-        scope=scope,
-        task_id=task_id,
-        tags=tags,
-        always_include=always_include,
-        level=normalized_level,
-        id=id,
-        supersedes=supersedes,
-    )
+    try:
+        memory_item = Memory.create(
+            project_id=project_id,
+            type=normalized_type,
+            title=normalized_title,
+            content=content.strip(),
+            scope=normalized_scope,
+            task_id=task_id,
+            tags=tags,
+            always_include=always_include,
+            level=normalized_level,
+            id=id,
+            supersedes=supersedes,
+        )
+    except ValueError as exc:
+        raise ValidationError(
+            code="INVALID_MEMORY_LEVEL",
+            message="Memory creation failed validation.",
+            details={"reason": str(exc)},
+        ) from exc
     return memory_to_dict(memory_item)
 
 

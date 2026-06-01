@@ -6,6 +6,9 @@ from engram.models.memory import Memory
 from engram.services.errors import EngramServiceError, JsonValue, ValidationError
 
 VALID_MEMORY_TYPES = {"note", "lesson", "decision", "constraint", "snippet"}
+DEFAULT_MEMORY_TYPE = "note"
+DEFAULT_MEMORY_SCOPE = "project"
+DEFAULT_PROJECT_LEVEL = "L3"
 VALID_MEMORY_UPDATE_FIELDS = {
     "type",
     "title",
@@ -70,3 +73,35 @@ def validate_memory_updates(updates: dict[str, JsonValue]) -> dict[str, JsonValu
             details={"scope": updates["scope"], "allowed_scopes": ["project", "task"]},
         )
     return updates
+
+
+def normalize_memory_create_payload(
+    *,
+    content: str,
+    title: str | None,
+    type: str | None,
+    scope: str | None,
+    level: str | None,
+) -> tuple[str, str, str, str | None]:
+    """Apply deterministic defaults for simplified memory creation."""
+    normalized_content = content.strip()
+    if not normalized_content:
+        raise ValidationError(
+            code="INVALID_MEMORY_CONTENT",
+            message="Memory content cannot be empty.",
+            details={"field": "content"},
+        )
+    normalized_title = (title or "").strip() or _derive_title_from_content(normalized_content)
+    normalized_type = (type or DEFAULT_MEMORY_TYPE).strip()
+    normalized_scope = (scope or DEFAULT_MEMORY_SCOPE).strip()
+    normalized_level = level.strip() if isinstance(level, str) and level.strip() else None
+    if normalized_scope == "project" and normalized_level is None:
+        normalized_level = DEFAULT_PROJECT_LEVEL
+    return normalized_type, normalized_title, normalized_scope, normalized_level
+
+
+def _derive_title_from_content(content: str) -> str:
+    preview = " ".join(content.split())
+    if len(preview) <= 60:
+        return preview
+    return f"{preview[:57].rstrip()}..."

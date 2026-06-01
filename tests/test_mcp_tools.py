@@ -364,6 +364,12 @@ def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) 
     assert updated["ok"] is True
     assert updated["memory"]["title"] == "Updated decision"
 
+    updated_direct = yaml.safe_load(
+        update_tool(memory_ref="mem-lifecycle-source", content="Updated content directly")
+    )
+    assert updated_direct["ok"] is True
+    assert updated_direct["memory"]["content"] == "Updated content directly"
+
     superseded = yaml.safe_load(
         supersede_tool(
             memory_ref="mem-lifecycle-source",
@@ -1132,9 +1138,9 @@ def test_mcp_memory_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     # 1. Happy path
     res = yaml.safe_load(
         create_handler(
-            type="lesson",
-            title="Test Lesson Memory",
             content="Test content for lesson",
+            title="Test Lesson Memory",
+            type="lesson",
             scope="project",
             level="L1",
             tags=["mcp", "test"],
@@ -1155,18 +1161,44 @@ def test_mcp_memory_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert saved_memory.level == "L1"
     assert saved_memory.tags == ["mcp", "test"]
 
-    # 2. Validation error path (missing level for project-scoped memory)
+    # 2. Validation error path (invalid type)
     res_err = yaml.safe_load(
         create_handler(
-            type="lesson",
-            title="Invalid Lesson Memory",
-            content="Missing level",
-            scope="project",
+            content="Invalid type",
+            type="not-a-type",
         )
     )
     assert res_err["ok"] is False
     assert "error" in res_err
-    assert res_err["error"] == "INVALID_MEMORY_LEVEL"
+    assert res_err["error"] == "INVALID_MEMORY_TYPE"
+
+
+def test_mcp_memory_create_minimal_payload_uses_defaults(tmp_db, monkeypatch) -> None:
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes-minimal-create")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-writes-minimal-create",
+        name="MCP Tool Writes Minimal Create Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    create_handler = server.tools["engram_memory_create"]
+
+    res = yaml.safe_load(create_handler(content="   Minimal create via MCP.   "))
+
+    assert res["ok"] is True
+    saved = Memory.get(res["id"])
+    assert saved is not None
+    assert saved.type == "note"
+    assert saved.scope == "project"
+    assert saved.level == "L3"
+    assert saved.title == "Minimal create via MCP."
 
 
 def test_mcp_phase_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:

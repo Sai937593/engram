@@ -122,9 +122,9 @@ def register_memory_tools(server: Any) -> None:
 
     @server.tool()
     def engram_memory_create(
-        type: str,
-        title: str,
         content: str,
+        title: str | None = None,
+        type: str = "note",
         scope: str = "project",
         task_id: str | None = None,
         tags: list[str] | None = None,
@@ -138,9 +138,9 @@ def register_memory_tools(server: Any) -> None:
             project = resolve_current_project()
             memory = create_memory(
                 project_id=str(project["id"]),
+                content=content,
                 type=type,
                 title=title,
-                content=content,
                 scope=scope,
                 task_id=task_id,
                 tags=tags,

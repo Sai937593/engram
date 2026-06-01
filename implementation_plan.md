@@ -1,23 +1,25 @@
-# Implementation Plan - Phase 7.1
+# Implementation Plan - Phase 7.2
 
 ## Scope
-Add a compact, project-scoped memory read interface by wiring `engram_memory_list` and adapting `engram_memory_get` output defaults, while keeping richer internal retrieval paths intact for existing callers.
+Simplify the agent-facing memory CRUD contract so routine `engram_memory_create`, `engram_memory_update`, and `engram_memory_delete` usage does not require explicit memory governance fields (type/scope/level/tags/always_include/supersede semantics), while preserving valid stored schema values and compatibility for existing internal flows.
 
 ## Files
-- src/engram/services/memory_service.py
-- src/engram/services/serializers.py
 - src/engram/mcp/tools/memory_tools.py
 - src/engram/mcp/tools/memory_lifecycle_tools.py
+- src/engram/services/memory_service.py
+- src/engram/services/memory_update_support.py
+- src/engram/models/memory/helpers.py
 - tests/test_services_memory.py
 - tests/test_mcp_tools.py
 
 ## Planned changes
-1. Inspect current service read functions and serializer entry points to identify where list/get response shape is defined and where internal rich fields are consumed.
-2. Add or adapt a service-level list path that returns project-scoped memories for MCP tool usage without requiring search flow inputs.
-3. Register or expose `engram_memory_list` in MCP tools and route it through the service list path.
-4. Define/update default compact serializer shape for list/get to foreground memory id, title, content (or preview), and timestamps.
-5. Keep richer retrieval data available via existing internal code paths so current non-agent-facing callers are not broken.
-6. Add/update focused tests for service and MCP tool behavior for list/get compact output and registration.
+1. Define a simplified create contract at MCP/service boundary centered on required `content` (and optional `title`) with deterministic defaults for type, scope, and level.
+2. Keep backward compatibility by accepting advanced fields as optional overrides, but stop requiring them in normal create/update paths.
+3. Add a dedicated service-layer normalizer for create defaults so all call paths produce valid schema values without tool-side duplication.
+4. Update `engram_memory_update` contract to accept straightforward field edits (especially content/title) without requiring callers to construct broad governance update payloads.
+5. Ensure `engram_memory_delete` remains deterministic and safe via existing project-scoped reference resolution.
+6. Update focused tests for simplified CRUD behavior and backward-compatible advanced-field acceptance.
+7. Keep demote/supersede tools callable but avoid routing normal edit guidance through them.
 
 ## Verification
 - Run focused tests:
@@ -26,11 +28,12 @@ Add a compact, project-scoped memory read interface by wiring `engram_memory_lis
   - `engram_workflow_verify`
 
 ## Risks
-- Existing tests or callers may currently assert advanced metadata fields in default responses.
-- Serializer changes could unintentionally affect lifecycle tool outputs if shared serializer functions are used broadly.
+- Existing tests may assert previous required-argument behavior for create/update.
+- Default level assignment for project-scope memories must remain aligned with model validation rules.
+- Contract simplification must not break legacy callers passing full advanced payloads.
 
 ## Done criteria
-- `engram_memory_list` is callable and returns project-scoped memories.
-- Default list/get output is compact and readable with identity, title, content/content preview, and timestamps.
-- Advanced lifecycle metadata is not foregrounded in normal agent-facing output.
-- Existing richer internal retrieval callers continue to function.
+- `engram_memory_create` can be called with a simplified argument set focused on memory content.
+- `engram_memory_update` supports straightforward edits without requiring demote/supersede workflow for routine updates.
+- `engram_memory_delete` behavior remains deterministic and project-scoped.
+- Stored records continue to satisfy scope/level/type validation and retrieval expectations.
