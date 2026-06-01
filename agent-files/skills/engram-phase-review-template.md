@@ -24,6 +24,7 @@ Use simplified phase and memory tools:
 - `engram_memory_delete_many` (for batch deletes)
 
 Do not use raw SQLite or ad hoc Python database scripts.
+Do not use any special phase memory review start tool; use only the normal tools listed above.
 
 ## Review Steps
 
@@ -32,6 +33,7 @@ Do not use raw SQLite or ad hoc Python database scripts.
 3. **Audit Project Memory**:
    - Search or list existing memories to find relevant project knowledge.
    - Determine what durable project lessons or rules should be persisted, updated, or removed.
+   - Keep memory review as phase-level curation; do not treat it as a per-task finish gate.
 4. **Curate Memories**:
    - Create new memories for core lessons, architecture decisions, or stable constraints.
    - Update or delete stale or duplicate memories using simple CRUD tools.

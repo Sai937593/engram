@@ -1,6 +1,6 @@
 # Memory Review Skill
 
-The Memory Review skill defines the process of evaluating, updating, and sanitizing the persistent project memory database (`.engram/memory.db`) during phase completion. Its goal is to maintain a high-signal memory repository, preventing stale or redundant information from polluting future context windows.
+The Memory Review skill defines phase-level durable memory curation during phase completion. Its goal is to maintain high-signal project memory so future agent context stays accurate, compact, and current.
 
 ---
 
@@ -28,6 +28,8 @@ Phase review should record what changed in project memory:
 
 AI agents should perform memory review as phase-completion follow-up, not as a task-finish gate:
 
+Use only normal phase and memory tools. Do not inspect or mutate `.engram/memory.db` directly, do not use raw SQLite, and do not use any special phase memory review start tool.
+
 ### Step 1: Audit Phase Learnings
 Review completed phase tasks and identify durable project-level learnings:
 - Check if new constraints or decisions should be stored via `engram_memory_create`.
@@ -35,6 +37,8 @@ Review completed phase tasks and identify durable project-level learnings:
 
 ### Step 2: Apply Memory CRUD Changes
 Use normal memory tools to apply updates:
+- `engram_memory_list`
+- `engram_memory_get`
 - `engram_memory_create`
 - `engram_memory_update`
 - `engram_memory_delete`
@@ -47,3 +51,6 @@ After phase verification and memory cleanup, complete phase workflow:
 # Complete the phase
 engram_phase_complete
 ```
+
+### Step 4: Update Repository-Wide Agent Rules Only When Stable
+Update the root `AGENTS.md` only when a stable, repository-wide rule, guardrail, or convention has changed.

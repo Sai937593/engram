@@ -1,39 +1,32 @@
-# Implementation Plan - Phase 8.4 Batch Memory Ops Docs Refresh
+# Implementation Plan - Phase 9.1 (c7de0990)
 
 ## Scope
-Refresh agent-facing documentation and templates so memory workflow guidance includes batch helpers:
-- `engram_memory_update_many`
-- `engram_memory_delete_many`
+Align phase-review and memory-review guidance with Workflow MVP simplification:
+- Keep phase review on normal phase/task/memory tools.
+- Reinforce memory curation at phase level, not per-task finish gates.
+- Explicitly prohibit raw SQLite/ad hoc DB scripts and special phase memory-review start tools.
+- Preserve guidance that root `AGENTS.md` is updated only for stable repository-wide rules.
 
-Keep guidance concise, workflow-focused, and aligned with MVP contracts.
+## Planned Changes
+1. Update `agent-files/skills/engram-phase-review-template.md`:
+- Confirm tool list only includes normal phase/task/memory tools.
+- Keep explicit prohibition on raw SQLite/ad hoc DB scripts.
+- Ensure wording clearly states phase-level memory review and no special phase memory-review start tool.
+- Keep/clarify `AGENTS.md` update rule as stable repository-wide only.
 
-## Files to Change
-- `docs/USER_MANUAL.md`
-- `src/engram/USER_MANUAL.md`
-- `agent-files/skills/engram-phase-review-template.md`
-- `agent-files/skills/engram-task-decomposition-template.md` (only if memory tool listings or guidance references require consistency wording)
-- `README.md`
+2. Update `docs/skills/memory-review.md`:
+- Reframe as phase-level curation guidance for durable knowledge.
+- Explicitly state this is not a per-task finish gate.
+- Add explicit prohibition on raw SQLite access and direct `.engram/memory.db` inspection/mutation.
+- Reference normal memory CRUD and phase completion tools only.
+- Remove wording that implies special phase memory-review start behavior.
 
-## Planned Implementation
-1. Update both USER_MANUAL copies:
-- Add `engram_memory_update_many` and `engram_memory_delete_many` to the memory tool inventory.
-- Update phase-level memory review step wording to mention CRUD plus batch update/delete helpers.
-- Preserve compact workflow framing and avoid lifecycle-governance jargon (tags, levels, supersede, demote, always_include, scope, memory types) in normal agent guidance.
-2. Update phase review skill template tool list and memory curation wording to include/allow batch update/delete helpers while keeping existing simple CRUD-first framing.
-3. Review decomposition template for any memory tool list references and adjust only if required for consistency.
-4. Update README MCP/tool workflow references:
-- Prefer `engram_workflow_finish_and_commit` naming with alias note if already referenced.
-- Mention batch memory helpers where memory operations are summarized.
-5. Ensure root `AGENTS.md` is untouched and no `.engram/reports/*.md` files are created.
+## Verification
+1. Run:
+`rg -n "engram_phase_complete|engram_memory_(list|get|create|update|delete|update_many|delete_many)|raw SQLite|special phase memory review|AGENTS.md" agent-files/skills/engram-phase-review-template.md docs/skills/memory-review.md`
+2. Run `mcp__engram.engram_workflow_verify`.
+3. If verify passes, run `mcp__engram.engram_workflow_finish_and_commit`.
 
-## Planned Verification
-1. Run targeted checks for expected strings:
-- Confirm both batch tool names appear in all intended files.
-- Confirm disallowed lifecycle-governance terms are not newly introduced in agent-facing workflow sections.
-2. Run repository verification gate via workflow tool:
-- `engram_workflow_verify`
-
-## Non-goals
-- No Python/service/tool implementation changes.
-- No CLI behavior changes.
-- No workflow redesign beyond wording alignment.
+## Out of Scope
+- Any workflow/service code changes.
+- Changes outside the two target documentation files.
