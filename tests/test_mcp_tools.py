@@ -1634,25 +1634,6 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         in res_finish_stale
     )
 
-    # 4e. Error path: missing memory review outcome returns compact blocked markdown
-    def raising_finish_memory_review_missing(project_id, repo_path, commit_type=None):
-        raise EngramServiceError(
-            code="MEMORY_REVIEW_OUTCOME_MISSING",
-            message="Active task is missing memory_review_outcome.",
-        )
-
-    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_memory_review_missing)
-    res_finish_memory_blocked = asyncio.run(finish_handler(commit_type="feat"))
-    assert "# Finish Blocked" in res_finish_memory_blocked
-    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_memory_blocked
-    assert "Reason: Active task is missing memory_review_outcome." in res_finish_memory_blocked
-    assert "## Next action" in res_finish_memory_blocked
-    assert res_finish_memory_blocked.count("## Next action") == 1
-    assert (
-        "Record memory_review_outcome on the active task via engram_task_update, then call "
-        "engram_workflow_finish_and_commit again." in res_finish_memory_blocked
-    )
-
     # 5. Error path: Project bound but has no repo_paths configured
     monkeypatch.setattr(
         "engram.mcp.tools.resolve_current_project",

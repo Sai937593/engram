@@ -570,8 +570,8 @@ def test_e2e_workflow_verify_records_pass_and_fail(disposable_git_repo):
     assert "failed" in verify_fail_str.lower()
 
 
-def test_e2e_workflow_finish_blocks_without_verification_or_memory_review(disposable_git_repo):
-    """Verify that engram_workflow_finish blocks when verification is missing or failed, or memory review is missing or invalid."""
+def test_e2e_workflow_finish_blocks_without_verification(disposable_git_repo):
+    """Verify that engram_workflow_finish blocks when verification is missing or failed."""
     mock_server = MockServer()
     register_tools(mock_server)
 
@@ -609,12 +609,6 @@ def test_e2e_workflow_finish_blocks_without_verification_or_memory_review(dispos
     assert "# Finish Blocked" in finish_res_a
     assert "Active task is not verified. Run engram_workflow_verify before finish." in finish_res_a
 
-    # Reset memory review outcome to None for subsequent tests
-    mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"memory_review_outcome": None},
-    )
-
     # --- Case B: Failed Verification ---
     code_file = disposable_git_repo / "code.py"
     code_file.write_text('"""Dummy module."""\n', encoding="utf-8")
@@ -644,34 +638,6 @@ def test_e2e_workflow_finish_blocks_without_verification_or_memory_review(dispos
     finish_res_b = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
     assert "# Finish Blocked" in finish_res_b
     assert "Active task is not verified. Run engram_workflow_verify before finish." in finish_res_b
-
-    # Reset memory review outcome to None
-    mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"memory_review_outcome": None},
-    )
-
-    # --- Case C: Missing Memory Review Outcome ---
-    dummy_test.write_text(
-        '"""Dummy tests."""\n\ndef test_dummy() -> None:\n    assert True\n',
-        encoding="utf-8",
-    )
-    os.utime(str(dummy_test), (past_time, past_time))
-    asyncio.run(mock_server.tools["engram_workflow_verify"]())
-
-    # Should return markdown blocked explanation instead of failing YAML
-    finish_res_c_str = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
-    assert "# Finish Blocked" in finish_res_c_str
-    assert "Active task is missing memory_review_outcome." in finish_res_c_str
-
-    # --- Case D: Invalid Memory Review Outcome ---
-    update_fail_str = mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"memory_review_outcome": "invalid_value"},
-    )
-    update_fail = yaml.safe_load(update_fail_str)
-    assert update_fail["ok"] is False
-    assert update_fail["error"] == "INVALID_MEMORY_REVIEW_OUTCOME"
 
 
 def test_e2e_workflow_finish_memory_review_outcomes(disposable_git_repo):

@@ -12,7 +12,6 @@ from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title
 from engram.services.errors import EngramServiceError
 from engram.services.serializers import task_to_dict
-from engram.services.task.validation import validate_memory_review_outcome_field
 from engram.services.workflow_constants import CONVENTIONAL_COMMIT_TYPES
 from engram.services.workflow_helpers import (
     get_target_branch,
@@ -132,12 +131,6 @@ def finish_workflow(
         )
 
     task = in_progress[0]
-    if not task.memory_review_outcome:
-        raise EngramServiceError(
-            code="MEMORY_REVIEW_OUTCOME_MISSING",
-            message="Active task is missing memory_review_outcome.",
-        )
-    validate_memory_review_outcome_field(task.memory_review_outcome)
     if not task.is_verified:
         raise EngramServiceError(
             code="TASK_NOT_VERIFIED",
