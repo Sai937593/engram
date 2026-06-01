@@ -14,11 +14,14 @@ from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.services.errors import EngramServiceError, ValidationError
 from engram.services.phase_service import (
+    archive_phase,
+    cancel_phase,
     complete_phase,
     create_phase,
     get_active_phase,
     list_phases,
     start_phase,
+    update_phase,
 )
 
 
@@ -285,3 +288,49 @@ def test_create_phase_raises_if_duplicate_title(tmp_db):
     with pytest.raises(ValidationError) as exc:
         create_phase(project_id=project.id, title="   phase   1  ")
     assert exc.value.code == "DUPLICATE_PHASE_TITLE"
+
+
+def test_update_phase_updates_title_and_rejects_duplicate(tmp_db):
+    project = _create_project("proj-update-a", "/tmp/proj-update-a")
+    phase_a = Phase.create(project_id=project.id, id="phu00001", title="Phase 1", status="planned")
+    Phase.create(project_id=project.id, id="phu00002", title="Phase 2", status="planned")
+
+    updated = update_phase(project.id, phase_a.id, title="New Phase 1", description="Updated")
+    assert updated["title"] == "New Phase 1"
+    assert updated["description"] == "Updated"
+
+    with pytest.raises(ValidationError) as exc:
+        update_phase(project.id, phase_a.id, title="phase 2")
+    assert exc.value.code == "DUPLICATE_PHASE_TITLE"
+
+
+def test_cancel_phase_requires_finished_tasks(tmp_db):
+    project = _create_project("proj-cancel-a", "/tmp/proj-cancel-a")
+    phase = Phase.create(project_id=project.id, id="phx00001", title="Phase X", status="active")
+    from engram.models.task import Task
+
+    Task.create(project_id=project.id, title="In progress", phase_id=phase.id, status="todo")
+    with pytest.raises(ValidationError) as exc:
+        cancel_phase(project.id, phase.id)
+    assert exc.value.code == "UNFINISHED_TASKS"
+
+    task = Task.list_by_project(project.id)[0]
+    task.update(status="done")
+    cancelled = cancel_phase(project.id, phase.id, reason="No longer needed")
+    assert cancelled["status"] == "cancelled"
+    assert "No longer needed" in (cancelled["evidence"] or "")
+
+
+def test_archive_phase_requires_terminal_status_and_deletes_row(tmp_db):
+    project = _create_project("proj-arch-a", "/tmp/proj-arch-a")
+    active = Phase.create(project_id=project.id, id="pha00011", title="Active", status="active")
+
+    with pytest.raises(ValidationError) as exc:
+        archive_phase(project.id, active.id)
+    assert exc.value.code == "INVALID_PHASE_TRANSITION"
+
+    active.update(status="done")
+    payload = archive_phase(project.id, active.id)
+    assert payload["archived"] is True
+    assert payload["phase"]["id"] == active.id
+    assert Phase.get(active.id) is None
