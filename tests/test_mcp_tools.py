@@ -760,7 +760,51 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "Retry engram_task_update with status=ready" in res_ready_err["fix"]
     assert "Missing: acceptance, description, relevant_files." in res_ready_err["fix"]
 
-    # 4. Memory review outcome happy path
+    # 4. Weak metadata fails until fields are repaired, then promotion succeeds
+    res_weak_ready_err = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={
+                "status": "ready",
+                "description": "Too short",
+                "acceptance": "Done quickly.",
+                "relevant_files": ["services"],
+            },
+        )
+    )
+    assert res_weak_ready_err["ok"] is False
+    assert res_weak_ready_err["error"] == "READY_METADATA_INCOMPLETE"
+    assert res_weak_ready_err["details"].get("missing_fields", []) == []
+    assert res_weak_ready_err["details"]["weak_fields"] == [
+        "description",
+        "acceptance",
+        "relevant_files",
+    ]
+
+    res_ready_after_repair = yaml.safe_load(
+        update_handler(
+            task_ref="task-to-update",
+            updates={
+                "status": "ready",
+                "description": "Implement draft-fix-ready regression coverage for quality validation.",
+                "acceptance": "Ready promotion succeeds after missing and weak metadata are repaired.",
+                "relevant_files": [
+                    "tests/test_services_task.py",
+                    "tests/test_mcp_tools.py",
+                ],
+            },
+        )
+    )
+    assert res_ready_after_repair["ok"] is True
+    assert res_ready_after_repair["id"] == "task-to-update"
+    assert res_ready_after_repair["updated_fields"] == [
+        "acceptance",
+        "description",
+        "relevant_files",
+        "status",
+    ]
+
+    # 5. Memory review outcome happy path
     res_mro = yaml.safe_load(
         update_handler(
             task_ref="task-to-update",
@@ -771,7 +815,7 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_mro["id"] == "task-to-update"
     assert res_mro["updated_fields"] == ["memory_review_outcome"]
 
-    # 5. Memory review outcome no_change path
+    # 6. Memory review outcome no_change path
     res_mro_no_change = yaml.safe_load(
         update_handler(
             task_ref="task-to-update",
@@ -782,7 +826,7 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_mro_no_change["id"] == "task-to-update"
     assert res_mro_no_change["updated_fields"] == ["memory_review_outcome"]
 
-    # 6. Memory review outcome invalid value rejection
+    # 7. Memory review outcome invalid value rejection
     res_mro_err = yaml.safe_load(
         update_handler(
             task_ref="task-to-update",
