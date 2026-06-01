@@ -1,28 +1,35 @@
-# Implementation Plan - Task aa4e1f93
+# Implementation Plan: Add batch task payload validation service (30d66252)
 
 ## Scope
-Add or update focused regression tests for simplified phase-2 task model behavior only: creation validation, migration/compatibility handling, open-queue workflow start selection, and `is_verified` default/invalidation semantics. Keep phase-4 verify staging and phase-5 finish-and-commit semantics out of scope except preserving compatibility with existing entry points.
+Add a batch task creation service entry point that accepts multiple create-task payloads, applies the same normalization and executable-metadata validation as single-task creation, and reports per-entry validation failures before any writes occur.
 
-## Target Files
-- tests/test_db.py
-- tests/test_task.py
+## Files
+- src/engram/services/task/crud.py
+- src/engram/services/task/__init__.py
+- src/engram/services/task/validation.py
 - tests/test_services_task.py
-- tests/test_services_workflow_start_basic.py
-- tests/test_services_workflow_start_dirty.py
-- tests/test_services_workflow_start_resume.py
-- tests/test_services_workflow_start_context.py
 
 ## Steps
-1. Review current assertions in the listed test files and identify gaps against the task acceptance criteria.
-2. Add/adjust tests to prove invalid task creation does not persist any row and returns detailed validation guidance.
-3. Add/adjust tests to prove new tasks start as `open` and `is_verified=False` by default.
-4. Add/adjust tests to prove workflow start selects from the `open` actionable queue and handles legacy status compatibility intentionally.
-5. Add/adjust tests for migration/compatibility paths around legacy statuses and `is_verified` invalidation triggers.
-6. Run narrow pytest slices for only changed files first; expand only if failures indicate cross-file coupling.
-7. Run `engram_workflow_verify`; fix failures and rerun until passing.
-8. Record memory review outcome (`no_change` unless durable memory is produced) and run `engram_workflow_finish`.
+1. Inspect current single-task creation path in `crud.py` and validation helpers in `validation.py`.
+2. Add a new batch service function (service layer only) that:
+   - accepts a list of task-create payloads,
+   - normalizes each payload using existing normalization logic,
+   - validates each payload using current executable-metadata rules,
+   - accumulates per-entry errors with stable index mapping,
+   - aborts before writes if any entry fails validation.
+3. If all entries validate, delegate to existing task creation write path for each payload.
+4. Export the new batch function in `src/engram/services/task/__init__.py`.
+5. Add focused tests in `tests/test_services_task.py` covering:
+   - all-valid batch creates expected tasks,
+   - mixed-invalid batch returns per-entry errors and creates nothing,
+   - validation behavior parity with single-task path for core required fields.
+6. Run required verification command:
+   - `uv run pytest tests/test_services_task.py -q -k create_m`
+7. Run `engram_workflow_verify`; if blocked/failing, fix and rerun until pass.
+8. Record task memory review outcome (`no_change` unless durable memory is produced).
+9. Run `engram_workflow_finish` and stop.
 
-## Constraints
-- Keep changes test-focused and inside task scope.
-- Preserve existing behavior except where simplified phase-2 behavior is explicitly expected.
-- Do not edit `planning/`, `workflow/`, or `.github/`.
+## Risks / Checks
+- Preserve current single-create behavior unchanged.
+- Keep service module adapter-safe (no CLI/MCP imports).
+- Ensure no partial writes happen on validation failure.

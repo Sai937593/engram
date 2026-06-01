@@ -19,6 +19,7 @@ from engram.services.task import (
     block_task,
     cancel_task,
     complete_task,
+    create_many_tasks,
     create_task,
     get_next_task,
     get_task,
@@ -474,6 +475,84 @@ def test_create_task_rejects_missing_dependency_reference(tmp_db):
         )
 
     assert exc.value.code == "TASK_NOT_FOUND"
+
+
+def test_create_many_tasks_creates_all_when_payloads_are_valid(tmp_db):
+    project = _create_project("proj-batch-1", "/tmp/proj-batch-1")
+    phase = Phase.create(project_id=project.id, id="phase001", title="MCP Phase")
+    dep = Task.create(project_id=project.id, id="depb0001", title="Dependency")
+
+    created = create_many_tasks(
+        project.id,
+        [
+            {
+                "title": "Batch task one",
+                "description": "Task one details",
+                "phase_id": phase.id,
+                "verification": "pytest tests/test_services_task.py",
+                "relevant_files": ["tests/test_services_task.py"],
+                "depends_on": dep.id,
+            },
+            {
+                "title": "Batch task two",
+                "description": "Task two details",
+                "phase_id": phase.id,
+                "verification": "pytest tests/test_services_task.py",
+                "relevant_files": ["tests/test_services_task.py"],
+                "status": "in-progress",
+                "priority": "high",
+            },
+        ],
+    )
+
+    assert len(created) == 2
+    assert created[0]["depends_on"] == dep.id
+    assert created[1]["status"] == "in_progress"
+    rows = _task_rows(project.id)
+    assert len(rows) == 3
+
+
+def test_create_many_tasks_returns_per_entry_errors_and_writes_nothing(tmp_db):
+    project = _create_project("proj-batch-2", "/tmp/proj-batch-2")
+    phase = Phase.create(project_id=project.id, id="phase001", title="MCP Phase")
+
+    with pytest.raises(ValidationError) as exc:
+        create_many_tasks(
+            project.id,
+            [
+                {
+                    "title": "Valid payload",
+                    "description": "Valid details",
+                    "phase_id": phase.id,
+                    "verification": "pytest tests/test_services_task.py",
+                    "relevant_files": ["tests/test_services_task.py"],
+                },
+                {
+                    "title": "Bad status",
+                    "description": "Invalid status field",
+                    "phase_id": phase.id,
+                    "verification": "pytest tests/test_services_task.py",
+                    "relevant_files": ["tests/test_services_task.py"],
+                    "status": "waiting",
+                },
+                {
+                    "title": "Missing dependency",
+                    "description": "Unknown dependency",
+                    "phase_id": phase.id,
+                    "verification": "pytest tests/test_services_task.py",
+                    "relevant_files": ["tests/test_services_task.py"],
+                    "depends_on": "no-such-task",
+                },
+            ],
+        )
+
+    assert exc.value.code == "TASK_BATCH_VALIDATION_FAILED"
+    assert exc.value.details["count"] == 2
+    assert exc.value.details["errors"][0]["index"] == 1
+    assert exc.value.details["errors"][0]["error"]["code"] == "INVALID_TASK_STATUS"
+    assert exc.value.details["errors"][1]["index"] == 2
+    assert exc.value.details["errors"][1]["error"]["code"] == "TASK_NOT_FOUND"
+    assert _task_rows(project.id) == []
 
 
 def test_update_task_happy_path(tmp_db):

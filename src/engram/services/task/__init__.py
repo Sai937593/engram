@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from engram.services.task.crud import (
     append_task_note,
+    create_many_tasks,
     create_task,
     get_task,
     list_tasks,
@@ -21,6 +22,7 @@ from engram.services.task.validation import VALID_TASK_UPDATE_FIELDS, resolve_ta
 
 __all__ = [
     "create_task",
+    "create_many_tasks",
     "update_task",
     "append_task_note",
     "get_task",

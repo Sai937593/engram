@@ -94,6 +94,41 @@ class _Helpers:
                 filtered.append(t)
         return filtered
 
+    @staticmethod
+    def normalize_create_inputs(payload: dict[str, Any]) -> dict[str, Any]:
+        """Normalize create-task payload aliases and status variants."""
+        normalized = dict(payload)
+        if normalized.get("description") is None:
+            normalized["description"] = normalized.get("objective")
+        status = normalized.get("status", "open")
+        if status in {"draft", "ready", "todo"}:
+            normalized["status"] = "open"
+        elif status == "in-progress":
+            normalized["status"] = "in_progress"
+        else:
+            normalized["status"] = status
+        return normalized
+
+    @staticmethod
+    def validate_create_inputs(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Validate and resolve a normalized create-task payload without writing."""
+        _validate_executable_task_metadata(
+            title=payload.get("title"),
+            description=payload.get("description"),
+            acceptance=payload.get("acceptance"),
+            phase_id=payload.get("phase_id"),
+            verification=payload.get("verification"),
+            relevant_files=payload.get("relevant_files"),
+            search_hints=payload.get("search_hints"),
+        )
+        _validate_status_field(payload.get("status", "open"))
+        _validate_priority_field(payload.get("priority", "medium"))
+        resolved = dict(payload)
+        resolved["depends_on"] = _normalize_dependency_ref(
+            project_id, payload.get("depends_on"), task_id=payload.get("id")
+        )
+        return resolved
+
 
 def list_tasks(
     project_id: str, status: str | None = None, phase: str | None = None
@@ -137,44 +172,79 @@ def create_task(
     search_hints: list[str] | None = None,
     objective: str | None = None,
 ) -> dict[str, object]:
-    if description is None:
-        description = objective
-
-    if status in {"draft", "ready", "todo"}:
-        status = "open"
-    elif status == "in-progress":
-        status = "in_progress"
-
-    _validate_executable_task_metadata(
-        title=title,
-        description=description,
-        acceptance=acceptance,
-        phase_id=phase_id,
-        verification=verification,
-        relevant_files=relevant_files,
-        search_hints=search_hints,
+    normalized = _Helpers.normalize_create_inputs(
+        {
+            "title": title,
+            "description": description,
+            "status": status,
+            "priority": priority,
+            "phase": phase,
+            "phase_id": phase_id,
+            "depends_on": depends_on,
+            "acceptance": acceptance,
+            "tags": tags,
+            "relevant_files": relevant_files,
+            "id": id,
+            "verification": verification,
+            "search_hints": search_hints,
+            "objective": objective,
+        }
     )
-
-    _validate_status_field(status)
-    _validate_priority_field(priority)
-    dep = _normalize_dependency_ref(project_id, depends_on, task_id=id)
+    validated = _Helpers.validate_create_inputs(project_id, normalized)
     t = _Task.create(
         project_id=project_id,
-        title=title,
-        description=description,
-        status=status,
-        priority=priority,
-        phase=phase,
-        phase_id=phase_id,
-        depends_on=dep,
-        acceptance=acceptance,
-        tags=tags,
-        relevant_files=relevant_files,
-        id=id,
-        verification=verification,
-        search_hints=search_hints,
+        title=validated["title"],
+        description=validated.get("description"),
+        status=validated.get("status", "open"),
+        priority=validated.get("priority", "medium"),
+        phase=validated.get("phase"),
+        phase_id=validated.get("phase_id"),
+        depends_on=validated.get("depends_on"),
+        acceptance=validated.get("acceptance"),
+        tags=validated.get("tags"),
+        relevant_files=validated.get("relevant_files"),
+        id=validated.get("id"),
+        verification=validated.get("verification"),
+        search_hints=validated.get("search_hints"),
     )
     return _task_to_dict(t)
+
+
+def create_many_tasks(
+    project_id: str, task_payloads: list[dict[str, Any]]
+) -> list[dict[str, object]]:
+    """Create multiple tasks atomically after full batch validation."""
+    validated_payloads: list[dict[str, Any]] = []
+    errors: list[dict[str, object]] = []
+
+    for index, raw_payload in enumerate(task_payloads):
+        try:
+            normalized = _Helpers.normalize_create_inputs(raw_payload)
+            validated_payloads.append(_Helpers.validate_create_inputs(project_id, normalized))
+        except (_ValidationError, _EngramServiceError) as exc:
+            errors.append(
+                {
+                    "index": index,
+                    "error": {
+                        "code": exc.code,
+                        "message": exc.message,
+                        "details": exc.details,
+                    },
+                }
+            )
+
+    if errors:
+        raise _ValidationError(
+            code="TASK_BATCH_VALIDATION_FAILED",
+            message="One or more task payloads failed validation.",
+            details={"errors": errors, "count": len(errors)},
+        )
+
+    created: list[dict[str, object]] = []
+    for payload in validated_payloads:
+        task_item = _Task.create(project_id=project_id, **payload)
+        created.append(_task_to_dict(task_item))
+    return created
 
 
 def update_task(project_id: str, task_ref: str, **kwargs: Any) -> dict[str, object]:
