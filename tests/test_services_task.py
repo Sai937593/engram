@@ -16,6 +16,8 @@ from engram.models.task import Task
 from engram.services.errors import EngramServiceError, ValidationError
 from engram.services.task import (
     append_task_note,
+    block_task,
+    cancel_task,
     complete_task,
     create_task,
     get_next_task,
@@ -23,7 +25,9 @@ from engram.services.task import (
     list_tasks,
     record_memory_review_outcome,
     resolve_task_ref,
+    retire_task,
     start_task,
+    unblock_task,
     update_task,
 )
 
@@ -679,6 +683,31 @@ def test_start_task_fails_if_dependency_reference_is_missing(tmp_db):
     assert exc.value.details["dependency_status"] == "missing"
 
 
+def test_start_task_fails_when_another_task_is_in_progress(tmp_db):
+    project = _create_project("proj-start-t4", "/tmp/proj-start-t4")
+    Task.create(project_id=project.id, id="task0107", title="Already active", status="in-progress")
+    t = Task.create(project_id=project.id, id="task0108", title="Candidate", status="todo")
+
+    with pytest.raises(ValidationError) as exc:
+        start_task(project.id, t.id)
+
+    assert exc.value.code == "TASK_ALREADY_IN_PROGRESS"
+    assert exc.value.details["task_id"] == t.id
+    assert exc.value.details["active_task_ids"] == ["task0107"]
+
+
+def test_start_task_rejects_invalid_source_status(tmp_db):
+    project = _create_project("proj-start-t5", "/tmp/proj-start-t5")
+    t = Task.create(project_id=project.id, id="task0109", title="Completed", status="done")
+
+    with pytest.raises(ValidationError) as exc:
+        start_task(project.id, t.id)
+
+    assert exc.value.code == "INVALID_TASK_TRANSITION"
+    assert exc.value.details["from_status"] == "done"
+    assert exc.value.details["to_status"] == "in-progress"
+
+
 def test_complete_task_success_without_evidence(tmp_db):
     project = _create_project("proj-comp-t", "/tmp/proj-comp-t")
     t = Task.create(project_id=project.id, id="task0104", title="Task 104", status="in-progress")
@@ -698,6 +727,82 @@ def test_complete_task_success_with_evidence(tmp_db):
     assert dto["status"] == "done"
     assert "All completed smoothly" in dto["evidence"]
     assert "[" in dto["evidence"]
+
+
+def test_complete_task_rejects_invalid_source_status(tmp_db):
+    project = _create_project("proj-comp-t3", "/tmp/proj-comp-t3")
+    t = Task.create(project_id=project.id, id="task0110", title="Task 110", status="todo")
+
+    with pytest.raises(ValidationError) as exc:
+        complete_task(project.id, t.id)
+
+    assert exc.value.code == "INVALID_TASK_TRANSITION"
+    assert exc.value.details["from_status"] == "todo"
+    assert exc.value.details["to_status"] == "done"
+
+
+def test_block_unblock_task_lifecycle_happy_path(tmp_db):
+    project = _create_project("proj-life-1", "/tmp/proj-life-1")
+    t = Task.create(project_id=project.id, id="task0111", title="Task 111", status="todo")
+
+    blocked = block_task(project.id, t.id, reason="Waiting on API key")
+    assert blocked["status"] == "blocked"
+    assert "Waiting on API key" in blocked["evidence"]
+
+    unblocked = unblock_task(project.id, t.id, target_status="ready", note="API key received")
+    assert unblocked["status"] == "ready"
+    assert "API key received" in unblocked["evidence"]
+    _assert_json_safe(unblocked)
+
+
+def test_block_unblock_task_rejects_invalid_transitions(tmp_db):
+    project = _create_project("proj-life-2", "/tmp/proj-life-2")
+    done = Task.create(project_id=project.id, id="task0112", title="Done", status="done")
+    todo = Task.create(project_id=project.id, id="task0113", title="Todo", status="todo")
+
+    with pytest.raises(ValidationError) as exc_done:
+        block_task(project.id, done.id)
+    assert exc_done.value.code == "INVALID_TASK_TRANSITION"
+
+    with pytest.raises(ValidationError) as exc_not_blocked:
+        unblock_task(project.id, todo.id)
+    assert exc_not_blocked.value.code == "INVALID_TASK_TRANSITION"
+
+    blocked = block_task(project.id, todo.id)
+    assert blocked["status"] == "blocked"
+    with pytest.raises(ValidationError) as exc_target:
+        unblock_task(project.id, todo.id, target_status="in-progress")
+    assert exc_target.value.code == "INVALID_TASK_TRANSITION_TARGET"
+
+
+def test_cancel_task_happy_path_and_invalid_state(tmp_db):
+    project = _create_project("proj-life-3", "/tmp/proj-life-3")
+    t = Task.create(project_id=project.id, id="task0114", title="Task 114", status="blocked")
+    cancelled = cancel_task(project.id, t.id, reason="No longer needed")
+    assert cancelled["status"] == "cancelled"
+    assert "No longer needed" in cancelled["evidence"]
+
+    with pytest.raises(ValidationError) as exc:
+        cancel_task(project.id, t.id)
+    assert exc.value.code == "INVALID_TASK_TRANSITION"
+
+
+def test_retire_task_requires_terminal_status_and_deletes_task(tmp_db):
+    project = _create_project("proj-life-4", "/tmp/proj-life-4")
+    active = Task.create(project_id=project.id, id="task0115", title="Active", status="todo")
+    done = Task.create(project_id=project.id, id="task0116", title="Done", status="done")
+
+    with pytest.raises(ValidationError) as exc:
+        retire_task(project.id, active.id)
+    assert exc.value.code == "INVALID_TASK_TRANSITION"
+
+    deleted = retire_task(project.id, done.id, reason="Retired after completion")
+    assert deleted["deleted"] is True
+    assert deleted["task"]["id"] == done.id
+    assert deleted["task"]["status"] == "done"
+    assert "Retired after completion" in deleted["task"]["evidence"]
+    assert Task.get(done.id) is None
+    _assert_json_safe(deleted)
 
 
 def test_update_task_memory_review_outcome_valid(tmp_db):

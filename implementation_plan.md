@@ -1,29 +1,32 @@
-# Implementation Plan - Phase 13.3 (Task b7119baf)
+# Implementation Plan - Phase 14.1 (Task ae8430b3)
 
 ## Scope
-Expose finalized memory lifecycle operations through MCP memory tools and refine `engram_memory_search` output to be compact, Markdown-first, and actionable while preserving safe failure guidance.
+Extend task lifecycle services so maintenance flows can block, unblock, cancel, and archive/delete tasks through service-layer transitions with deterministic validation and JSON-safe payloads.
 
 ## Files in scope
-- src/engram/mcp/tools/memory_tools.py
-- src/engram/mcp/tools/helpers.py
-- src/engram/services/memory_service.py (only if MCP adapter gaps require service-facing shape tweaks)
-- tests/test_mcp_tools.py
-- tests/test_mcp_server.py
+- src/engram/services/task/lifecycle.py
+- src/engram/services/task/crud.py
+- src/engram/services/task/validation.py
+- src/engram/models/task/model.py (only if status enums/metadata fields are required)
+- tests/test_services_task.py
 
 ## Plan
-1. Audit existing MCP memory tool surface and map acceptance coverage for get, update, supersede, demote, archive, and delete to confirm missing/partial handlers.
-2. Implement or refine thin MCP adapters so lifecycle tools delegate to memory services (no direct DB mutation/filter logic in MCP layer).
-3. Update memory-search response formatting to Markdown-first compact output while preserving miss guidance and deterministic error/help text.
-4. Ensure default discovery behavior still hides superseded/archived entries unless explicitly requested through maintenance/audit paths.
-5. Add/adjust regression tests in MCP test suites for:
-   - lifecycle happy paths,
-   - compact actionable response contracts,
-   - safe failure guidance for misses/invalid operations.
-6. Run required verification commands:
-   - `uv run pytest tests/test_mcp_tools.py tests/test_mcp_server.py -q`
-   - `uv run pytest -q`
+1. Audit current task service APIs and existing status transition guards for start/done/update to identify reusable validation hooks.
+2. Add explicit service operations for:
+   - block task
+   - unblock task
+   - cancel task
+   - archive/delete-style retirement (matching existing model semantics)
+3. Implement deterministic validation errors for illegal transitions (invalid source status, active-task invariants, dependency/task-safety constraints).
+4. Ensure each new operation returns stable JSON-safe task payloads consistent with current service response shape.
+5. Add focused regression tests in `tests/test_services_task.py` for:
+   - happy paths for each lifecycle transition
+   - invalid transition failures with clear error codes/messages
+   - one-task-at-a-time workflow invariants preserved
+6. Run required verification command:
+   - `uv run pytest tests/test_services_task.py -q`
 
 ## Non-goals
-- No schema redesign or model-layer rewrite beyond what is strictly needed for MCP delegation compatibility.
-- No edits in `planning/`, `workflow/`, or `.github/`.
+- No direct model mutations from MCP adapters.
+- No changes in `planning/`, `workflow/`, or `.github/`.
 - No additional Engram task work in this session.

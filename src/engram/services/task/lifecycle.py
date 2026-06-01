@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from engram.models.task import Task
 from engram.services.errors import EngramServiceError, ValidationError
 from engram.services.serializers import task_to_dict
 from engram.services.task.validation import resolve_task_ref
+
+
+def _get_task(project_id: str, task_ref: str) -> Task:
+    task_id = resolve_task_ref(project_id, task_ref)
+    task_item = Task.get(task_id)
+    if task_item is None:
+        raise EngramServiceError(
+            code="TASK_NOT_FOUND",
+            message="Task reference was not found in this project.",
+            details={"project_id": project_id, "task_ref": task_ref.strip()},
+        )
+    return task_item
 
 
 def get_next_task(project_id: str) -> dict[str, object] | None:
@@ -21,13 +32,28 @@ def get_next_task(project_id: str) -> dict[str, object] | None:
 
 def start_task(project_id: str, task_ref: str) -> dict[str, object]:
     """Start a task by marking it in-progress, validating its dependencies."""
-    task_id = resolve_task_ref(project_id, task_ref)
-    task_item = Task.get(task_id)
-    if task_item is None:
-        raise EngramServiceError(
-            code="TASK_NOT_FOUND",
-            message="Task reference was not found in this project.",
-            details={"project_id": project_id, "task_ref": task_ref.strip()},
+    task_item = _get_task(project_id, task_ref)
+    if task_item.status not in {"draft", "ready", "todo"}:
+        raise ValidationError(
+            code="INVALID_TASK_TRANSITION",
+            message=f"Cannot transition task '{task_item.id}' from '{task_item.status}' to 'in-progress'.",
+            details={
+                "task_id": task_item.id,
+                "from_status": task_item.status,
+                "to_status": "in-progress",
+            },
+        )
+
+    active_tasks = [
+        t.id
+        for t in Task.list_by_project(project_id)
+        if t.id != task_item.id and t.status == "in-progress"
+    ]
+    if active_tasks:
+        raise ValidationError(
+            code="TASK_ALREADY_IN_PROGRESS",
+            message="Cannot start a new task while another task is already in-progress.",
+            details={"task_id": task_item.id, "active_task_ids": sorted(active_tasks)},
         )
 
     # Validate dependencies
@@ -64,21 +90,21 @@ def complete_task(
     evidence: str | None = None,
 ) -> dict[str, object]:
     """Complete a task by marking it done, optionally appending evidence."""
-    task_id = resolve_task_ref(project_id, task_ref)
-    task_item = Task.get(task_id)
-    if task_item is None:
-        raise EngramServiceError(
-            code="TASK_NOT_FOUND",
-            message="Task reference was not found in this project.",
-            details={"project_id": project_id, "task_ref": task_ref.strip()},
+    task_item = _get_task(project_id, task_ref)
+    if task_item.status != "in-progress":
+        raise ValidationError(
+            code="INVALID_TASK_TRANSITION",
+            message=f"Cannot transition task '{task_item.id}' from '{task_item.status}' to 'done'.",
+            details={"task_id": task_item.id, "from_status": task_item.status, "to_status": "done"},
         )
 
     updates: dict[str, Any] = {"status": "done"}
     if evidence and evidence.strip():
+        from datetime import datetime
+
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         new_entry = f"[{timestamp}] {evidence.strip()}"
         existing = task_item.evidence or ""
         updates["evidence"] = (existing + "\n" + new_entry).strip() if existing else new_entry
-
     task_item.update(**updates)
     return task_to_dict(task_item)
