@@ -1,33 +1,31 @@
-# Implementation Plan - Phase 6.2
+# Implementation Plan - Phase 6.3
 
 ## Scope
-Update agent-facing guidance so memory review is phase-level follow-up, not a per-task finish requirement.
+Rewrite finish-gate regression tests so finish is blocked only by verification/worktree gates, not by missing or invalid `memory_review_outcome`.
 
 ## Files
-- docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md
-- docs/USER_MANUAL.md
-- src/engram/USER_MANUAL.md
-- docs/skills/memory-review.md
-- src/engram/mcp/tools/task_tools.py
+- tests/test_services_workflow_finish.py
+- tests/test_mcp_tools.py
+- tests/test_workflow_redesign_phase_15_end_to_end.py
+- tests/test_workflow_redesign_phase_5_regressions.py
 
 ## Planned changes
-1. Remove or reword any statements that require `memory_review_outcome` before task finish.
-2. Align workflow docs to use simplified flow: `start -> implement -> verify -> finish and commit`.
-3. Reframe memory review guidance as phase-completion work using existing memory CRUD tools.
-4. Update any finish/next-step messaging that still tells agents to log lessons or set `memory_review_outcome` before finish.
-5. Keep all changes documentation/tool-message scoped; no workflow behavior redesign beyond wording alignment.
+1. Update service-layer finish tests to assert success when `memory_review_outcome` is missing or invalid, while preserving existing verification and worktree blocking assertions.
+2. Update MCP/tool-layer finish tests to remove any setup or assertions that still require `memory_review_outcome` as a prerequisite.
+3. Update E2E workflow finish tests to prove a verified, clean task can finish without any memory-review update step.
+4. Keep memory-related assertions only where they describe returned task fields, not finish eligibility.
 
 ## Verification
-- Run targeted checks:
-  - `uv run pytest tests/ -m "not slow" -x --tb=short -q`
+- Run focused tests:
+  - `uv run pytest tests/test_services_workflow_finish.py tests/test_mcp_tools.py tests/test_workflow_redesign_phase_15_end_to_end.py tests/test_workflow_redesign_phase_5_regressions.py -q`
 - Run workflow gate:
   - `engram_workflow_verify`
 
 ## Risks
-- Potential mismatch between docs and transitional alias behavior (`engram_workflow_finish` vs `engram_workflow_finish_and_commit`).
-- Missing one residual memory-review phrase in long docs.
+- Legacy assertions may still assume `memory_review_outcome` is mandatory in specific E2E branches.
+- Test fixtures may include incidental memory-review updates that hide missing-coverage gaps.
 
 ## Done criteria
-- All listed files no longer require per-task memory review before finish.
-- Remaining memory-review instructions are explicitly phase-level.
-- Workflow finish messaging is consistent with simplified flow.
+- Finish regression coverage no longer fails for missing/invalid `memory_review_outcome`.
+- At least one success-path test explicitly finishes after verify with no memory-review step.
+- Verification and worktree cleanliness gate coverage remains intact.

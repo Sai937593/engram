@@ -277,14 +277,6 @@ def test_e2e_workflow_finish_success(disposable_git_repo):
     verify_res_str = asyncio.run(mock_server.tools["engram_workflow_verify"]())
     assert "Verification succeeded and staged changes are ready." in verify_res_str
 
-    # Update task with memory_review_outcome to pass Phase 9 gating rules
-    update_res_str = mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"memory_review_outcome": "no_change"},
-    )
-    update_res = yaml.safe_load(update_res_str)
-    assert update_res["ok"] is True
-
     # Run the primary tool name for finish
     finish_res_str = asyncio.run(
         mock_server.tools["engram_workflow_finish_and_commit"](commit_type="feat")
@@ -326,7 +318,7 @@ def test_e2e_workflow_finish_alias_wraps_primary(disposable_git_repo):
     p1_res_str = mock_server.tools["engram_phase_create"](title="Phase One", status="active")
     p1_id = yaml.safe_load(p1_res_str)["id"]
 
-    t1_id = yaml.safe_load(
+    yaml.safe_load(
         mock_server.tools["engram_task_create"](
             title="Task Primary",
             status="ready",
@@ -334,7 +326,7 @@ def test_e2e_workflow_finish_alias_wraps_primary(disposable_git_repo):
             relevant_files=["code.py"],
         )
     )["id"]
-    t2_id = yaml.safe_load(
+    yaml.safe_load(
         mock_server.tools["engram_task_create"](
             title="Task Alias",
             status="ready",
@@ -357,10 +349,6 @@ def test_e2e_workflow_finish_alias_wraps_primary(disposable_git_repo):
     os.utime(str(code_file), (past_time, past_time))
     os.utime(str(dummy_test), (past_time, past_time))
     asyncio.run(mock_server.tools["engram_workflow_verify"]())
-    mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"memory_review_outcome": "no_change"},
-    )
     primary_res = asyncio.run(
         mock_server.tools["engram_workflow_finish_and_commit"](commit_type="feat")
     )
@@ -368,10 +356,6 @@ def test_e2e_workflow_finish_alias_wraps_primary(disposable_git_repo):
 
     asyncio.run(mock_server.tools["engram_workflow_start"]())
     asyncio.run(mock_server.tools["engram_workflow_verify"]())
-    mock_server.tools["engram_task_update"](
-        task_ref=t2_id,
-        updates={"memory_review_outcome": "no_change"},
-    )
     alias_res = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
     assert "# Task Finished" in alias_res
 
@@ -405,8 +389,7 @@ def test_e2e_workflow_verification_stale_behavior(disposable_git_repo):
         phase_id=p1_id,
         relevant_files=["code.py"],
     )
-    t1_res = yaml.safe_load(t1_res_str)
-    t1_id = t1_res["id"]
+    t1_id = yaml.safe_load(t1_res_str)["id"]
 
     asyncio.run(mock_server.tools["engram_workflow_start"]())
 
@@ -594,17 +577,12 @@ def test_e2e_workflow_finish_blocks_without_verification(disposable_git_repo):
         phase_id=p1_id,
         relevant_files=["code.py"],
     )
-    t1_res = yaml.safe_load(t1_res_str)
-    t1_id = t1_res["id"]
+    yaml.safe_load(t1_res_str)
 
     # Start the workflow BEFORE creating files to avoid dirty working tree
     asyncio.run(mock_server.tools["engram_workflow_start"]())
 
     # --- Case A: Active task not verified ---
-    mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"memory_review_outcome": "no_change"},
-    )
     finish_res_a = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
     assert "# Finish Blocked" in finish_res_a
     assert "Active task is not verified. Run engram_workflow_verify before finish." in finish_res_a
@@ -627,12 +605,6 @@ def test_e2e_workflow_finish_blocks_without_verification(disposable_git_repo):
 
     # Run verification -> it will fail
     asyncio.run(mock_server.tools["engram_workflow_verify"]())
-
-    # Set memory review outcome
-    mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"memory_review_outcome": "no_change"},
-    )
 
     # Attempt to finish -> blocked because failed verify leaves task unverified
     finish_res_b = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
@@ -751,7 +723,7 @@ def test_e2e_finish_closeout_guidance_and_no_autostart(disposable_git_repo):
         phase_id=p1_id,
         relevant_files=["code.py"],
     )
-    t1_id = yaml.safe_load(t1_res_str)["id"]
+    yaml.safe_load(t1_res_str)
 
     # Create a task in Phase Two (ready status, so it's next)
     t2_res_str = mock_server.tools["engram_task_create"](
@@ -790,11 +762,6 @@ def test_e2e_finish_closeout_guidance_and_no_autostart(disposable_git_repo):
     os.utime(str(dummy_test), (past_time, past_time))
 
     asyncio.run(mock_server.tools["engram_workflow_verify"]())
-    mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"memory_review_outcome": "no_change"},
-    )
-
     # Finish Task 1
     finish_res_str = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
     assert "# Task Finished" in finish_res_str
