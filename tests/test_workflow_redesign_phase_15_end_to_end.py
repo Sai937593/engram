@@ -285,8 +285,10 @@ def test_e2e_workflow_finish_success(disposable_git_repo):
     update_res = yaml.safe_load(update_res_str)
     assert update_res["ok"] is True
 
-    # Run engram_workflow_finish
-    finish_res_str = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
+    # Run the primary tool name for finish
+    finish_res_str = asyncio.run(
+        mock_server.tools["engram_workflow_finish_and_commit"](commit_type="feat")
+    )
     assert "finished" in finish_res_str.lower()
     assert "phase complete" in finish_res_str.lower()
 
@@ -305,6 +307,73 @@ def test_e2e_workflow_finish_success(disposable_git_repo):
     ).stdout.strip()
     assert git_log.startswith("feat(phase-one): Task One")
     assert t1_id in git_log
+
+
+def test_e2e_workflow_finish_alias_wraps_primary(disposable_git_repo):
+    """Verify alias compatibility by comparing primary and alias finish behavior."""
+    mock_server = MockServer()
+    register_tools(mock_server)
+
+    init_res_str = mock_server.tools["engram_project_init"](
+        name="E2E Finish Alias Project",
+        project_id="e2e-finish-alias",
+        summary="Testing primary/alias finish tool compatibility",
+    )
+    init_res = yaml.safe_load(init_res_str)
+    assert init_res["ok"] is True
+    _commit_gitignore(disposable_git_repo)
+
+    p1_res_str = mock_server.tools["engram_phase_create"](title="Phase One", status="active")
+    p1_id = yaml.safe_load(p1_res_str)["id"]
+
+    t1_id = yaml.safe_load(
+        mock_server.tools["engram_task_create"](
+            title="Task Primary",
+            status="ready",
+            phase_id=p1_id,
+            relevant_files=["code.py"],
+        )
+    )["id"]
+    t2_id = yaml.safe_load(
+        mock_server.tools["engram_task_create"](
+            title="Task Alias",
+            status="ready",
+            phase_id=p1_id,
+            relevant_files=["code.py"],
+        )
+    )["id"]
+
+    asyncio.run(mock_server.tools["engram_workflow_start"]())
+    code_file = disposable_git_repo / "code.py"
+    code_file.write_text('"""Dummy module."""\n', encoding="utf-8")
+    tests_dir = disposable_git_repo / "tests"
+    tests_dir.mkdir(exist_ok=True)
+    dummy_test = tests_dir / "test_dummy.py"
+    dummy_test.write_text(
+        '"""Dummy tests."""\n\ndef test_dummy() -> None:\n    assert True\n',
+        encoding="utf-8",
+    )
+    past_time = time.time() - 2
+    os.utime(str(code_file), (past_time, past_time))
+    os.utime(str(dummy_test), (past_time, past_time))
+    asyncio.run(mock_server.tools["engram_workflow_verify"]())
+    mock_server.tools["engram_task_update"](
+        task_ref=t1_id,
+        updates={"memory_review_outcome": "no_change"},
+    )
+    primary_res = asyncio.run(
+        mock_server.tools["engram_workflow_finish_and_commit"](commit_type="feat")
+    )
+    assert "# Task Finished" in primary_res
+
+    asyncio.run(mock_server.tools["engram_workflow_start"]())
+    asyncio.run(mock_server.tools["engram_workflow_verify"]())
+    mock_server.tools["engram_task_update"](
+        task_ref=t2_id,
+        updates={"memory_review_outcome": "no_change"},
+    )
+    alias_res = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
+    assert "# Task Finished" in alias_res
 
 
 def test_e2e_transition_guidance_empty_ready_tasks(disposable_git_repo):

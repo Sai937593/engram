@@ -117,6 +117,44 @@ def test_finish_workflow_git_push_fails(tmp_db: Any) -> None:
     assert refreshed.status == "in-progress"
 
 
+def test_finish_workflow_git_commit_fails_and_task_stays_in_progress(tmp_db: Any) -> None:
+    """Verify that non-empty commit failures do not mark task done."""
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+        memory_review_outcome="created",
+        is_verified=True,
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
+
+    git_mock = GitMock()
+    git_mock.commit_returncode = 1
+    git_mock.commit_stderr = "pre-commit hook failed"
+
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        with pytest.raises(EngramServiceError) as exc_info:
+            finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
+
+    assert exc_info.value.code == "GIT_OPERATION_FAILED"
+    refreshed = Task.get(task.id)
+    assert refreshed is not None
+    assert refreshed.status == "in-progress"
+
+
 def test_finish_workflow_nothing_to_commit(tmp_db: Any) -> None:
     """Verify that when git commit fails with 'nothing to commit', it continues successfully."""
     project = Project.create(
