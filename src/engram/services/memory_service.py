@@ -10,7 +10,7 @@ from engram.services.memory_update_support import (
     get_project_memory,
     validate_memory_updates,
 )
-from engram.services.serializers import memory_to_dict
+from engram.services.serializers import compact_memory_to_dict, memory_to_dict
 
 
 def _validate_limit(limit: int) -> int:
@@ -68,7 +68,10 @@ def search_memories(
     if not terms:
         # Fallback to listing memories
         memories = list_memories(
-            project_id, type_filter=type_filter, include_superseded=include_superseded
+            project_id,
+            type_filter=type_filter,
+            include_superseded=include_superseded,
+            compact=False,
         )
         if tags:
             # Filter by tags manually in Python
@@ -98,6 +101,7 @@ def list_memories(
     type_filter: str | None = None,
     limit: int | None = None,
     include_superseded: bool = False,
+    compact: bool = True,
 ) -> list[dict[str, JsonValue]]:
     """Return project-scoped JSON-safe memory DTOs using list model behavior."""
     if type_filter:
@@ -108,10 +112,13 @@ def list_memories(
         memories = Memory.list_by_project(project_id, include_superseded=include_superseded)
 
     if limit is None:
-        return [memory_to_dict(memory_item) for memory_item in memories]
+        return [_serialize_memory(memory_item, compact=compact) for memory_item in memories]
 
     validated_limit = _validate_limit(limit)
-    return [memory_to_dict(memory_item) for memory_item in memories[:validated_limit]]
+    return [
+        _serialize_memory(memory_item, compact=compact)
+        for memory_item in memories[:validated_limit]
+    ]
 
 
 def create_memory(
@@ -174,10 +181,10 @@ def create_memory(
     return memory_to_dict(memory_item)
 
 
-def get_memory(project_id: str, memory_ref: str) -> dict[str, JsonValue]:
+def get_memory(project_id: str, memory_ref: str, compact: bool = True) -> dict[str, JsonValue]:
     """Resolve a project-scoped memory reference and return a JSON-safe DTO."""
     memory_item = get_project_memory(project_id, memory_ref)
-    return memory_to_dict(memory_item)
+    return _serialize_memory(memory_item, compact=compact)
 
 
 def update_memory(project_id: str, memory_ref: str, **updates: JsonValue) -> dict[str, JsonValue]:
@@ -193,3 +200,17 @@ def update_memory(project_id: str, memory_ref: str, **updates: JsonValue) -> dic
             details={"reason": str(exc)},
         ) from exc
     return memory_to_dict(memory_item)
+
+
+def _serialize_memory(memory_item: Memory, *, compact: bool) -> dict[str, JsonValue]:
+    if not compact:
+        return memory_to_dict(memory_item)
+    conn = get_db_connection()
+    row = conn.execute(
+        "SELECT created_at, updated_at FROM memories WHERE id = ?",
+        (memory_item.id,),
+    ).fetchone()
+    conn.close()
+    created_at = None if row is None else row["created_at"]
+    updated_at = None if row is None else row["updated_at"]
+    return compact_memory_to_dict(memory_item, created_at=created_at, updated_at=updated_at)

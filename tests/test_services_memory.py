@@ -113,9 +113,10 @@ def test_list_memories_returns_project_scoped_json_safe_payloads(tmp_db):
     payloads = list_memories(target_project.id)
 
     assert [payload["id"] for payload in payloads] == ["lsta0001", "lsta0002"]
-    assert all(payload["project_id"] == target_project.id for payload in payloads)
-    assert isinstance(payloads[0]["always_include"], bool)
-    assert isinstance(payloads[0]["tags"], list)
+    assert "project_id" not in payloads[0]
+    assert "content_preview" in payloads[0]
+    assert "created_at" in payloads[0]
+    assert "updated_at" in payloads[0]
 
 
 def test_list_memories_applies_type_filter(tmp_db):
@@ -140,7 +141,7 @@ def test_list_memories_applies_type_filter(tmp_db):
     payloads = list_memories(project.id, type_filter="lesson")
 
     assert [payload["id"] for payload in payloads] == ["lstc0001"]
-    assert all(payload["type"] == "lesson" for payload in payloads)
+    assert all("type" not in payload for payload in payloads)
 
 
 def test_list_memories_limit_none_returns_all_matching_rows(tmp_db):
@@ -468,8 +469,10 @@ def test_get_memory_returns_project_scoped_memory_dto(tmp_db):
     fetched = get_memory(project.id, "geta0001")
 
     assert fetched["id"] == dto["id"]
-    assert fetched["project_id"] == project.id
     assert fetched["title"] == "Fetch me"
+    assert fetched["content"] == "Project scoped retrieval."
+    assert "created_at" in fetched
+    assert "updated_at" in fetched
 
 
 def test_get_memory_rejects_foreign_project_lookup(tmp_db):
@@ -490,6 +493,28 @@ def test_get_memory_rejects_foreign_project_lookup(tmp_db):
     error = raised.value
     assert error.code == "MEMORY_NOT_FOUND"
     assert error.details["project_id"] == project_b.id
+
+
+def test_memory_service_get_and_list_support_full_shape_for_internal_callers(tmp_db):
+    project = _create_project("proj-get-full", "/tmp/proj-get-full")
+    create_memory(
+        project_id=project.id,
+        type="decision",
+        title="Full shape",
+        content="Keep rich fields available.",
+        level="L1",
+        id="full0001",
+    )
+
+    full_get = get_memory(project.id, "full0001", compact=False)
+    full_list = list_memories(project.id, compact=False)
+
+    assert full_get["project_id"] == project.id
+    assert full_get["type"] == "decision"
+    assert full_get["scope"] == "project"
+    assert full_get["level"] == "L1"
+    assert full_list[0]["id"] == "full0001"
+    assert "project_id" in full_list[0]
 
 
 def test_update_memory_updates_writable_fields_and_returns_dto(tmp_db):
@@ -586,7 +611,7 @@ def test_supersede_memory_creates_replacement_and_hides_old_by_default(tmp_db):
     )
 
     assert replacement["id"] == "lifea002"
-    old = get_memory(project.id, "lifea001")
+    old = get_memory(project.id, "lifea001", compact=False)
     assert old["superseded_by"] == "lifea002"
     assert [m["id"] for m in list_memories(project.id)] == ["lifea002"]
 

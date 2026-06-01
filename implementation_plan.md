@@ -1,31 +1,36 @@
-# Implementation Plan - Phase 6.3
+# Implementation Plan - Phase 7.1
 
 ## Scope
-Rewrite finish-gate regression tests so finish is blocked only by verification/worktree gates, not by missing or invalid `memory_review_outcome`.
+Add a compact, project-scoped memory read interface by wiring `engram_memory_list` and adapting `engram_memory_get` output defaults, while keeping richer internal retrieval paths intact for existing callers.
 
 ## Files
-- tests/test_services_workflow_finish.py
+- src/engram/services/memory_service.py
+- src/engram/services/serializers.py
+- src/engram/mcp/tools/memory_tools.py
+- src/engram/mcp/tools/memory_lifecycle_tools.py
+- tests/test_services_memory.py
 - tests/test_mcp_tools.py
-- tests/test_workflow_redesign_phase_15_end_to_end.py
-- tests/test_workflow_redesign_phase_5_regressions.py
 
 ## Planned changes
-1. Update service-layer finish tests to assert success when `memory_review_outcome` is missing or invalid, while preserving existing verification and worktree blocking assertions.
-2. Update MCP/tool-layer finish tests to remove any setup or assertions that still require `memory_review_outcome` as a prerequisite.
-3. Update E2E workflow finish tests to prove a verified, clean task can finish without any memory-review update step.
-4. Keep memory-related assertions only where they describe returned task fields, not finish eligibility.
+1. Inspect current service read functions and serializer entry points to identify where list/get response shape is defined and where internal rich fields are consumed.
+2. Add or adapt a service-level list path that returns project-scoped memories for MCP tool usage without requiring search flow inputs.
+3. Register or expose `engram_memory_list` in MCP tools and route it through the service list path.
+4. Define/update default compact serializer shape for list/get to foreground memory id, title, content (or preview), and timestamps.
+5. Keep richer retrieval data available via existing internal code paths so current non-agent-facing callers are not broken.
+6. Add/update focused tests for service and MCP tool behavior for list/get compact output and registration.
 
 ## Verification
 - Run focused tests:
-  - `uv run pytest tests/test_services_workflow_finish.py tests/test_mcp_tools.py tests/test_workflow_redesign_phase_15_end_to_end.py tests/test_workflow_redesign_phase_5_regressions.py -q`
+  - `uv run pytest tests/test_services_memory.py tests/test_mcp_tools.py -q`
 - Run workflow gate:
   - `engram_workflow_verify`
 
 ## Risks
-- Legacy assertions may still assume `memory_review_outcome` is mandatory in specific E2E branches.
-- Test fixtures may include incidental memory-review updates that hide missing-coverage gaps.
+- Existing tests or callers may currently assert advanced metadata fields in default responses.
+- Serializer changes could unintentionally affect lifecycle tool outputs if shared serializer functions are used broadly.
 
 ## Done criteria
-- Finish regression coverage no longer fails for missing/invalid `memory_review_outcome`.
-- At least one success-path test explicitly finishes after verify with no memory-review step.
-- Verification and worktree cleanliness gate coverage remains intact.
+- `engram_memory_list` is callable and returns project-scoped memories.
+- Default list/get output is compact and readable with identity, title, content/content preview, and timestamps.
+- Advanced lifecycle metadata is not foregrounded in normal agent-facing output.
+- Existing richer internal retrieval callers continue to function.

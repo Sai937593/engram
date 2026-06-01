@@ -194,7 +194,7 @@ def test_service_layer_integration(project):
     assert m2_dto["superseded_by"] is None
 
     # Reload m1 through list_memories and verify it includes superseded_by
-    m1_reloaded_list = list_memories(project.id, include_superseded=True)
+    m1_reloaded_list = list_memories(project.id, include_superseded=True, compact=False)
     m1_dto_reloaded = next(m for m in m1_reloaded_list if m["id"] == m1_dto["id"])
     assert m1_dto_reloaded["superseded_by"] == m2_dto["id"]
 

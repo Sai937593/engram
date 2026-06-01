@@ -66,6 +66,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_phase_create"].__name__ == "engram_phase_create"
     assert "engram_memory_search" in server.tools
     assert server.tools["engram_memory_search"].__name__ == "engram_memory_search"
+    assert "engram_memory_list" in server.tools
+    assert server.tools["engram_memory_list"].__name__ == "engram_memory_list"
     assert "engram_task_create" in server.tools
     assert server.tools["engram_task_create"].__name__ == "engram_task_create"
     assert "engram_task_create_many" in server.tools
@@ -285,6 +287,41 @@ def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
     )
 
 
+def test_mcp_tool_memory_list_returns_compact_project_scoped_memories(tmp_db, monkeypatch) -> None:
+    cwd = os.path.abspath("repo/bound-mcp-tool-list")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-memory-list",
+        name="MCP Memory List Project",
+        summary="List coverage",
+        repo_paths=[cwd],
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-list-1",
+        type="note",
+        title="Listable memory",
+        content="List content",
+        tags=["x"],
+        level="L2",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_memory_list"]
+    result = yaml.safe_load(handler())
+
+    assert result["ok"] is True
+    assert result["memories"][0]["id"] == "mem-list-1"
+    assert result["memories"][0]["title"] == "Listable memory"
+    assert "created_at" in result["memories"][0]
+    assert "updated_at" in result["memories"][0]
+    assert "type" not in result["memories"][0]
+
+
 def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) -> None:
     """Verify memory lifecycle MCP tools delegate to service APIs with safe guidance."""
     cwd = os.path.abspath("repo/bound-mcp-memory-lifecycle")
@@ -318,6 +355,8 @@ def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) 
     got = yaml.safe_load(get_tool(memory_ref="mem-lifecycle-source"))
     assert got["ok"] is True
     assert got["memory"]["id"] == "mem-lifecycle-source"
+    assert "content_preview" in got["memory"]
+    assert "type" not in got["memory"]
 
     updated = yaml.safe_load(
         update_tool(memory_ref="mem-lifecycle-source", updates={"title": "Updated decision"})
@@ -333,8 +372,6 @@ def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) 
         )
     )
     assert superseded["ok"] is True
-    source_after_supersede = yaml.safe_load(get_tool(memory_ref="mem-lifecycle-source"))
-    assert source_after_supersede["memory"]["superseded_by"] == superseded["memory"]["id"]
 
     demoted = yaml.safe_load(
         demote_tool(memory_ref=superseded["memory"]["id"], reason="Lower priority")

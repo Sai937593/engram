@@ -6,7 +6,7 @@ from typing import Any
 
 from engram.mcp.tools.helpers import _respond, _respond_error
 from engram.services.errors import EngramServiceError
-from engram.services.memory_service import create_memory, search_memories
+from engram.services.memory_service import create_memory, list_memories, search_memories
 from engram.services.project_service import resolve_current_project
 
 
@@ -33,6 +33,32 @@ def _memory_search_markdown(memories: list[dict[str, Any]]) -> str:
 
 def register_memory_tools(server: Any) -> None:
     """Register memory search and creation tools on the server."""
+
+    @server.tool()
+    def engram_memory_list(
+        type: str | None = None,
+        limit: int = 50,
+        include_superseded: bool = False,
+    ) -> str:
+        """List project-scoped memories in compact, agent-facing shape."""
+        try:
+            project = resolve_current_project()
+            memories = list_memories(
+                project_id=str(project["id"]),
+                type_filter=type,
+                limit=limit,
+                include_superseded=include_superseded,
+            )
+            return _respond(
+                {
+                    "ok": True,
+                    "memories": memories,
+                    "result": f"## Memory List\nCount: {len(memories)}",
+                },
+                keep_empty_keys={"memories"},
+            )
+        except EngramServiceError as exc:
+            return _respond_error(exc)
 
     @server.tool()
     def engram_memory_search(

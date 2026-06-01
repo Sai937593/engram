@@ -137,6 +137,22 @@ def memory_to_dict(memory: Memory) -> dict[str, JsonValue]:
     }
 
 
+def compact_memory_to_dict(
+    memory: Memory, *, created_at: str | None = None, updated_at: str | None = None
+) -> dict[str, JsonValue]:
+    """Serialize a Memory model into a compact agent-facing dictionary."""
+    content = str(memory.content)
+    preview = content if len(content) <= 240 else f"{content[:237]}..."
+    return {
+        "id": str(memory.id),
+        "title": str(memory.title),
+        "content": content,
+        "content_preview": preview,
+        "created_at": _none_if_blank(created_at),
+        "updated_at": _none_if_blank(updated_at),
+    }
+
+
 def phase_to_dict(phase: Phase) -> dict[str, JsonValue]:
     """Serialize a Phase model into a JSON-safe dictionary."""
     return {
