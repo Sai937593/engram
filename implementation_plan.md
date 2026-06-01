@@ -1,34 +1,33 @@
-# Implementation Plan - Task c63c5495
+# Implementation Plan - Task b884eb2c
 
 ## Scope
-Add regression coverage for the draft-to-ready execution path so Phase 11 lifecycle behavior remains stable: draft task creation, promotion to ready, blocked workflow start when only drafts remain, and successful selection/resumption once a ready task exists.
+Define and implement the Phase 12.1 service-layer task-quality validation contract for ready promotion, expanding from missing-field checks to deterministic weak-metadata heuristics and a stable error payload shape consumable by services/MCP.
 
 ## Constraints and Boundaries
-- One-task session only: execute only task `c63c5495`.
+- One-task session only: execute only task `b884eb2c`.
 - No edits in `planning/`, `workflow/`, or `.github/`.
-- Keep changes test-focused unless a missing test seam requires minimal production adjustment.
-- Preserve Phase 11 minimal ready-gate behavior; do not introduce richer Phase 12 heuristics.
+- Keep contract metadata-focused only; do not introduce lifecycle behavior beyond validation.
+- Preserve CLI/service boundary: implementation stays in services and tests.
 
 ## Inputs to Use
-- `tests/test_mcp_tools.py`
-- `tests/test_services_workflow_start_basic.py`
+- `src/engram/services/task/validation.py`
+- `src/engram/services/task/update_resolution.py`
 - `tests/test_services_task.py`
-- `tests/test_workflow_redesign_phase_5_regressions.py`
+- `docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_REDESIGN.md`
 
 ## Planned Changes
-1. Review existing lifecycle coverage in the listed test modules and map gaps against the acceptance criteria.
-2. Add/adjust tests validating draft task creation and promotion to `ready` with minimum required metadata.
-3. Add/adjust workflow-start tests for blocked messaging when only `draft` tasks remain.
-4. Add/adjust selection/resumption tests confirming a `ready` task is selected for new starts while true `in-progress` work is resumed.
-5. Keep assertions deterministic and focused on observable service/MCP behavior, avoiding implementation-coupled expectations.
+1. Review current ready-metadata validation contract and identify extension points for weak-field detection.
+2. Define deterministic weak-field heuristics for evaluated metadata fields (description, acceptance, relevant files, and any additional task metadata currently gated by ready promotion).
+3. Implement a stable validation result/payload shape that distinguishes missing fields from weak fields without coupling to CLI formatting.
+4. Wire the richer validation contract through task update/promotion resolution paths used by services and MCP.
+5. Add focused unit tests in `tests/test_services_task.py` covering pass/fail permutations, deterministic weak-field outcomes, and payload stability.
 
 ## Validation Plan
-- Run targeted tests:
-  - `uv run pytest tests/test_mcp_tools.py -q tests/test_services_workflow_start_basic.py -q tests/test_services_task.py -q tests/test_workflow_redesign_phase_5_regressions.py -q`
-- Run full workflow verification: `engram_workflow_verify`
+- Run focused module tests: `uv run pytest tests/test_services_task.py -q`
+- Run workflow verification gate: `engram_workflow_verify`
 - If verification fails, fix the first actionable issue and rerun.
 
 ## Out of Scope
-- Any non-regression feature work in workflow/task services.
-- Any edits outside the accepted lifecycle regression scope.
-- Work on tasks other than `c63c5495` in this session.
+- Workflow start/selection policy changes.
+- Finish/verify gate behavior changes unrelated to task metadata validation.
+- Any task other than `b884eb2c`.
