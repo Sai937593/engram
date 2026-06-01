@@ -1,33 +1,50 @@
-# Phase 8.2 Implementation Plan: Transactional Batch Memory Delete Service
+﻿# Implementation Plan - Phase 8.3 Memory Batch MCP Tools
 
 ## Scope
-Add a service-level batch delete path that prevalidates all requested memory IDs, rejects invalid batches with clear errors, and performs deletion only when the entire batch is valid. Preserve existing single-delete behavior.
+Implement two MCP memory lifecycle tools:
+- `engram_memory_update_many`
+- `engram_memory_delete_many`
 
-## Planned Changes
-1. Add batch delete validation/resolution helper in `src/engram/services/memory_update_support.py`.
-- Validate non-empty ID list.
-- Normalize IDs and reject empty IDs.
-- Reject duplicate IDs.
-- Resolve each ID with existing project-scoped lookup (`get_project_memory`) so missing/foreign IDs fail early.
+No generic batch mutate tool will be added.
 
-2. Add transactional batch delete service function in `src/engram/services/memory_service.py`.
-- New function (e.g. `delete_memories`) accepts `project_id` and list of memory IDs.
-- Prevalidate via the new helper before any writes.
-- Use a single DB transaction and delete all resolved IDs.
-- Return concise result shape with count and deleted IDs.
+## Files to Change
+- `src/engram/mcp/tools/memory_lifecycle_tools.py`
+- `src/engram/mcp/tools/__init__.py` (only if exports require updates)
+- `src/engram/mcp/server.py` (only if direct registration changes are required)
+- `src/engram/mcp/schemas.py` (only if lightweight tool schema mapping is already expected by current patterns)
+- `tests/test_mcp_tools.py`
+- `tests/test_mcp_server.py` (only if registration assertions need extension)
 
-3. Keep single-delete semantics unchanged.
-- Do not alter existing lifecycle delete behavior.
-- Keep batch delete scoped only to explicit deletion, not a generic mutation runner.
+## Planned Implementation
+1. Add `engram_memory_update_many` MCP handler in `memory_lifecycle_tools.py`.
+2. Add `engram_memory_delete_many` MCP handler in `memory_lifecycle_tools.py`.
+3. Keep argument contracts simple and deterministic:
+   - Require non-empty batch payload input.
+   - Raise clear validation errors via existing `ValidationError` path for invalid/missing inputs.
+   - Avoid partial mutation by delegating atomic behavior to underlying service methods.
+4. Delegate both tools to existing service-layer batch APIs (Phase 8.1/8.2 dependency) through current project resolution.
+5. Return compact success payloads with actionable summary fields (counts/ids/outcome) rather than verbose records.
+6. Preserve existing lifecycle tools and behavior unchanged.
 
-4. Add focused service tests in `tests/test_services_memory.py`.
-- Success case deletes multiple valid IDs and returns `{deleted_count, deleted_ids}`.
-- Empty batch failure.
-- Duplicate IDs failure.
-- Missing/foreign ID failure.
-- Atomicity: if one ID is invalid, no deletion occurs.
+## Planned Tests
+1. Registration tests:
+   - Assert both tool names are present after `register_tools(server)`.
+2. MCP behavior tests for each new tool:
+   - Happy path returns `ok: true` and compact summary fields.
+   - Invalid input returns clear validation error payload.
+   - Service error path is surfaced via `_respond_error` with no raw traceback.
+3. If needed, monkeypatch service functions to confirm MCP tool delegates through service API boundaries.
 
 ## Verification
-- Run `engram_workflow_verify`.
-- If checks fail, fix only task-related failures and rerun.
-- On success, run `engram_workflow_finish_and_commit`.
+- Run focused tests first:
+  - `uv run pytest tests/test_mcp_tools.py -k "memory_update_many or memory_delete_many or register_tools"`
+- Run broader MCP checks if needed:
+  - `uv run pytest tests/test_mcp_server.py tests/test_mcp_tools.py`
+- Then run workflow verification gate:
+  - `engram_workflow_verify`
+
+## Non-goals
+- No CLI changes.
+- No memory model/schema redesign.
+- No generic batch mutation MCP surface.
+- No unrelated refactoring.

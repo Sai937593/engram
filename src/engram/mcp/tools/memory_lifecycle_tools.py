@@ -12,7 +12,12 @@ from engram.services.memory_lifecycle_service import (
     demote_memory,
     supersede_memory,
 )
-from engram.services.memory_service import get_memory, update_memory
+from engram.services.memory_service import (
+    delete_memories,
+    get_memory,
+    update_memories,
+    update_memory,
+)
 from engram.services.project_service import resolve_current_project
 
 
@@ -131,5 +136,35 @@ def register_memory_lifecycle_tools(server: Any) -> None:
                 project_id=str(project["id"]), memory_ref=memory_ref, force=force
             )
             return _respond({"ok": True, **deletion})
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+    @server.tool()
+    def engram_memory_update_many(entries: list[dict[str, Any]] | None = None) -> str:
+        try:
+            project = resolve_current_project()
+            if entries is None or not entries:
+                raise ValidationError(
+                    code="VALIDATION_ERROR",
+                    message="Missing required argument: entries.",
+                    details={"field": "entries"},
+                )
+            summary = update_memories(project_id=str(project["id"]), entries=entries)
+            return _respond({"ok": True, **summary})
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+    @server.tool()
+    def engram_memory_delete_many(memory_refs: list[str] | None = None) -> str:
+        try:
+            project = resolve_current_project()
+            if memory_refs is None or not memory_refs:
+                raise ValidationError(
+                    code="VALIDATION_ERROR",
+                    message="Missing required argument: memory_refs.",
+                    details={"field": "memory_refs"},
+                )
+            summary = delete_memories(project_id=str(project["id"]), memory_refs=memory_refs)
+            return _respond({"ok": True, **summary})
         except EngramServiceError as exc:
             return _respond_error(exc)

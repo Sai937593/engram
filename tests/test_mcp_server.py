@@ -516,6 +516,8 @@ def test_register_tools_registers_expected_fastmcp_tools() -> None:
         "engram_memory_demote",
         "engram_memory_archive",
         "engram_memory_delete",
+        "engram_memory_update_many",
+        "engram_memory_delete_many",
     }
     for tool_name in expected_tools:
         assert tool_name in server.tools

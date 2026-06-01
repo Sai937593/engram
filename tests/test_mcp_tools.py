@@ -90,6 +90,10 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_memory_archive"].__name__ == "engram_memory_archive"
     assert "engram_memory_delete" in server.tools
     assert server.tools["engram_memory_delete"].__name__ == "engram_memory_delete"
+    assert "engram_memory_update_many" in server.tools
+    assert server.tools["engram_memory_update_many"].__name__ == "engram_memory_update_many"
+    assert "engram_memory_delete_many" in server.tools
+    assert server.tools["engram_memory_delete_many"].__name__ == "engram_memory_delete_many"
     assert "engram_phase_start" in server.tools
     assert server.tools["engram_phase_start"].__name__ == "engram_phase_start"
     assert "engram_phase_complete" in server.tools
@@ -405,6 +409,70 @@ def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) 
     forced_delete = yaml.safe_load(delete_tool(memory_ref="mem-active-delete-blocked", force=True))
     assert forced_delete["ok"] is True
     assert forced_delete["deleted"] is True
+
+
+def test_mcp_memory_lifecycle_batch_tools_delegate_and_validate(tmp_db, monkeypatch) -> None:
+    """Verify memory batch lifecycle tools route via service layer with compact outputs."""
+    cwd = os.path.abspath("repo/bound-mcp-memory-batch-lifecycle")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+    project = Project.create(
+        id="proj-tool-memory-batch-lifecycle",
+        name="MCP Memory Batch Lifecycle Project",
+        summary="Batch lifecycle coverage",
+        repo_paths=[cwd],
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-batch-1",
+        type="decision",
+        title="Batch one",
+        content="First content",
+        tags=["core"],
+        level="L1",
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-batch-2",
+        type="note",
+        title="Batch two",
+        content="Second content",
+        tags=[],
+        level="L2",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    update_many_tool = server.tools["engram_memory_update_many"]
+    delete_many_tool = server.tools["engram_memory_delete_many"]
+
+    updated = yaml.safe_load(
+        update_many_tool(
+            entries=[
+                {"memory_ref": "mem-batch-1", "title": "Batch one updated"},
+                {"memory_ref": "mem-batch-2", "content": "Second content updated"},
+            ]
+        )
+    )
+    assert updated["ok"] is True
+    assert updated["updated_count"] == 2
+    assert updated["updated_ids"] == ["mem-batch-1", "mem-batch-2"]
+
+    invalid_update = yaml.safe_load(update_many_tool(entries=[]))
+    assert invalid_update["ok"] is False
+    assert invalid_update["error"] == "VALIDATION_ERROR"
+    assert invalid_update["details"]["field"] == "entries"
+
+    deleted = yaml.safe_load(delete_many_tool(memory_refs=["mem-batch-1", "mem-batch-2"]))
+    assert deleted["ok"] is True
+    assert deleted["deleted_count"] == 2
+    assert deleted["deleted_ids"] == ["mem-batch-1", "mem-batch-2"]
+
+    invalid_delete = yaml.safe_load(delete_many_tool(memory_refs=[]))
+    assert invalid_delete["ok"] is False
+    assert invalid_delete["error"] == "VALIDATION_ERROR"
+    assert invalid_delete["details"]["field"] == "memory_refs"
 
 
 def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) -> None:
