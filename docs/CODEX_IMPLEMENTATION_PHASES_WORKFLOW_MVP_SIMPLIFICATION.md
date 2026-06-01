@@ -1,5 +1,7 @@
 # Codex Implementation Phases: Workflow MVP Simplification
 
+> Historical implementation planning document. Active agent-facing workflow guidance should be taken from `docs/USER_MANUAL.md` and skill instructions.
+
 ## Branch
 
 ```text
@@ -255,6 +257,8 @@ engram_memory_delete
   - content preview or content
   - created_at
   - updated_at
+
+Historical note: the removed lifecycle concepts above are implementation migration context, not active instructions for routine agent work.
 
 ### Acceptance
 

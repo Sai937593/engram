@@ -1,39 +1,37 @@
-# Implementation Plan - Phase 7.2
+# Implementation Plan - Phase 7.3
 
 ## Scope
-Simplify the agent-facing memory CRUD contract so routine `engram_memory_create`, `engram_memory_update`, and `engram_memory_delete` usage does not require explicit memory governance fields (type/scope/level/tags/always_include/supersede semantics), while preserving valid stored schema values and compatibility for existing internal flows.
+Update primary agent-facing workflow documentation so routine memory usage is presented as simple CRUD (`list/get/create/update/delete`), and remove or demote advanced lifecycle concepts (levels, tags, scope, always_include, memory types, demote, supersede) from normal guidance.
 
 ## Files
-- src/engram/mcp/tools/memory_tools.py
-- src/engram/mcp/tools/memory_lifecycle_tools.py
-- src/engram/services/memory_service.py
-- src/engram/services/memory_update_support.py
-- src/engram/models/memory/helpers.py
-- tests/test_services_memory.py
-- tests/test_mcp_tools.py
+- docs/USER_MANUAL.md
+- src/engram/USER_MANUAL.md
+- docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_MVP_SIMPLIFICATION.md
+- docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md
+- docs/adr/0002-workflow-mvp-simplification.md
 
 ## Planned changes
-1. Define a simplified create contract at MCP/service boundary centered on required `content` (and optional `title`) with deterministic defaults for type, scope, and level.
-2. Keep backward compatibility by accepting advanced fields as optional overrides, but stop requiring them in normal create/update paths.
-3. Add a dedicated service-layer normalizer for create defaults so all call paths produce valid schema values without tool-side duplication.
-4. Update `engram_memory_update` contract to accept straightforward field edits (especially content/title) without requiring callers to construct broad governance update payloads.
-5. Ensure `engram_memory_delete` remains deterministic and safe via existing project-scoped reference resolution.
-6. Update focused tests for simplified CRUD behavior and backward-compatible advanced-field acceptance.
-7. Keep demote/supersede tools callable but avoid routing normal edit guidance through them.
+1. Update both USER_MANUAL copies so the "Memories" concept and workflow sections describe simple CRUD as the normal interface and avoid instructing routine lifecycle management fields/actions.
+2. Adjust MCP tool reference wording to keep advanced/deprecated lifecycle semantics out of primary workflow guidance, while retaining accurate tool naming where needed.
+3. In implementation/handoff docs, clearly mark advanced memory lifecycle references as historical/background and keep active guidance aligned to simple CRUD expectations.
+4. In ADR 0002, keep historical context but ensure active decision and agent-facing workflow text explicitly emphasizes simple CRUD in normal operation.
+5. Keep edits narrowly scoped to the listed docs and avoid unrelated workflow or service changes.
 
 ## Verification
-- Run focused tests:
-  - `uv run pytest tests/test_services_memory.py tests/test_mcp_tools.py -q`
-- Run workflow gate:
+- Run focused doc checks by inspecting updated sections for:
+  - simple CRUD as normal memory interface
+  - no routine guidance requiring demote/supersede/levels/tags/always_include/scope/types
+  - historical references clearly isolated
+- Run workflow verification gate:
   - `engram_workflow_verify`
 
 ## Risks
-- Existing tests may assert previous required-argument behavior for create/update.
-- Default level assignment for project-scope memories must remain aligned with model validation rules.
-- Contract simplification must not break legacy callers passing full advanced payloads.
+- Duplicate docs (`docs/` and `src/engram/`) can drift if edits are not mirrored exactly.
+- Over-pruning could remove legitimate historical context needed for traceability.
+- Mixed terminology (`finish` vs `finish_and_commit`) may reappear if wording updates are inconsistent.
 
 ## Done criteria
-- `engram_memory_create` can be called with a simplified argument set focused on memory content.
-- `engram_memory_update` supports straightforward edits without requiring demote/supersede workflow for routine updates.
-- `engram_memory_delete` behavior remains deterministic and project-scoped.
-- Stored records continue to satisfy scope/level/type validation and retrieval expectations.
+- Primary docs present memory CRUD as the routine interface.
+- Normal workflow guidance no longer directs agents to manage advanced memory lifecycle fields/concepts.
+- Any retained advanced lifecycle references are clearly marked as historical/background.
+- `engram_workflow_verify` passes after documentation updates.

@@ -215,6 +215,7 @@ Remove or hide from the normal agent-facing interface:
 - memory types
 
 The existing database schema may keep extra columns internally during migration, but the agent-facing model should be simple.
+Any references to these lifecycle fields in older planning/handoff materials are historical context only.
 
 ### 11. Add targeted batch tools
 

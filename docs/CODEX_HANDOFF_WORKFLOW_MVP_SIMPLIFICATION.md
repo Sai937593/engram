@@ -1,5 +1,7 @@
 # Codex Handoff: Workflow MVP Simplification
 
+> Historical handoff document. For active agent-facing workflow, use `docs/USER_MANUAL.md` and current skill instructions.
+
 ## Purpose
 
 Implement the simplified Engram workflow MVP on branch:
@@ -273,6 +275,8 @@ Hide or remove from normal agent-facing workflow:
 - memory types
 
 It is acceptable for the database schema to keep extra columns during migration. The key requirement is that normal agent tools and docs present a simple model.
+
+Historical note: the lifecycle fields listed above are migration/background context and are not part of routine agent instructions.
 
 ### Batch memory operations
 

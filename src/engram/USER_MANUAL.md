@@ -24,9 +24,9 @@ Tasks are specific actionable units of work.
 
 ### Memories
 Memories are persistent facts designed to survive across coding sessions.
-- **Types:** `note`, `decision`, `lesson`, `constraint`, `snippet`
+- **Normal interface:** Use memory CRUD (`list`, `get`, `create`, `update`, `delete`) for routine work.
 - **Retrieval:** Automatically indexed via SQLite FTS5 lexical search combined with local fastembed semantic search.
-- **Guardrails:** Pinned policy memories (levels L0/L1) act as active agent constraints and are automatically injected into the agent's startup context.
+- **Historical/internal detail:** Legacy lifecycle fields (for example levels, scope, tags, always_include, type-specific governance) may exist in stored schema or migration history, but are not part of normal agent workflow guidance.
 
 ---
 
@@ -106,7 +106,11 @@ The MCP server exposes 17 tools for full interactive capabilities:
     *   `engram_task_start`: Transition task status to `in-progress`.
     *   `engram_task_done`: Transition task status to `done` with evidence.
 *   **Memory Management:**
-    *   `engram_memory_create`: Creates a persistent project memory (accepts `title`, `content`, `type`, `scope`, `level`).
+    *   `engram_memory_list`: Lists memories for the active project.
+    *   `engram_memory_get`: Retrieves a memory by id.
+    *   `engram_memory_create`: Creates a memory from normal user-facing fields (for example `title`, `content`).
+    *   `engram_memory_update`: Updates a memory by id.
+    *   `engram_memory_delete`: Deletes a memory by id.
     *   `engram_memory_search`: Runs FTS5 + semantic hybrid query search over all project memories.
 *   **Phase Management:**
     *   `engram_phase_list`: Lists all milestone phases for the project in priority order.
@@ -151,7 +155,7 @@ When the implementation is complete and verified:
 *   The agent calls `engram_workflow_finish_and_commit` to commit and push already-staged verified changes.
 
 ### Step 6: Phase-Level Memory Review
-During phase completion, review durable lessons and decisions using memory CRUD tools (for example `engram_memory_search` and `engram_memory_create`) before running `engram_phase_complete`.
+During phase completion, review durable lessons and decisions using memory CRUD tools (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`) before running `engram_phase_complete`.
 
 ---
 
