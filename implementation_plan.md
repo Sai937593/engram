@@ -1,40 +1,34 @@
-# Implementation Plan: Expand regression coverage for batch creation (5cd2e288)
+﻿# Implementation Plan - Phase 4.5 Verification Regression Coverage
 
 ## Scope
-Add regression tests to lock down batch task creation behavior across service and MCP layers without changing production behavior.
+Add and/or adjust regression tests to lock final Phase 4 verification behavior across service, MCP, and end-to-end flows:
+- missing active task precondition
+- failed verify semantics (`is_verified` remains false)
+- passing verify semantics (stages worktree and sets `is_verified` true)
+- persistence/visibility of verification state through MCP and integration paths
 
-## Files to update
-- tests/test_services_task.py
-- tests/test_mcp_tools.py
-- tests/test_mcp_server.py
-- tests/test_mcp_startup_reliability.py
+## Planned Changes
+1. Service coverage (`tests/test_services_workflow_verify.py`)
+- Confirm/extend explicit assertions for:
+  - no in-progress task -> `NO_TASK_IN_PROGRESS`
+  - failed verify run keeps `Task.is_verified` false
+  - successful verify run executes staging and sets `Task.is_verified` true
+- Add narrow assertions only where final behavior is currently under-specified.
 
-## Planned changes
-1. Add/extend service-level tests for `create_many` success path:
-   - Assert all requested tasks are created.
-   - Assert response payload shape remains stable.
+2. MCP coverage (`tests/test_mcp_tools.py`)
+- Verify `engram_workflow_verify` output remains compact and deterministic for pass/fail.
+- Ensure MCP-visible behavior aligns with service verification contract for active-task requirement and verification result semantics.
 
-2. Add/extend service-level tests for invalid batch rejection:
-   - Submit a mixed-validity batch.
-   - Assert operation fails atomically.
-   - Assert zero task rows are persisted after failure.
-
-3. Add MCP tool contract regression coverage:
-   - Verify `task_create_many` remains registered.
-   - Verify stable success/error response shape exposed by MCP tool.
-
-4. Add startup/server coverage as needed:
-   - Guard against regressions where tool registration disappears.
+3. End-to-end coverage (`tests/test_workflow_redesign_phase_15_end_to_end.py`)
+- Ensure at least one integration path exercises real staging behavior and verification persistence.
+- Tighten assertions only around the Phase 4.5 contract; avoid unrelated refactors.
 
 ## Verification
 Run:
-- `uv run pytest tests/test_services_task.py -q -k create_many`
-- `uv run pytest tests/test_mcp_tools.py -q -k task_create_many`
-- `uv run pytest tests/test_mcp_server.py -q -k task_create_many`
-- `uv run pytest tests/test_mcp_startup_reliability.py -q -k task_create_many`
+- `uv run pytest tests/test_services_workflow_verify.py tests/test_mcp_tools.py tests/test_workflow_redesign_phase_15_end_to_end.py`
 
-Then run a broader sanity pass if required by failures.
+If any failures are unrelated or flaky, isolate and fix only blockers tied to this task scope.
 
-## Notes
-- No changes under `planning/`, `workflow/`, or `.github/`.
-- Keep changes test-focused and scoped to this task.
+## Out of Scope
+- Service/CLI/MCP redesigns beyond regression coverage.
+- New abstractions or broad cleanup in test modules.

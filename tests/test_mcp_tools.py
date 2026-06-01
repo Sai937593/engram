@@ -20,6 +20,7 @@ from engram.models.task import Task
 def bypass_strict_task_validation(monkeypatch):
     import engram.services.task.crud as crud
     import engram.services.task.validation as validation
+
     monkeypatch.setattr(validation, "validate_executable_task_metadata", lambda **kwargs: None)
     monkeypatch.setattr(crud, "_validate_executable_task_metadata", lambda **kwargs: None)
 
@@ -860,7 +861,9 @@ def test_mcp_task_create_many_happy_path(tmp_db, monkeypatch) -> None:
         assert Task.get(item["id"]) is not None
 
 
-def test_mcp_task_create_many_validation_failure_is_per_entry_and_atomic(tmp_db, monkeypatch) -> None:
+def test_mcp_task_create_many_validation_failure_is_per_entry_and_atomic(
+    tmp_db, monkeypatch
+) -> None:
     """Verify batch validation errors are index-specific and create zero tasks."""
     cwd = os.path.abspath("repo/bound-mcp-tool-writes")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
@@ -1457,6 +1460,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         "task_title": "Test Task",
         "passed": False,
         "summary": "`uv run pytest tests -q` failed. First actionable target: `tests/test_fail.py::test_x`.",
+        "details": "Command: `uv run pytest tests -q`\nExit code: 1\n\nOutput tail:\nFAILED tests/test_fail.py::test_x - assert False",
     }
 
     start_called_args = []
@@ -1515,7 +1519,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "Task: `t1` - Test Task" in res_verify
     assert "Status: FAILED" in res_verify
     assert "## Details" in res_verify
-    assert mock_verify_res["summary"] in res_verify
+    assert mock_verify_res["details"] in res_verify
     assert "## Next action" in res_verify
     assert res_verify.count("## Next action") == 1
     assert "Fix the first actionable target, then rerun engram_workflow_verify." in res_verify
@@ -1526,6 +1530,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     # 3b. Happy path: Verify PASS remains concise and deterministic
     mock_verify_res["passed"] = True
     mock_verify_res["summary"] = "All local quality checks passed."
+    mock_verify_res["details"] = "Checks passed and changes staged."
     res_verify_pass = asyncio.run(verify_handler())
     assert "# Verification Result" in res_verify_pass
     assert "Task: `t1` - Test Task" in res_verify_pass
@@ -1535,7 +1540,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "## Next action" in res_verify_pass
     assert res_verify_pass.count("## Next action") == 1
     assert (
-        "Verification passed. Continue implementation and run engram_workflow_finish when ready."
+        "Verification succeeded and staged changes are ready. Continue implementation or run engram_workflow_finish when ready."
         in res_verify_pass
     )
 

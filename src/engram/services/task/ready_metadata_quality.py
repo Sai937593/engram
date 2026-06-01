@@ -49,14 +49,18 @@ def evaluate_executable_task_quality(
         missing_fields.append("description")
     elif len(clean_description) < 24 or len(clean_description.split()) < 4:
         weak_fields.append("description")
-        weak_field_reasons["description"] = "Objective must include at least 4 words and 24 characters."
+        weak_field_reasons["description"] = (
+            "Objective must include at least 4 words and 24 characters."
+        )
 
     # 3. Acceptance
     if not clean_acceptance:
         missing_fields.append("acceptance")
     elif len(clean_acceptance) < 32 or len(clean_acceptance.split()) < 6:
         weak_fields.append("acceptance")
-        weak_field_reasons["acceptance"] = "Acceptance must include at least 6 words and 32 characters."
+        weak_field_reasons["acceptance"] = (
+            "Acceptance must include at least 6 words and 32 characters."
+        )
 
     # 4. Phase ID
     if not clean_phase_id:
@@ -67,7 +71,9 @@ def evaluate_executable_task_quality(
         missing_fields.append("verification")
     elif len(clean_verification) < 24 or len(clean_verification.split()) < 4:
         weak_fields.append("verification")
-        weak_field_reasons["verification"] = "Verification must include at least 4 words and 24 characters."
+        weak_field_reasons["verification"] = (
+            "Verification must include at least 4 words and 24 characters."
+        )
 
     # 6. Relevant files or search hints choice
     if not normalized_files and not normalized_hints:
@@ -80,9 +86,13 @@ def evaluate_executable_task_quality(
         hints_weak_reason = ""
 
         if normalized_files:
-            if not any(("/" in item) or ("\\" in item) or ("." in item) for item in normalized_files):
+            if not any(
+                ("/" in item) or ("\\" in item) or ("." in item) for item in normalized_files
+            ):
                 files_weak = True
-                files_weak_reason = "Relevant files must include at least one concrete path-like entry."
+                files_weak_reason = (
+                    "Relevant files must include at least one concrete path-like entry."
+                )
 
         if normalized_hints:
             if any(len(item) < 3 for item in normalized_hints):
@@ -128,5 +138,9 @@ def evaluate_ready_metadata_quality(
     # Filter out placeholder fields from results
     missing = [m for m in missing if m not in ("title", "phase_id", "verification", "search_hints")]
     weak = [w for w in weak if w not in ("title", "phase_id", "verification", "search_hints")]
-    reasons = {k: v for k, v in reasons.items() if k not in ("title", "phase_id", "verification", "search_hints")}
+    reasons = {
+        k: v
+        for k, v in reasons.items()
+        if k not in ("title", "phase_id", "verification", "search_hints")
+    }
     return missing, weak, reasons

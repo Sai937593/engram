@@ -146,15 +146,16 @@ def register_workflow_tools(server: Any) -> None:
             from engram.services.workflow_formatter import format_verify_result
 
             next_guidance = (
-                "Verification passed. Continue implementation and run engram_workflow_finish when ready."
+                "Verification succeeded and staged changes are ready. Continue implementation or run engram_workflow_finish when ready."
                 if res["passed"]
                 else "Fix the first actionable target, then rerun engram_workflow_verify."
             )
+            details = res["summary"] if res["passed"] else res.get("details", res["summary"])
             return format_verify_result(
                 task_id=res["task_id"],
                 task_title=res.get("task_title"),
                 passed=bool(res["passed"]),
-                details=res["summary"],
+                details=details,
                 next_guidance=next_guidance,
             )
         except EngramServiceError as exc:

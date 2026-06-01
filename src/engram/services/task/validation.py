@@ -160,6 +160,7 @@ def validate_ready_promotion_metadata(
 ) -> None:
     """Validate metadata quality required to promote a task into ready."""
     from engram.services.task.ready_metadata_quality import evaluate_ready_metadata_quality
+
     missing, weak, reasons = evaluate_ready_metadata_quality(
         description=description,
         acceptance=acceptance,
@@ -220,4 +221,3 @@ def validate_executable_task_metadata(
                 "weak_field_reasons": reasons,
             },
         )
-
