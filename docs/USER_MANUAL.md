@@ -140,14 +140,16 @@ weak title-only tasks and ensure execution-ready metadata.
 If the agent needs deep constraints or related documentation for a task, it reads the resource:
 `engram://task/{task_id}/context`
 
-### Step 4: Iterative Development & Memory Capture
-During the coding phase, the agent captures critical software engineering decisions, lessons, or constraints:
-*   Calls `engram_memory_create` to log decisions (e.g. why a specific architecture or library was selected).
-*   Calls `engram_task_note_append` to record diagnostic evidence or migration progress.
+### Step 4: Iterative Development
+During the coding phase, the agent implements the scoped task and records diagnostic evidence as needed:
+*   Calls `engram_task_note_append` to record implementation or migration progress.
 
 ### Step 5: Verification & Session Completion
 When the implementation is complete and verified:
 *   The agent calls `engram_workflow_finish` to stage changes, execute validation tests, confirm the Conventional Commit message, and push the branch.
+
+### Step 6: Phase-Level Memory Review
+During phase completion, review durable lessons and decisions using memory CRUD tools (for example `engram_memory_search` and `engram_memory_create`) before running `engram_phase_complete`.
 
 ---
 

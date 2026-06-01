@@ -1,32 +1,33 @@
-# Implementation Plan - Phase 6.1 Finish Memory-Review Gate Removal
+# Implementation Plan - Phase 6.2
 
 ## Scope
-Remove finish-time dependency on `memory_review_outcome` from workflow finish flow, while preserving compatibility for existing task fields and update APIs.
+Update agent-facing guidance so memory review is phase-level follow-up, not a per-task finish requirement.
 
-## Planned Changes
-1. Update `src/engram/services/workflow_service.py`:
-- Remove `MEMORY_REVIEW_OUTCOME_MISSING` block from `finish_workflow`.
-- Remove finish-time validation call for `memory_review_outcome`.
-- Keep existing verification and git eligibility gates unchanged.
-- Keep returning `memory_review_outcome` in success payload for backward compatibility.
+## Files
+- docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md
+- docs/USER_MANUAL.md
+- src/engram/USER_MANUAL.md
+- docs/skills/memory-review.md
+- src/engram/mcp/tools/task_tools.py
 
-2. Update `src/engram/mcp/tools/workflow_tool_helpers.py`:
-- Remove `MEMORY_REVIEW_OUTCOME_MISSING` from finish gate error code set.
-- Remove special blocked guidance branch that instructs setting `memory_review_outcome`.
-- Keep verify/staging guidance behavior intact.
+## Planned changes
+1. Remove or reword any statements that require `memory_review_outcome` before task finish.
+2. Align workflow docs to use simplified flow: `start -> implement -> verify -> finish and commit`.
+3. Reframe memory review guidance as phase-completion work using existing memory CRUD tools.
+4. Update any finish/next-step messaging that still tells agents to log lessons or set `memory_review_outcome` before finish.
+5. Keep all changes documentation/tool-message scoped; no workflow behavior redesign beyond wording alignment.
 
-3. Verify MCP wrapper behavior in `src/engram/mcp/tools/workflow_tools.py`:
-- Ensure finish blocked formatting still routes only for remaining finish gate codes.
-- No output expansion; keep response compact.
+## Verification
+- Run targeted checks:
+  - `uv run pytest tests/ -m "not slow" -x --tb=short -q`
+- Run workflow gate:
+  - `engram_workflow_verify`
 
-4. Confirm formatter behavior in `src/engram/services/workflow_formatter.py`:
-- No required structural changes.
-- Keep optional display of `memory_review_outcome` when present.
+## Risks
+- Potential mismatch between docs and transitional alias behavior (`engram_workflow_finish` vs `engram_workflow_finish_and_commit`).
+- Missing one residual memory-review phrase in long docs.
 
-## Validation
-- Run focused tests for workflow service and MCP workflow tool paths.
-- Run any targeted project checks necessary to confirm no regressions in finish behavior.
-
-## Out of Scope
-- Removing `memory_review_outcome` from task models, persistence schema, or task update APIs.
-- Broader workflow redesign beyond finish-time gating.
+## Done criteria
+- All listed files no longer require per-task memory review before finish.
+- Remaining memory-review instructions are explicitly phase-level.
+- Workflow finish messaging is consistent with simplified flow.

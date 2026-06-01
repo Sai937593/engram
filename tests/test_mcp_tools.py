@@ -1352,10 +1352,7 @@ def test_mcp_task_done_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res["id"] == "task-done-1"
     assert res["status"] == "done"
     assert res["phase_complete"] is True
-    assert (
-        res["next"]
-        == "Log lessons with engram_memory_create, then call engram_workflow_finish_and_commit"
-    )
+    assert res["next"] == "Call engram_workflow_verify, then engram_workflow_finish_and_commit"
     assert "task" not in res
 
     # Assert evidence is saved to model
