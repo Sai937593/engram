@@ -27,10 +27,8 @@ Engram is a local-first project/workflow memory system for coding agents. Keep t
 
 ## Verification expectations
 
-For code changes, run the relevant local checks before considering the work complete. In the current repository state, the Engram workflow verification tool is available as `engram_workflow_verify`; use the start-task skill when doing an Engram-managed task.
+For code changes, run the relevant local checks to verify that your changes have the desired effects and that the project builds and passes tests successfully before considering the work complete.
 
 ## Engram usage boundary
 
 Do not force the Engram workflow on every interaction. Use Engram workflow only when the user asks to work on an Engram task, run a phase workflow, decompose work, or otherwise explicitly invokes Engram.
-
-Detailed Engram workflow steps live in the skills under `.codex/skills/`.
