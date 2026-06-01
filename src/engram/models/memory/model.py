@@ -131,8 +131,8 @@ class Memory:
             superseded_by,
         )
 
-    def update(self, **kwargs):
-        update_memory_record(self, **kwargs)
+    def update(self, *, conn: Any | None = None, **kwargs):
+        update_memory_record(self, conn=conn, **kwargs)
 
     def demote_project_guardrail_level(self, reason: str) -> tuple[str, str]:
         """Demote a project-scope guardrail level by exactly one level and audit the reason."""

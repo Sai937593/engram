@@ -25,6 +25,7 @@ from engram.services.memory_service import (
     get_recent_memories,
     list_memories,
     search_memories,
+    update_memories,
     update_memory,
 )
 
@@ -602,6 +603,156 @@ def test_update_memory_rejects_invalid_scope_level_transition(tmp_db):
     error = raised.value
     assert error.code == "INVALID_MEMORY_UPDATE"
     assert "Task-scope memories must not define a level." in str(error.details["reason"])
+
+
+def test_update_memories_updates_multiple_rows_atomically(tmp_db):
+    project = _create_project("proj-updm-a", "/tmp/proj-updm-a")
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="First old",
+        content="First old content",
+        scope="project",
+        level="L2",
+        id="upma0001",
+    )
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Second old",
+        content="Second old content",
+        scope="project",
+        level="L3",
+        id="upma0002",
+    )
+
+    result = update_memories(
+        project.id,
+        entries=[
+            {"memory_ref": "upma0001", "title": "First new"},
+            {"memory_ref": "upma0002", "content": "Second new content", "always_include": True},
+        ],
+    )
+
+    assert result == {"updated_count": 2, "updated_ids": ["upma0001", "upma0002"]}
+    first = Memory.get("upma0001")
+    second = Memory.get("upma0002")
+    assert first is not None and second is not None
+    assert first.title == "First new"
+    assert second.content == "Second new content"
+    assert second.always_include is True
+
+
+def test_update_memories_rejects_empty_entries(tmp_db):
+    project = _create_project("proj-updm-b", "/tmp/proj-updm-b")
+    with pytest.raises(ValidationError) as raised:
+        update_memories(project.id, entries=[])
+
+    assert raised.value.code == "INVALID_MEMORY_BATCH_UPDATE"
+
+
+def test_update_memories_rejects_duplicate_memory_refs(tmp_db):
+    project = _create_project("proj-updm-c", "/tmp/proj-updm-c")
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="Title",
+        content="Content",
+        scope="project",
+        level="L3",
+        id="upmc0001",
+    )
+    with pytest.raises(ValidationError) as raised:
+        update_memories(
+            project.id,
+            entries=[
+                {"memory_ref": "upmc0001", "title": "A"},
+                {"memory_ref": "upmc0001", "title": "B"},
+            ],
+        )
+
+    assert raised.value.code == "DUPLICATE_MEMORY_REFERENCE"
+
+
+def test_update_memories_rejects_foreign_or_unknown_refs(tmp_db):
+    project_a = _create_project("proj-updm-d1", "/tmp/proj-updm-d1")
+    project_b = _create_project("proj-updm-d2", "/tmp/proj-updm-d2")
+    create_memory(
+        project_id=project_a.id,
+        type="note",
+        title="A title",
+        content="A content",
+        scope="project",
+        level="L3",
+        id="upmd0001",
+    )
+
+    with pytest.raises(EngramServiceError) as raised:
+        update_memories(
+            project_b.id,
+            entries=[{"memory_ref": "upmd0001", "title": "Should fail"}],
+        )
+
+    assert raised.value.code == "MEMORY_NOT_FOUND"
+
+
+def test_update_memories_rejects_unknown_fields(tmp_db):
+    project = _create_project("proj-updm-e", "/tmp/proj-updm-e")
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="Title",
+        content="Content",
+        scope="project",
+        level="L3",
+        id="upme0001",
+    )
+    with pytest.raises(ValidationError) as raised:
+        update_memories(
+            project.id,
+            entries=[{"memory_ref": "upme0001", "made_up_field": "nope"}],
+        )
+
+    assert raised.value.code == "INVALID_MEMORY_UPDATE_FIELD"
+
+
+def test_update_memories_is_atomic_when_one_entry_is_invalid(tmp_db):
+    project = _create_project("proj-updm-f", "/tmp/proj-updm-f")
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="First old",
+        content="First old content",
+        scope="project",
+        level="L1",
+        id="upmf0001",
+    )
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Second old",
+        content="Second old content",
+        scope="project",
+        level="L2",
+        id="upmf0002",
+    )
+
+    with pytest.raises(ValidationError) as raised:
+        update_memories(
+            project.id,
+            entries=[
+                {"memory_ref": "upmf0001", "title": "First new"},
+                {"memory_ref": "upmf0002", "scope": "task", "level": "L2"},
+            ],
+        )
+
+    assert raised.value.code == "INVALID_MEMORY_UPDATE"
+    first = Memory.get("upmf0001")
+    second = Memory.get("upmf0002")
+    assert first is not None and second is not None
+    assert first.title == "First old"
+    assert second.scope == "project"
+    assert second.level == "L2"
 
 
 def test_supersede_memory_creates_replacement_and_hides_old_by_default(tmp_db):

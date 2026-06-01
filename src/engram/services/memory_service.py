@@ -11,6 +11,7 @@ from engram.services.memory_update_support import (
     VALID_MEMORY_TYPES,
     get_project_memory,
     normalize_memory_create_payload,
+    resolve_batch_memory_updates,
     validate_memory_updates,
 )
 from engram.services.serializers import compact_memory_to_dict, memory_to_dict
@@ -204,6 +205,31 @@ def update_memory(project_id: str, memory_ref: str, **updates: JsonValue) -> dic
             details={"reason": str(exc)},
         ) from exc
     return memory_to_dict(memory_item)
+
+
+def update_memories(project_id: str, entries: list[dict[str, JsonValue]]) -> dict[str, JsonValue]:
+    """Update multiple memories atomically and return a concise update summary."""
+    resolved_entries = resolve_batch_memory_updates(project_id, entries)
+    conn = get_db_connection()
+    try:
+        conn.execute("BEGIN")
+        for memory_item, resolved_updates in resolved_entries:
+            try:
+                memory_item.update(conn=conn, **resolved_updates)
+            except ValueError as exc:
+                raise ValidationError(
+                    code="INVALID_MEMORY_UPDATE",
+                    message="Memory update failed validation.",
+                    details={"reason": str(exc), "memory_ref": memory_item.id},
+                ) from exc
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    updated_ids = [memory_item.id for memory_item, _ in resolved_entries]
+    return {"updated_count": len(updated_ids), "updated_ids": updated_ids}
 
 
 def _serialize_memory(memory_item: Memory, *, compact: bool) -> dict[str, JsonValue]:

@@ -87,7 +87,7 @@ def demote_project_guardrail_level(memory: Any, reason: str) -> tuple[str, str]:
     return current_level, next_level
 
 
-def update_memory_record(memory: Any, **kwargs) -> None:
+def update_memory_record(memory: Any, *, conn: Any | None = None, **kwargs) -> None:
     """Update a memory instance and database record with auditing."""
     next_scope = kwargs.get("scope", memory.scope)
     next_level = kwargs.get("level", memory.level)
@@ -95,6 +95,8 @@ def update_memory_record(memory: Any, **kwargs) -> None:
     if "level" in kwargs:
         kwargs["level"] = normalized_level
 
+    owns_connection = conn is None
+    active_conn = conn if conn is not None else get_db_connection()
     updates = []
     params = []
 
@@ -118,6 +120,7 @@ def update_memory_record(memory: Any, **kwargs) -> None:
                     field=key,
                     old_value=str(old_value),
                     new_value=str(value),
+                    conn=active_conn,
                 )
 
     if not updates:
@@ -127,7 +130,7 @@ def update_memory_record(memory: Any, **kwargs) -> None:
     params.append(memory.id)
 
     query = f"UPDATE memories SET {', '.join(updates)} WHERE id = ?"
-    conn = get_db_connection()
-    conn.execute(query, params)
-    conn.commit()
-    conn.close()
+    active_conn.execute(query, params)
+    if owns_connection:
+        active_conn.commit()
+        active_conn.close()

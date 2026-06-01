@@ -1,40 +1,44 @@
-# Implementation Plan - Phase 7.4
+﻿# Implementation Plan - Phase 8.1 Batch Memory Update Service
 
 ## Scope
-Add focused regression tests that lock the simplified memory interface contract across MCP tool export and default agent-facing payloads for `engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, and `engram_memory_delete`, while preserving existing retrieval/startup behavior that uses internal metadata.
+Implement a transactional, project-scoped `update_many` path for memory updates in service/support layers, reusing existing single-memory validation and preserving all-or-nothing semantics.
 
-## Files
-- tests/test_mcp_server.py
-- tests/test_services_memory.py
-- tests/test_context.py
-- tests/test_memory_retrieval_fts_retriever.py
-- src/engram/mcp/tools/memory_tools.py (read-only unless tests expose a gap)
-- src/engram/mcp/tools/memory_lifecycle_tools.py (read-only unless tests expose a gap)
-- src/engram/services/serializers.py (read-only unless tests expose a gap)
+## Planned Changes
+1. Add batch update validation/resolution helper(s) in `src/engram/services/memory_update_support.py`:
+- Require a non-empty list of update entries.
+- Validate each entry shape includes `memory_ref` and at least one update field.
+- Reject duplicate memory references within the same batch.
+- Resolve all memory references through project scoping (`get_project_memory`) before applying updates.
+- Reuse `validate_memory_updates` for per-entry field/type/scope validation.
+- Return fully validated `(memory_item, resolved_updates)` units for apply phase.
 
-## Planned changes
-1. Extend MCP server/toolset regression coverage to assert the expected simplified memory tool surface remains exported.
-2. Add or update list/get output assertions so default compact responses exclude lifecycle-heavy fields (for example: `level`, `scope`, `always_include`, `superseded_by`) unless explicitly intended.
-3. Add create/update/delete input-path tests that validate simplified inputs and guard against accidental re-expansion of required lifecycle-oriented parameters.
-4. Confirm retrieval/startup regressions remain covered by current tests; add only minimal assertions if a coverage hole is identified.
-5. Keep production code unchanged unless a test reveals a true contract mismatch that must be fixed to satisfy acceptance criteria.
+2. Add service API in `src/engram/services/memory_service.py`:
+- New `update_memories(project_id: str, entries: list[dict[str, JsonValue]]) -> dict[str, JsonValue]` (name may be adjusted to match existing service naming).
+- Perform full prevalidation first; do not mutate during validation.
+- Apply updates in a single DB transaction (`BEGIN`/`COMMIT`, rollback on any exception).
+- Normalize model `ValueError` into `ValidationError` with clear batch context.
+- Return concise success payload with `updated_count` and `updated_ids` (or compact summaries if already established pattern exists).
 
-## Verification
-- Run targeted tests during implementation:
-  - `uv run pytest tests/test_mcp_server.py`
-  - `uv run pytest tests/test_services_memory.py`
-  - `uv run pytest tests/test_context.py`
-  - `uv run pytest tests/test_memory_retrieval_fts_retriever.py`
-- Run workflow verification gate:
-  - `engram_workflow_verify`
+3. Error contract alignment:
+- Reuse existing error codes where practical (`INVALID_MEMORY_UPDATE`, `INVALID_MEMORY_UPDATE_FIELD`, `MEMORY_NOT_FOUND`, etc.).
+- Add specific batch-level codes only if needed for clarity (e.g., empty batch, duplicate refs), defined consistently in service-layer error usage.
 
-## Risks
-- Existing fixtures may include metadata-rich objects; assertions must focus on default agent-facing serialized payloads, not internal model rows.
-- Tool registration tests can become brittle if they overfit ordering instead of set membership.
-- Startup/retrieval regressions may be indirectly affected by serializer-level expectations.
+4. Tests in `tests/test_services_memory.py`:
+- Success path updates multiple rows in one request and returns expected summary.
+- Reject empty batch.
+- Reject duplicate refs.
+- Reject unknown fields.
+- Reject unknown/cross-project ref.
+- Reject invalid payload values (e.g., invalid type/scope/level transition).
+- Atomicity test: mixed valid+invalid entry causes no row updates.
+- Verify single-memory `update_memory` behavior unchanged.
 
-## Done criteria
-- Regression tests cover simplified memory tool export and default list/get/create/update/delete contract behavior.
-- Tests fail if lifecycle-heavy fields leak into default compact agent-facing outputs unexpectedly.
-- Retrieval/startup metadata-dependent behavior remains covered and passing.
-- `engram_workflow_verify` passes with no failures.
+## Validation Steps
+1. Run targeted tests first:
+- `uv run pytest tests/test_services_memory.py -k update`
+2. Run full memory service tests:
+- `uv run pytest tests/test_services_memory.py`
+3. Run workflow verification gate:
+- `engram_workflow_verify`
+4. Finish and commit via workflow tool after successful verification:
+- `engram_workflow_finish_and_commit`

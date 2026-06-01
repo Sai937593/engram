@@ -22,6 +22,43 @@ VALID_MEMORY_UPDATE_FIELDS = {
 }
 
 
+def resolve_batch_memory_updates(
+    project_id: str, entries: list[dict[str, JsonValue]]
+) -> list[tuple[Memory, dict[str, JsonValue]]]:
+    """Prevalidate and resolve a batch of memory updates before applying any writes."""
+    if not entries:
+        raise ValidationError(
+            code="INVALID_MEMORY_BATCH_UPDATE",
+            message="Batch memory update requires at least one entry.",
+            details={"field": "entries"},
+        )
+
+    resolved: list[tuple[Memory, dict[str, JsonValue]]] = []
+    seen_refs: set[str] = set()
+    for index, entry in enumerate(entries):
+        raw_ref = entry.get("memory_ref")
+        memory_ref = str(raw_ref).strip() if raw_ref is not None else ""
+        if not memory_ref:
+            raise ValidationError(
+                code="INVALID_MEMORY_BATCH_ENTRY",
+                message="Batch entry is missing a valid memory reference.",
+                details={"index": index, "field": "memory_ref"},
+            )
+        if memory_ref in seen_refs:
+            raise ValidationError(
+                code="DUPLICATE_MEMORY_REFERENCE",
+                message="Batch memory update includes duplicate memory reference.",
+                details={"index": index, "memory_ref": memory_ref},
+            )
+        seen_refs.add(memory_ref)
+        updates = {key: value for key, value in entry.items() if key != "memory_ref"}
+        validated_updates = validate_memory_updates(updates)
+        memory_item = get_project_memory(project_id, memory_ref)
+        resolved.append((memory_item, validated_updates))
+
+    return resolved
+
+
 def get_project_memory(project_id: str, memory_ref: str) -> Memory:
     """Resolve a memory reference and enforce project scoping."""
     candidate = memory_ref.strip()
