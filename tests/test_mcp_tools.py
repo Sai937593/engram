@@ -1431,6 +1431,70 @@ def test_mcp_phase_complete_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res["phase"]["status"] == "done"
 
 
+def test_mcp_phase_complete_allows_normal_memory_crud_review_flow(tmp_db, monkeypatch) -> None:
+    """Regression: phase completion path can use normal memory CRUD tools without a special gate."""
+    cwd = os.path.abspath("repo/bound-mcp-phase-memory-crud")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-phase-memory-crud",
+        name="MCP Phase Memory CRUD Project",
+        summary="Regression flow for phase review with normal memory CRUD",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(
+        project_id=project.id,
+        id="ph-memory-1",
+        title="Phase Memory Review",
+        status="active",
+    )
+    Task.create(
+        project_id=project.id,
+        id="task-memory-1",
+        title="Done task for phase completion",
+        phase_id=phase.id,
+        status="done",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    create_memory = server.tools["engram_memory_create"]
+    update_memory = server.tools["engram_memory_update"]
+    delete_memory = server.tools["engram_memory_delete"]
+    complete_phase = server.tools["engram_phase_complete"]
+
+    created = yaml.safe_load(
+        create_memory(
+            title="Phase review note",
+            content="Captured memory evidence before phase completion.",
+            type="note",
+        )
+    )
+    assert created["ok"] is True
+    memory_id = created["id"]
+
+    updated = yaml.safe_load(
+        update_memory(
+            memory_ref=memory_id,
+            title="Phase review note updated",
+            content="Updated phase review evidence before completion.",
+        )
+    )
+    assert updated["ok"] is True
+    assert updated["memory"]["id"] == memory_id
+
+    deleted = yaml.safe_load(delete_memory(memory_ref=memory_id, force=True))
+    assert deleted == {"ok": True, "id": memory_id, "deleted": True}
+
+    completed = yaml.safe_load(complete_phase(phase_ref=phase.id))
+    assert completed["ok"] is True
+    assert completed["phase"]["status"] == "done"
+    assert "engram_phase_memory_review" not in server.tools
+
+
 def test_mcp_phase_lifecycle_maintenance_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     """Verify engram_phase_update/cancel/archive tools delegate lifecycle behavior safely."""
     cwd = os.path.abspath("repo/bound-mcp-phase-maintenance")
