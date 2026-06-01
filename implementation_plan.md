@@ -1,44 +1,35 @@
-# Implementation Plan - Add Primary finish_and_commit MCP Tool (Task 06e0af06)
+# Implementation Plan - Update finish formatting and workflow-facing docs (Task 1eefdbb1)
 
 ## Scope
-Expose `engram_workflow_finish_and_commit` as the preferred MCP finish tool while keeping `engram_workflow_finish` working during transition. Update tool-facing guidance text to prefer the new name. Keep workflow start/verify behavior unchanged and avoid adding staging behavior in the tool layer.
+Update workflow formatter strings and nearest workflow-facing docs so guidance consistently prefers `engram_workflow_finish_and_commit`, states that verify stages changes, and states that finish-and-commit only commits/pushes already-staged work. Keep existing memory-review gate guidance intact.
 
 ## Planned Changes
-1. Update workflow tool registration in `src/engram/mcp/tools/workflow_tools.py`
-- Register a new MCP handler: `engram_workflow_finish_and_commit(commit_type: str | None = None)`.
-- Keep existing finish execution path by delegating to `engram.mcp.tools.finish_workflow(...)` with unchanged arguments.
-- Reuse the same success and blocked formatting behavior currently used by `engram_workflow_finish`.
-- Keep `engram_workflow_finish` as a deprecated wrapper/alias that calls the same implementation.
+1. Update workflow formatter text in `src/engram/services/workflow_formatter.py`
+- Replace finish references that currently point to `engram_workflow_finish` with `engram_workflow_finish_and_commit` as the primary action.
+- Keep transitional wording if needed, but make the old name clearly secondary.
+- Preserve memory-review gate language and outcomes.
 
-2. Centralize finish handler behavior to avoid duplication
-- Extract shared async finish logic into an internal helper in `workflow_tools.py` (or equivalent minimal private function) so both tool names stay behaviorally identical.
-- Ensure blocked guidance and success next-actions prefer `engram_workflow_finish_and_commit`.
+2. Confirm verify success guidance in `src/engram/mcp/tools/workflow_tools.py`
+- Ensure verify success next-action text points to `engram_workflow_finish_and_commit`.
+- Do not change verify behavior or staging semantics.
 
-3. Update finish blocked helper guidance in `src/engram/mcp/tools/workflow_tool_helpers.py`
-- Change next-action strings to instruct:
-  - rerun verify, then call `engram_workflow_finish_and_commit`
-  - record `memory_review_outcome`, then call `engram_workflow_finish_and_commit`
-  - resolve staging/worktree issues, then call `engram_workflow_finish_and_commit`
+3. Update workflow-facing docs only (no broad cleanup)
+- `src/engram/USER_MANUAL.md`
+- `docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md`
+- `docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_MVP_SIMPLIFICATION.md`
+- Remove/adjust nearby statements that imply finish performs staging or reruns validation.
+- Keep mentions of `engram_workflow_finish` only as deprecated/transitional where necessary.
 
-4. Update exports/wiring in `src/engram/mcp/tools/__init__.py` only if needed
-- Preserve existing service wiring and avoid adding tool-layer staging logic.
-- Keep changes minimal and limited to naming/wiring compatibility.
-
-5. Update tests
-- `tests/test_mcp_tools.py`
-  - assert both `engram_workflow_finish_and_commit` and `engram_workflow_finish` are registered.
-  - validate new tool name returns expected success and blocked markdown behavior.
-  - update expected next-action strings to prefer `engram_workflow_finish_and_commit`.
-- `tests/test_mcp_server.py`
-  - adjust registration expectations if they assert exact tool set.
+4. Keep changes tightly scoped
+- No edits outside task-relevant workflow text and examples.
+- No behavior changes beyond wording alignment.
 
 ## Verification
-- Run focused tests:
-  - `uv run pytest tests/test_mcp_tools.py tests/test_mcp_server.py`
-- Then run workflow verify gate:
-  - `engram_workflow_verify`
+- Run required task verification command:
+  - `uv run pytest tests/test_mcp_tools.py tests/test_workflow_redesign_phase_15_end_to_end.py -q`
+- Run `engram_workflow_verify` and address any failures.
 
 ## Out Of Scope
-- Removing `engram_workflow_finish` entirely.
-- Changing workflow start or verify semantics.
-- Service-layer refactors unrelated to MCP tool registration/guidance.
+- Full historical doc cleanup across the repository.
+- Workflow design changes beyond this wording alignment.
+- Removing the memory-review gate before Phase 6.

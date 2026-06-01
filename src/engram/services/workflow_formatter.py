@@ -78,7 +78,7 @@ def format_work_order(
         "- Pre-coding: Create `implementation_plan.md` and await user approval before writing code."
     )
     lines.append(
-        "- Pre-commit: Rerun unit tests and ensure zero failures before invoking `engram_workflow_finish`."
+        "- Pre-commit: Rerun unit tests and ensure zero failures before invoking `engram_workflow_finish_and_commit`."
     )
     lines.append("")
 

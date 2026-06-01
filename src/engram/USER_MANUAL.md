@@ -63,7 +63,7 @@ Refer to the table below to transition from the old CLI commands to their MCP se
 | `engram context startup` | **REMOVED** | Read resource `engram://startup` |
 | `engram context task <id>` | **REMOVED** | Read resource `engram://task/{task_id}/context` |
 | `engram start` | **REMOVED** | Call tool `engram_workflow_start` |
-| `engram finish` | **REMOVED** | Call tool `engram_workflow_finish` |
+| `engram finish` | **REMOVED** | Call tool `engram_workflow_finish_and_commit` (preferred) or transitional alias `engram_workflow_finish` |
 | `engram task list` | **REMOVED** | Call tool `engram_task_list` |
 | `engram task get` | **REMOVED** | Call tool `engram_task_get` |
 | `engram task next` | **REMOVED** | Call tool `engram_task_next` |
@@ -93,7 +93,9 @@ The MCP server exposes 17 tools for full interactive capabilities:
 
 *   **Workflow Control:**
     *   `engram_workflow_start`: Starts the session workflow. Claims next actionable task, updates branch, and returns startup context.
-    *   `engram_workflow_finish`: Stage changes, execute validation tests, confirm Conventional Commit, commit, and mark task done.
+    *   `engram_workflow_verify`: Runs local verification checks and stages changes on success.
+    *   `engram_workflow_finish_and_commit`: Commits and pushes already-staged verified changes, then marks the task done.
+    *   `engram_workflow_finish`: Deprecated transitional alias for `engram_workflow_finish_and_commit`.
 *   **Task Management:**
     *   `engram_task_list`: Filters and lists project tasks by status or phase.
     *   `engram_task_get`: Retrieves full details of a specific task.
@@ -147,7 +149,7 @@ During the coding phase, the agent captures critical software engineering decisi
 
 ### Step 5: Verification & Session Completion
 When the implementation is complete and verified:
-*   The agent calls `engram_workflow_finish` to stage changes, execute validation tests, confirm the Conventional Commit message, and push the branch.
+*   The agent calls `engram_workflow_finish_and_commit` to commit and push already-staged verified changes.
 
 ---
 
