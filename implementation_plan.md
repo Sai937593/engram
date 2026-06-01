@@ -1,27 +1,25 @@
-# Implementation Plan - Task eb75ad51
+# Implementation Plan - Task cc2040e7
 
 ## Scope
-Run a final repo-wide documentation audit for phase-review regressions and resolve any remaining active guidance that conflicts with the simplified workflow.
+Remove mandatory Git-hook language from active workflow guidance so normal task execution is clearly based on `engram_workflow_verify`, while keeping CI described as an independent check.
 
-## Findings from initial audit
-- `AGENTS.md` and `agent-files/root-agents-template.md` contain valid guardrails forbidding raw SQLite / direct `.engram/memory.db` inspection.
-- `docs/skills/memory-review.md` and `agent-files/skills/engram-phase-review-template.md` correctly require normal memory CRUD tools and explicitly forbid any special phase-memory-review start tool.
-- Matches in `docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_MVP_SIMPLIFICATION.md` and `docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md` are historical planning/handoff context, not active operational guidance.
-- `docs/USER_MANUAL.md` references `.engram/memory.db` as product architecture/storage, not as an instruction for agents to query it directly.
+## Files in scope
+- `agent-files/skills/engram-start-task-template.md`
+- `README.md`
+- `docs/USER_MANUAL.md`
+- `docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md` (historical check only; edit only if active wording is ambiguous)
 
 ## Planned edits
-1. Perform one more targeted scan for nearby wording variants (e.g., `phase_memory_review_start`, `memory review gate`, `draft/ready/todo` references tied to task finish) across `docs/`, `agent-files/`, and root `AGENTS.md`.
-2. If any active contradictory wording exists, apply minimal text edits to align with:
-   - phase-level memory review only,
-   - no special phase-review startup tool,
-   - no direct raw SQLite guidance for agent operations.
-3. Preserve historical docs as historical; avoid rewriting implementation history unless needed for clarity labels.
+1. Update the start-task template text that currently describes verify as running "hook scripts" so it instead describes repo-local quality checks (format, lint, tests) without requiring Git hooks.
+2. Sweep `README.md` and `docs/USER_MANUAL.md` for active workflow wording that implies pre-commit/pre-push is required; replace with wording that:
+   - defines `engram_workflow_verify` as the local quality gate, and
+   - keeps hook configs optional developer convenience.
+3. Leave historical implementation docs as historical unless a line reads as active instruction; if needed, add concise clarifying language rather than broad rewrites.
 
 ## Verification
-- Run the required task grep:
-  - `rg -n "raw SQLite|memory\.db|special phase memory review|phase memory review start|per-task memory review" docs agent-files AGENTS.md`
-- Run one supplemental grep for adjacent legacy phrasing to confirm no active regressions remain.
-- Then run `engram_workflow_verify` as required workflow verification before finish.
+1. Run targeted grep checks for hook-dependent wording in active docs.
+2. Run `engram_workflow_verify` to execute required local checks and auto-stage changes on success.
+3. If verification passes, run `engram_workflow_finish_and_commit` to complete the task.
 
 ## Deliverable
-A concise repo-audit outcome with any minimal doc fixes needed, verified via workflow checks.
+Active docs and templates no longer require Git hooks for normal Engram task execution, and verification/finish workflow remains aligned with MVP behavior.
