@@ -475,6 +475,91 @@ def test_mcp_memory_lifecycle_batch_tools_delegate_and_validate(tmp_db, monkeypa
     assert invalid_delete["details"]["field"] == "memory_refs"
 
 
+def test_mcp_memory_lifecycle_batch_tools_reject_missing_and_invalid_payloads(
+    tmp_db, monkeypatch
+) -> None:
+    """Verify batch MCP tools fail clearly on missing/invalid inputs without partial mutation."""
+    cwd = os.path.abspath("repo/bound-mcp-memory-batch-invalid")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+    project = Project.create(
+        id="proj-tool-memory-batch-invalid",
+        name="MCP Memory Batch Invalid Project",
+        summary="Batch invalid coverage",
+        repo_paths=[cwd],
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-batch-invalid-1",
+        type="note",
+        title="Before one",
+        content="Before one content",
+        tags=[],
+        level="L2",
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-batch-invalid-2",
+        type="lesson",
+        title="Before two",
+        content="Before two content",
+        tags=[],
+        level="L1",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    update_many_tool = server.tools["engram_memory_update_many"]
+    delete_many_tool = server.tools["engram_memory_delete_many"]
+
+    missing_entries = yaml.safe_load(update_many_tool(entries=None))
+    assert missing_entries["ok"] is False
+    assert missing_entries["error"] == "VALIDATION_ERROR"
+    assert missing_entries["details"]["field"] == "entries"
+
+    missing_memory_refs = yaml.safe_load(delete_many_tool(memory_refs=None))
+    assert missing_memory_refs["ok"] is False
+    assert missing_memory_refs["error"] == "VALIDATION_ERROR"
+    assert missing_memory_refs["details"]["field"] == "memory_refs"
+
+    invalid_entry = yaml.safe_load(update_many_tool(entries=[{"title": "No ref"}]))
+    assert invalid_entry["ok"] is False
+    assert invalid_entry["error"] == "INVALID_MEMORY_BATCH_ENTRY"
+
+    before_first = Memory.get("mem-batch-invalid-1")
+    before_second = Memory.get("mem-batch-invalid-2")
+    assert before_first is not None and before_second is not None
+    assert before_first.title == "Before one"
+    assert before_second.title == "Before two"
+
+    atomic_failure = yaml.safe_load(
+        update_many_tool(
+            entries=[
+                {"memory_ref": "mem-batch-invalid-1", "title": "Should not persist"},
+                {"memory_ref": "mem-batch-invalid-2", "scope": "task", "level": "L1"},
+            ]
+        )
+    )
+    assert atomic_failure["ok"] is False
+    assert atomic_failure["error"] == "INVALID_MEMORY_UPDATE"
+
+    after_first = Memory.get("mem-batch-invalid-1")
+    after_second = Memory.get("mem-batch-invalid-2")
+    assert after_first is not None and after_second is not None
+    assert after_first.title == "Before one"
+    assert after_second.scope == "project"
+    assert after_second.level == "L1"
+
+    delete_atomic_failure = yaml.safe_load(
+        delete_many_tool(memory_refs=["mem-batch-invalid-1", "missing000"])
+    )
+    assert delete_atomic_failure["ok"] is False
+    assert delete_atomic_failure["error"] == "MEMORY_NOT_FOUND"
+    assert Memory.get("mem-batch-invalid-1") is not None
+    assert Memory.get("mem-batch-invalid-2") is not None
+
+
 def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) -> None:
     """Verify engram_memory_search returns PROJECT_NOT_BOUND for unbound cwd."""
     cwd = os.path.abspath("repo/unbound-mcp-tool")

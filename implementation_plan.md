@@ -1,41 +1,25 @@
-# Implementation Plan - Phase 11.3 (f0cef447)
+# Implementation Plan - Phase 11.4 (ee966963)
 
 ## Scope
-Harden finish-boundary tests for `engram_workflow_finish_and_commit` without changing production behavior unless a concrete contract gap is exposed by tests.
+Tighten tests for the simplified agent-facing memory interface, focusing on CRUD via service/MCP paths and explicit batch validation behavior for `engram_memory_update_many` and `engram_memory_delete_many`.
 
-Primary files:
-- `tests/test_services_workflow_finish.py`
-- `tests/test_workflow_redesign_phase_5_regressions.py`
-- `tests/test_mcp_tools.py`
+## Findings from current state
+- `tests/test_services_memory.py` already covers service-level CRUD plus batch update/delete atomicity and validation.
+- MCP batch tool wrappers in `src/engram/mcp/tools/memory_lifecycle_tools.py` add argument-level validation (`entries`/`memory_refs` required) and response shaping that is not yet directly asserted by dedicated tool tests.
 
-No-touch for this task unless strictly required:
-- `planning/`
-- `workflow/`
-- `.github/`
+## Planned changes
+1. Inspect existing MCP tool tests to identify coverage gaps for:
+   - `engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`
+   - `engram_memory_update_many`, `engram_memory_delete_many` required-arg and invalid-payload paths.
+2. Add focused tests (likely in MCP tool test module) to validate:
+   - Missing `entries` / `memory_refs` return deterministic validation errors.
+   - Invalid batch payloads fail clearly.
+   - Batch operations remain all-or-nothing for invalid inputs through the MCP entrypoints.
+3. Keep assertions aligned with compact agent-facing output contracts (`ok`, summary counts/ids, concise error codes/messages/details).
+4. Run targeted unit tests for modified files.
+5. Run `engram_workflow_verify` to execute repo-local gates and stage changes.
+6. Run `engram_workflow_finish_and_commit` to finalize task.
 
-## Target Behaviors
-1. Verification gate
-- Finish blocks when the active task is not verified (`TASK_NOT_VERIFIED`).
-
-2. Worktree cleanliness gate
-- Finish blocks when unstaged changes exist (`WORKTREE_HAS_UNSTAGED_CHANGES`).
-- Finish blocks when untracked files exist (`WORKTREE_HAS_UNTRACKED_FILES`).
-
-3. Boundary ownership
-- Finish must not run staging (`git add -A`) and only commits/pushes pre-staged work.
-
-4. Completion ordering
-- Task is marked `done` only after commit/push succeeds.
-
-## Planned Edits
-1. Audit existing finish tests for explicit assertions of each acceptance item.
-2. Add or tighten only missing assertions/cases in the three target test files.
-3. Prefer service-level assertions for git-call ordering and MCP-level assertions for user-facing blocked behavior.
-4. Keep edits localized; avoid unrelated refactors or output-format churn.
-
-## Verification Plan
-1. Run required task verification command:
-- `uv run pytest tests/test_services_workflow_finish.py tests/test_workflow_redesign_phase_5_regressions.py tests/test_mcp_tools.py -q -k "finish and commit"`
-2. If failures appear, fix only finish-boundary regressions and rerun the same command until green.
-3. After tests pass, run `engram_workflow_verify`.
-4. If verify succeeds, run `engram_workflow_finish_and_commit`.
+## Non-goals
+- No behavior changes to memory service logic unless tests reveal a real defect.
+- No lifecycle semantics expansion beyond simplified CRUD/batch scope.
