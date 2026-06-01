@@ -2,56 +2,53 @@
 
 Use this skill when the user asks to break a phase, plan, document, or feature into Engram tasks.
 
-This skill is written for the current redesign branch state. Do not call future simplified tools such as `engram_task_create_many` until they exist.
-
 ## Goal
 
-Create executable Engram tasks that the current workflow can start.
+Create executable Engram tasks that the simplified MVP workflow can start.
 
-## Current available tools
+## Available Tools
 
-Use current phase/task tools such as:
+Use phase and task tools such as:
 
 - `engram_phase_list`
 - `engram_phase_create`
 - `engram_phase_start`
 - `engram_phase_update`
 - `engram_task_create`
+- `engram_task_create_many` (for batch creation when available)
 - `engram_task_list`
 - `engram_task_get`
 - `engram_task_update`
 
-Tool availability may vary by branch. If a listed tool is unavailable, use the closest existing Engram MCP tool rather than raw database access.
+Do not use raw database access or write direct SQLite queries.
 
-## Decomposition rules
+## Decomposition Rules
 
 Create tasks that are:
 
-- small enough for one focused implementation session
-- independently verifiable
-- ordered by dependency
-- explicit about files or search areas
-- clear about acceptance criteria
-- free of vague objectives like "improve workflow" without concrete behavior
+- Small enough for one focused implementation session.
+- Independently verifiable.
+- Ordered by dependency.
+- Explicit about files or search areas.
+- Clear about acceptance criteria.
+- Free of vague objectives like "improve workflow" without concrete behavior.
 
-## Current task creation shape
+## Task Creation Shape
 
-For the current redesign branch, create executable tasks using current fields.
+Create executable tasks using the simplified MVP fields. Required fields include:
 
-Prefer:
+- `title`: Short, action-oriented name.
+- `objective`: Concise description of what the task accomplishes.
+- `acceptance`: Clear criteria that must pass for the task to be done.
+- `phase_id`: The ID of the parent phase.
+- `verification`: Explicit verification instructions or commands.
+- `relevant_files` or `search_hints`: Target files to modify or areas to inspect.
 
-- `title`
-- `description`
-- `acceptance`
-- `relevant_files`
-- `phase_id`
-- `status = "ready"` when the task is intended to be executable
-
-The current readiness validation expects meaningful `description`, `acceptance`, and `relevant_files`.
+Newly created tasks start in the `open` status with `is_verified = false`.
 
 Do not create weak placeholder tasks. If information is missing, either infer from the phase document or stop and ask the user.
 
-## Task quality checklist
+## Task Quality Checklist
 
 Each task should answer:
 
@@ -61,16 +58,14 @@ Each task should answer:
 - How will the task be verified?
 - Does it depend on another task?
 
-If the current schema does not have a dedicated field for some of this information, include it in `description` or `acceptance`.
-
-## Output style
+## Output Style
 
 After creating tasks, summarize:
 
-- phase created or used
-- number of tasks created
-- task order
-- any assumptions
-- any tasks intentionally not created
+- Phase created or used.
+- Number of tasks created.
+- Task order and dependency graph.
+- Any assumptions or risks.
+- Any tasks intentionally left out of scope.
 
 Do not start implementation after decomposition unless the user explicitly asks.
