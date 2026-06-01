@@ -506,6 +506,7 @@ def test_register_tools_registers_expected_fastmcp_tools() -> None:
         "engram_task_list",
         "engram_task_get",
         "engram_task_next",
+        "engram_task_create_many",
         "engram_memory_search",
         "engram_memory_get",
         "engram_memory_update",
