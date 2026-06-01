@@ -5,9 +5,12 @@ from __future__ import annotations
 from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.services.errors import EngramServiceError, JsonValue, ValidationError
+from engram.services.memory_update_support import (
+    VALID_MEMORY_TYPES,
+    get_project_memory,
+    validate_memory_updates,
+)
 from engram.services.serializers import memory_to_dict
-
-VALID_MEMORY_TYPES = {"note", "lesson", "decision", "constraint", "snippet"}
 
 
 def _validate_limit(limit: int) -> int:
@@ -168,4 +171,25 @@ def create_memory(
         id=id,
         supersedes=supersedes,
     )
+    return memory_to_dict(memory_item)
+
+
+def get_memory(project_id: str, memory_ref: str) -> dict[str, JsonValue]:
+    """Resolve a project-scoped memory reference and return a JSON-safe DTO."""
+    memory_item = get_project_memory(project_id, memory_ref)
+    return memory_to_dict(memory_item)
+
+
+def update_memory(project_id: str, memory_ref: str, **updates: JsonValue) -> dict[str, JsonValue]:
+    """Update writable memory fields and return the updated JSON-safe DTO."""
+    memory_item = get_project_memory(project_id, memory_ref)
+    resolved = validate_memory_updates(updates)
+    try:
+        memory_item.update(**resolved)
+    except ValueError as exc:
+        raise ValidationError(
+            code="INVALID_MEMORY_UPDATE",
+            message="Memory update failed validation.",
+            details={"reason": str(exc)},
+        ) from exc
     return memory_to_dict(memory_item)

@@ -15,9 +15,11 @@ from engram.models.project import Project
 from engram.services.errors import EngramServiceError, ValidationError
 from engram.services.memory_service import (
     create_memory,
+    get_memory,
     get_recent_memories,
     list_memories,
     search_memories,
+    update_memory,
 )
 
 
@@ -444,6 +446,117 @@ def test_create_memory_task_scope_with_level_raises_validation_error(tmp_db):
             level="L1",
         )
     assert exc.value.code == "INVALID_MEMORY_LEVEL"
+
+
+def test_get_memory_returns_project_scoped_memory_dto(tmp_db):
+    project = _create_project("proj-get-a", "/tmp/proj-get-a")
+    dto = create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Fetch me",
+        content="Project scoped retrieval.",
+        level="L2",
+        id="geta0001",
+    )
+
+    fetched = get_memory(project.id, "geta0001")
+
+    assert fetched["id"] == dto["id"]
+    assert fetched["project_id"] == project.id
+    assert fetched["title"] == "Fetch me"
+
+
+def test_get_memory_rejects_foreign_project_lookup(tmp_db):
+    project_a = _create_project("proj-get-b1", "/tmp/proj-get-b1")
+    project_b = _create_project("proj-get-b2", "/tmp/proj-get-b2")
+    create_memory(
+        project_id=project_a.id,
+        type="lesson",
+        title="Private memory",
+        content="Only project A should resolve this.",
+        level="L2",
+        id="getb0001",
+    )
+
+    with pytest.raises(EngramServiceError) as raised:
+        get_memory(project_b.id, "getb0001")
+
+    error = raised.value
+    assert error.code == "MEMORY_NOT_FOUND"
+    assert error.details["project_id"] == project_b.id
+
+
+def test_update_memory_updates_writable_fields_and_returns_dto(tmp_db):
+    project = _create_project("proj-upd-a", "/tmp/proj-upd-a")
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="Old title",
+        content="Old content",
+        scope="project",
+        level="L2",
+        id="upda0001",
+    )
+
+    updated = update_memory(
+        project.id,
+        "upda0001",
+        title="New title",
+        content="New content",
+        tags=["alpha", "beta"],
+        always_include=True,
+    )
+
+    assert updated["title"] == "New title"
+    assert updated["content"] == "New content"
+    assert updated["tags"] == ["alpha", "beta"]
+    assert updated["always_include"] is True
+
+    fetched = Memory.get("upda0001")
+    assert fetched is not None
+    assert fetched.title == "New title"
+    assert fetched.content == "New content"
+    assert fetched.tags == ["alpha", "beta"]
+    assert fetched.always_include is True
+
+
+def test_update_memory_rejects_unknown_fields(tmp_db):
+    project = _create_project("proj-upd-b", "/tmp/proj-upd-b")
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Title",
+        content="Content",
+        level="L2",
+        id="updb0001",
+    )
+
+    with pytest.raises(ValidationError) as raised:
+        update_memory(project.id, "updb0001", made_up_field="nope")
+
+    error = raised.value
+    assert error.code == "INVALID_MEMORY_UPDATE_FIELD"
+    assert error.details["fields"] == ["made_up_field"]
+
+
+def test_update_memory_rejects_invalid_scope_level_transition(tmp_db):
+    project = _create_project("proj-upd-c", "/tmp/proj-upd-c")
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Title",
+        content="Content",
+        scope="project",
+        level="L1",
+        id="updc0001",
+    )
+
+    with pytest.raises(ValidationError) as raised:
+        update_memory(project.id, "updc0001", scope="task", level="L2")
+
+    error = raised.value
+    assert error.code == "INVALID_MEMORY_UPDATE"
+    assert "Task-scope memories must not define a level." in str(error.details["reason"])
 
 
 @pytest.mark.slow
