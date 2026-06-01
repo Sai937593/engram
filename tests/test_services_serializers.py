@@ -87,6 +87,7 @@ def test_task_to_dict_shape_lists_optional_values_and_effective_status(monkeypat
         "verification": None,
         "search_hints": [],
         "memory_review_outcome": None,
+        "is_verified": False,
     }
     _assert_json_safe(payload)
 

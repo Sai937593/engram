@@ -36,6 +36,7 @@ class Task:
         memory_review_outcome=None,
         verification=None,
         search_hints=None,
+        is_verified=False,
     ):
         self.id = id
         self.project_id = project_id
@@ -53,6 +54,7 @@ class Task:
         self.memory_review_outcome = memory_review_outcome
         self.verification = verification
         self.search_hints = normalize_search_hints(search_hints)
+        self.is_verified = bool(is_verified)
 
     @property
     def objective(self) -> str | None:
@@ -82,6 +84,7 @@ class Task:
         verification=None,
         search_hints=None,
         objective=None,
+        is_verified=False,
     ):
         if description is None:
             description = objective
@@ -91,8 +94,8 @@ class Task:
         conn = get_db_connection()
         conn.execute(
             "INSERT INTO tasks (id, project_id, title, description, status, priority, "
-            "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome, verification, search_hints) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome, verification, search_hints, is_verified) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 id,
                 project_id,
@@ -109,6 +112,7 @@ class Task:
                 memory_review_outcome,
                 verification,
                 serialize_search_hints(normalize_search_hints(search_hints)),
+                1 if is_verified else 0,
             ),
         )
         conn.commit()
@@ -132,6 +136,7 @@ class Task:
             memory_review_outcome,
             verification,
             search_hints,
+            is_verified,
         ]
         return cls(*args)
 
@@ -149,6 +154,7 @@ class Task:
             if "search_hints" in row.keys()
             else []
         )
+        is_verified = bool(row["is_verified"]) if "is_verified" in row.keys() else False
         args = [
             row["id"],
             row["project_id"],
@@ -166,12 +172,19 @@ class Task:
             mro,
             ver,
             sh,
+            is_verified,
         ]
         return cls(*args)
 
     def update(self, **kwargs):
         if "objective" in kwargs:
             kwargs["description"] = kwargs.pop("objective")
+
+        # Material fields that affect execution or specifications make previous verification stale
+        material_fields = {"title", "description", "acceptance", "relevant_files", "verification", "search_hints"}
+        if any(f in kwargs for f in material_fields):
+            kwargs["is_verified"] = False
+
         updates, params = [], []
         for key, val in kwargs.items():
             if not hasattr(self, key):
@@ -195,7 +208,11 @@ class Task:
                     else (
                         serialize_search_hints(new)
                         if key == "search_hints"
-                        else (val if not isinstance(val, list) else ",".join(val))
+                        else (
+                            int(new) if isinstance(new, bool) else (
+                                val if not isinstance(val, list) else ",".join(val)
+                            )
+                        )
                     )
                 )
                 params.append(p_val)

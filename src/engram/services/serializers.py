@@ -116,6 +116,7 @@ def task_to_dict(task: Task) -> dict[str, JsonValue]:
         "verification": _none_if_blank(task.verification),
         "search_hints": _string_list(task.search_hints),
         "memory_review_outcome": _none_if_blank(task.memory_review_outcome),
+        "is_verified": bool(task.is_verified),
     }
 
 

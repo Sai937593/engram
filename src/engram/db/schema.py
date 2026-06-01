@@ -38,6 +38,7 @@ def create_tasks_table(cursor: sqlite3.Cursor) -> None:
         memory_review_outcome TEXT,
         verification TEXT,
         search_hints TEXT,
+        is_verified BOOLEAN DEFAULT 0,
         created_at  TEXT DEFAULT (datetime('now')),
         updated_at  TEXT DEFAULT (datetime('now'))
     )

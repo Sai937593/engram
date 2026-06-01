@@ -920,3 +920,111 @@ def test_strict_executable_task_validation_missing_and_weak_fields(tmp_db):
     assert "relevant_files" in weak
 
 
+def test_create_task_starts_unverified(tmp_db):
+    """New tasks default to is_verified = False."""
+    project = _create_project("proj-verify-create", "/tmp/proj-verify-create")
+    dto = create_task(
+        project_id=project.id,
+        title="Valid executable task title here.",
+        description="Detailed description for immediate execution.",
+        acceptance="Acceptance criteria is concrete.",
+        phase_id="ph-12345",
+        verification="Run pytest tests test services task.",
+        relevant_files=["tests/test_services_task.py"],
+    )
+    assert dto["is_verified"] is False
+
+    # Check persistence
+    persisted = get_task(project.id, dto["id"])
+    assert persisted["is_verified"] is False
+
+
+def test_update_task_verification_persists(tmp_db):
+    """Setting is_verified to True explicitly works and persists."""
+    project = _create_project("proj-verify-update", "/tmp/proj-verify-update")
+    dto = create_task(
+        project_id=project.id,
+        title="Valid executable task title here.",
+        description="Detailed description for immediate execution.",
+        acceptance="Acceptance criteria is concrete.",
+        phase_id="ph-12345",
+        verification="Run pytest tests test services task.",
+        relevant_files=["tests/test_services_task.py"],
+    )
+    assert dto["is_verified"] is False
+
+    updated = update_task(project.id, dto["id"], is_verified=True)
+    assert updated["is_verified"] is True
+
+    persisted = get_task(project.id, dto["id"])
+    assert persisted["is_verified"] is True
+
+
+def test_update_task_material_changes_reset_verification(tmp_db):
+    """Modifying material fields resets is_verified to False."""
+    project = _create_project("proj-verify-reset", "/tmp/proj-verify-reset")
+    dto = create_task(
+        project_id=project.id,
+        title="Valid executable task title here.",
+        description="Detailed description for immediate execution.",
+        acceptance="Acceptance criteria is concrete.",
+        phase_id="ph-12345",
+        verification="Run pytest tests test services task.",
+        relevant_files=["tests/test_services_task.py"],
+    )
+
+    material_fields_with_updates = [
+        ("title", "New material title that is valid"),
+        ("description", "New description that is very detailed"),
+        ("acceptance", "New acceptance criteria that is concrete"),
+        ("verification", "New verification instruction here"),
+        ("relevant_files", ["tests/test_db.py"]),
+    ]
+
+    for field, new_val in material_fields_with_updates:
+        # Mark as verified first
+        update_task(project.id, dto["id"], is_verified=True)
+        persisted = get_task(project.id, dto["id"])
+        assert persisted["is_verified"] is True
+
+        # Perform material update
+        updated = update_task(project.id, dto["id"], **{field: new_val})
+        assert updated["is_verified"] is False
+        persisted = get_task(project.id, dto["id"])
+        assert persisted["is_verified"] is False
+
+
+def test_update_task_non_material_changes_preserve_verification(tmp_db):
+    """Modifying non-material fields preserves is_verified state."""
+    project = _create_project("proj-verify-preserve", "/tmp/proj-verify-preserve")
+    dto = create_task(
+        project_id=project.id,
+        title="Valid executable task title here.",
+        description="Detailed description for immediate execution.",
+        acceptance="Acceptance criteria is concrete.",
+        phase_id="ph-12345",
+        verification="Run pytest tests test services task.",
+        relevant_files=["tests/test_services_task.py"],
+    )
+
+    non_material_fields_with_updates = [
+        ("status", "in_progress"),
+        ("priority", "high"),
+        ("tags", ["new-tag"]),
+        ("memory_review_outcome", "no_change"),
+    ]
+
+    for field, new_val in non_material_fields_with_updates:
+        # Mark as verified first
+        update_task(project.id, dto["id"], is_verified=True)
+        persisted = get_task(project.id, dto["id"])
+        assert persisted["is_verified"] is True
+
+        # Perform non-material update
+        updated = update_task(project.id, dto["id"], **{field: new_val})
+        assert updated["is_verified"] is True
+        persisted = get_task(project.id, dto["id"])
+        assert persisted["is_verified"] is True
+
+
+

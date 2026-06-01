@@ -30,6 +30,7 @@ VALID_TASK_UPDATE_FIELDS = {
     "verification",
     "search_hints",
     "memory_review_outcome",
+    "is_verified",
 }
 
 
