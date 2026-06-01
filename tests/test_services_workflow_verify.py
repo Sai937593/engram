@@ -229,3 +229,31 @@ def test_verify_workflow_requires_in_progress_task(tmp_db: Any) -> None:
         verify_workflow(project.id, "/tmp/proj-verify-none")
 
     assert exc_info.value.code == "NO_TASK_IN_PROGRESS"
+
+
+def test_verify_workflow_failure_resets_previously_verified_task(
+    tmp_db: Any, tmp_path: Any
+) -> None:
+    project = Project.create(
+        id="proj-verify-reset-fail",
+        name="Verify Reset Fail Project",
+        summary="Service verify reset fail",
+        repo_paths=[str(tmp_path)],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="task-verify-reset-fail",
+        title="Run verification",
+        status="in-progress",
+        is_verified=True,
+    )
+
+    responses = [SimpleNamespace(returncode=1, stdout="bad", stderr="")]
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    with patch("engram.services.workflow_verify_service.subprocess.run", side_effect=responses):
+        res = verify_workflow(project.id, str(tmp_path))
+
+    assert res["passed"] is False
+    refreshed_task = Task.get(task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.is_verified is False

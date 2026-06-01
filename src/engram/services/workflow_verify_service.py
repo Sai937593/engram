@@ -99,6 +99,7 @@ def verify_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
                 else f"`{command}` failed."
             )
             details = _compact_failure_details(command, proc.returncode, output)
+            task.update(is_verified=False)
             record = record_workflow_verification(
                 project_id=project_id,
                 task_id=task.id,
@@ -123,6 +124,7 @@ def verify_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
         command = " ".join(stage_cmd)
         summary = f"`{command}` failed."
         details = _compact_failure_details(command, stage_proc.returncode, stage_output)
+        task.update(is_verified=False)
         record = record_workflow_verification(
             project_id=project_id,
             task_id=task.id,
