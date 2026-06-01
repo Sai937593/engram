@@ -275,7 +275,7 @@ def test_e2e_workflow_finish_success(disposable_git_repo):
 
     # Run verify workflow and ensure it passes
     verify_res_str = asyncio.run(mock_server.tools["engram_workflow_verify"]())
-    assert "Verification passed" in verify_res_str
+    assert "Verification succeeded and staged changes are ready." in verify_res_str
 
     # Update task with memory_review_outcome to pass Phase 9 gating rules
     update_res_str = mock_server.tools["engram_task_update"](
@@ -486,7 +486,7 @@ def test_e2e_workflow_verify_records_pass_and_fail(disposable_git_repo):
     os.utime(str(dummy_test), (past_time, past_time))
 
     verify_res_str = asyncio.run(mock_server.tools["engram_workflow_verify"]())
-    assert "Verification passed" in verify_res_str
+    assert "Verification succeeded and staged changes are ready." in verify_res_str
     assert "staged current worktree and marked task verified" in verify_res_str
 
     # --- 2. Failing verification scenario ---
