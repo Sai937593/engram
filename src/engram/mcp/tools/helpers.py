@@ -54,17 +54,64 @@ def _respond_error(exc: EngramServiceError) -> str:
         "UNRESOLVED_WORKSPACE": "Run git init first to initialize a git repository.",
     }
 
-    fix_val = getattr(exc, "fix", None) or known_fixes.get(exc.code)
+    details = _compact_error_details(exc)
+    fix_val = _resolve_error_fix(exc, known_fixes)
 
     resp_dict: dict[str, Any] = {
         "ok": False,
         "error": exc.code,
         "message": exc.message,
     }
+    if details:
+        resp_dict["details"] = details
     if fix_val:
         resp_dict["fix"] = fix_val
 
     return _respond(resp_dict)
+
+
+def _compact_error_details(exc: EngramServiceError) -> dict[str, Any]:
+    """Return compact, deterministic detail payload for actionable MCP errors."""
+    if not exc.details:
+        return {}
+    if exc.code == "READY_METADATA_INCOMPLETE":
+        keys = ("evaluated_fields", "missing_fields", "weak_fields", "weak_field_reasons")
+        return {k: exc.details[k] for k in keys if k in exc.details}
+    if exc.code == "INVALID_TASK_STATUS":
+        keys = ("status", "allowed_statuses")
+        return {k: exc.details[k] for k in keys if k in exc.details}
+    return dict(exc.details)
+
+
+def _resolve_error_fix(exc: EngramServiceError, known_fixes: dict[str, str]) -> str | None:
+    """Prefer explicit fix; otherwise derive deterministic, field-specific guidance."""
+    if getattr(exc, "fix", None):
+        return exc.fix
+    if exc.code != "READY_METADATA_INCOMPLETE":
+        return known_fixes.get(exc.code)
+
+    missing = sorted(
+        str(v) for v in exc.details.get("missing_fields", []) if isinstance(v, str) and v.strip()
+    )
+    weak = sorted(
+        str(v) for v in exc.details.get("weak_fields", []) if isinstance(v, str) and v.strip()
+    )
+    reasons = exc.details.get("weak_field_reasons", {})
+    reason_list: list[str] = []
+    if isinstance(reasons, dict):
+        for field in weak:
+            reason = reasons.get(field)
+            if isinstance(reason, str) and reason.strip():
+                reason_list.append(f"{field} ({reason.strip()})")
+
+    segments = ["Retry engram_task_update with status=ready after improving task metadata."]
+    if missing:
+        segments.append(f"Missing: {', '.join(missing)}.")
+    if weak:
+        segments.append(f"Strengthen: {', '.join(weak)}.")
+    if reason_list:
+        segments.append(f"Weak-field reasons: {'; '.join(reason_list)}.")
+    return " ".join(segments)
 
 
 def slim_task_dict(task: dict[str, Any]) -> dict[str, Any]:

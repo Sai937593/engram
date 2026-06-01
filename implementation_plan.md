@@ -1,26 +1,25 @@
-# Implementation Plan - Phase 12.2 (Task 243bdd98)
+# Implementation Plan - Phase 12.3 (Task b041c5a3)
 
 ## Scope
-Enforce richer task-quality validation when promoting tasks to `ready`, reusing the Phase 12.1 validation contract and preserving deterministic error payloads.
+Refine MCP-visible task update and workflow guidance so task-quality failures are compact, specific, and actionable when ready-promotion metadata is incomplete or weak.
 
 ## Files in scope
-- src/engram/services/task/validation.py
-- src/engram/services/task/update_resolution.py
 - src/engram/mcp/tools/helpers.py
-- tests/test_services_task.py
+- src/engram/mcp/tools/task_tools.py
+- src/engram/mcp/tools/workflow_tools.py
+- tests/test_mcp_tools.py
 
 ## Plan
-1. Confirm the ready-promotion gate in service update resolution always uses the Phase 12.1 evaluator outputs (`missing_fields`, `weak_fields`, `weak_field_reasons`, `evaluated_fields`) without ad hoc checks.
-2. Ensure update flows that transition into `ready` from non-ready statuses consistently call the same validation function with effective field values.
-3. If needed, align MCP error guidance for `READY_METADATA_INCOMPLETE` with richer quality failures (weak vs missing metadata) while keeping compatibility.
-4. Add/adjust focused tests for:
-   - rejection on weak metadata with field-specific reasons,
-   - rejection on missing metadata,
-   - success path for valid metadata,
-   - stability of response payload shape.
-5. Run focused task-service tests for ready promotion, then run full `pytest`.
+1. Review current error rendering and guidance mapping for `READY_METADATA_INCOMPLETE` and related task-quality/status failures to identify where MCP responses are too generic.
+2. Implement helper-level formatting updates so `EngramServiceError` payload details (for evaluated/missing/weak fields) are surfaced in concise, deterministic MCP output.
+3. Adjust `engram_task_update` and/or workflow-start blocked messaging to point Codex to exact metadata fields to strengthen before retrying `status=ready`.
+4. Add focused MCP tests that assert:
+   - field-specific guidance appears for quality-gated ready promotion,
+   - output remains compact and non-duplicative,
+   - existing error behavior for unrelated codes is preserved.
+5. Run targeted MCP tests, then run full `pytest` to confirm no regressions.
 
 ## Non-goals
-- No changes outside Task 243bdd98 scope.
-- No workflow/planning/.github edits.
-- No unrelated refactors.
+- No service-layer validation logic redesign (Phase 12.2 already owns enforcement contract).
+- No edits in `planning/`, `workflow/`, or `.github/`.
+- No changes beyond this single Engram task.

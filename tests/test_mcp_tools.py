@@ -747,6 +747,18 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     )
     assert res_ready_err["ok"] is False
     assert res_ready_err["error"] == "READY_METADATA_INCOMPLETE"
+    assert res_ready_err["details"]["evaluated_fields"] == [
+        "description",
+        "acceptance",
+        "relevant_files",
+    ]
+    assert sorted(res_ready_err["details"]["missing_fields"]) == [
+        "acceptance",
+        "description",
+        "relevant_files",
+    ]
+    assert "Retry engram_task_update with status=ready" in res_ready_err["fix"]
+    assert "Missing: acceptance, description, relevant_files." in res_ready_err["fix"]
 
     # 4. Memory review outcome happy path
     res_mro = yaml.safe_load(
@@ -1371,6 +1383,44 @@ def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
     assert res_unknown["ok"] is False
     assert res_unknown["error"] == "SOME_UNKNOWN_ERROR"
     assert "fix" not in res_unknown
+
+
+def test_mcp_error_response_ready_metadata_includes_compact_actionable_details() -> None:
+    """Verify READY_METADATA_INCOMPLETE includes compact details and field-specific remediation."""
+    from engram.mcp.tools import _respond_error
+    from engram.services.errors import EngramServiceError
+
+    exc = EngramServiceError(
+        code="READY_METADATA_INCOMPLETE",
+        message="Task cannot be promoted to ready until required metadata is complete and sufficiently specific.",
+        details={
+            "status": "ready",
+            "evaluated_fields": ["description", "acceptance", "relevant_files"],
+            "missing_fields": ["description"],
+            "weak_fields": ["acceptance", "relevant_files"],
+            "weak_field_reasons": {
+                "acceptance": "Acceptance criteria are too generic.",
+                "relevant_files": "Relevant files are too broad.",
+            },
+            "required_fields": ["description", "acceptance", "relevant_files"],
+        },
+    )
+
+    res = yaml.safe_load(_respond_error(exc))
+    assert res["ok"] is False
+    assert res["error"] == "READY_METADATA_INCOMPLETE"
+    assert set(res["details"].keys()) == {
+        "evaluated_fields",
+        "missing_fields",
+        "weak_fields",
+        "weak_field_reasons",
+    }
+    assert res["details"]["missing_fields"] == ["description"]
+    assert res["details"]["weak_fields"] == ["acceptance", "relevant_files"]
+    assert "Retry engram_task_update with status=ready" in res["fix"]
+    assert "Missing: description." in res["fix"]
+    assert "Strengthen: acceptance, relevant_files." in res["fix"]
+    assert "Weak-field reasons: acceptance (Acceptance criteria are too generic.)" in res["fix"]
 
 
 def test_mcp_phase_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
