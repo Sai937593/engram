@@ -10,6 +10,7 @@ from engram.mcp.tools.helpers import (
     slim_phase_dict,
     slim_task_dict,
 )
+from engram.mcp.tools.memory_lifecycle_tools import register_memory_lifecycle_tools
 from engram.mcp.tools.memory_tools import register_memory_tools
 from engram.mcp.tools.phase_tools import register_phase_tools
 from engram.mcp.tools.task_tools import register_task_tools
@@ -48,6 +49,7 @@ __all__ = [
     "slim_phase_dict",
     "slim_task_dict",
     "register_memory_tools",
+    "register_memory_lifecycle_tools",
     "register_phase_tools",
     "register_task_tools",
     "register_workflow_tools",
@@ -79,5 +81,6 @@ def register_tools(server: Any) -> None:
     """Register all modular MCP tools on the server."""
     register_task_tools(server)
     register_memory_tools(server)
+    register_memory_lifecycle_tools(server)
     register_phase_tools(server)
     register_workflow_tools(server)

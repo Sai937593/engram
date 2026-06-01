@@ -10,6 +10,27 @@ from engram.services.memory_service import create_memory, search_memories
 from engram.services.project_service import resolve_current_project
 
 
+def _memory_search_markdown(memories: list[dict[str, Any]]) -> str:
+    """Build a compact markdown summary for memory search results."""
+    if not memories:
+        return (
+            "## Memory Search\n"
+            "No matching memories found.\n\n"
+            "Next: broaden terms and capture new findings with `engram_memory_create`."
+        )
+    lines = ["## Memory Search", f"Matches: {len(memories)}"]
+    for memory_item in memories[:5]:
+        mem_id = str(memory_item.get("id", ""))
+        mem_type = str(memory_item.get("type", "memory"))
+        title = str(memory_item.get("title", "")).strip() or "Untitled"
+        lines.append(f"- `{mem_id}` [{mem_type}] {title}")
+    if len(memories) > 5:
+        lines.append(f"- ... {len(memories) - 5} more")
+    lines.append("")
+    lines.append("Next: apply relevant memories before implementation.")
+    return "\n".join(lines)
+
+
 def register_memory_tools(server: Any) -> None:
     """Register memory search and creation tools on the server."""
 
@@ -35,6 +56,7 @@ def register_memory_tools(server: Any) -> None:
                     {
                         "ok": True,
                         "memories": [],
+                        "result": _memory_search_markdown([]),
                         "hint": "No results. Try broader terms. Log key discoveries with engram_memory_create.",
                     },
                     keep_empty_keys={"memories"},
@@ -65,6 +87,7 @@ def register_memory_tools(server: Any) -> None:
                 {
                     "ok": True,
                     "memories": memories,
+                    "result": _memory_search_markdown(memories),
                     "hint": hint,
                 }
             )

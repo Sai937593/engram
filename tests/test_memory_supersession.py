@@ -207,3 +207,32 @@ def test_service_layer_integration(project):
     searched = search_memories(project.id, "Content")
     assert len(searched) == 1
     assert searched[0]["id"] == m2_dto["id"]
+
+
+def test_supersede_rejects_cross_project_reference(project):
+    from engram.models.project import Project
+
+    other_project = Project.create(
+        id="proj-sup-x",
+        name="Other Project",
+        summary="",
+        repo_paths=["/tmp/proj-sup-x"],
+    )
+    old = Memory.create(
+        project_id=project.id,
+        type="lesson",
+        title="Old",
+        content="Old content",
+        scope="project",
+        level="L2",
+    )
+    with pytest.raises(ValueError, match="same project"):
+        Memory.create(
+            project_id=other_project.id,
+            type="lesson",
+            title="New",
+            content="New content",
+            scope="project",
+            level="L2",
+            supersedes=old.id,
+        )

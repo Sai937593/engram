@@ -64,6 +64,18 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_note_append"].__name__ == "engram_task_note_append"
     assert "engram_memory_create" in server.tools
     assert server.tools["engram_memory_create"].__name__ == "engram_memory_create"
+    assert "engram_memory_get" in server.tools
+    assert server.tools["engram_memory_get"].__name__ == "engram_memory_get"
+    assert "engram_memory_update" in server.tools
+    assert server.tools["engram_memory_update"].__name__ == "engram_memory_update"
+    assert "engram_memory_supersede" in server.tools
+    assert server.tools["engram_memory_supersede"].__name__ == "engram_memory_supersede"
+    assert "engram_memory_demote" in server.tools
+    assert server.tools["engram_memory_demote"].__name__ == "engram_memory_demote"
+    assert "engram_memory_archive" in server.tools
+    assert server.tools["engram_memory_archive"].__name__ == "engram_memory_archive"
+    assert "engram_memory_delete" in server.tools
+    assert server.tools["engram_memory_delete"].__name__ == "engram_memory_delete"
     assert "engram_phase_start" in server.tools
     assert server.tools["engram_phase_start"].__name__ == "engram_phase_start"
     assert "engram_phase_complete" in server.tools
@@ -205,6 +217,7 @@ def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
     # All memories
     res_all = yaml.safe_load(handler())
     assert res_all["ok"] is True
+    assert "## Memory Search" in res_all["result"]
     assert len(res_all["memories"]) == 2
     assert {m["id"] for m in res_all["memories"]} == {"mem-1", "mem-2"}
     assert res_all["hint"] == "Apply these issues/notes before drafting your implementation plan."
@@ -234,10 +247,90 @@ def test_mcp_tool_memory_search_searches_memories(tmp_db, monkeypatch) -> None:
     res_miss = yaml.safe_load(handler(query="nonexistent"))
     assert res_miss["ok"] is True
     assert res_miss["memories"] == []
+    assert "No matching memories found." in res_miss["result"]
     assert (
         res_miss["hint"]
         == "No results. Try broader terms. Log key discoveries with engram_memory_create."
     )
+
+
+def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) -> None:
+    """Verify memory lifecycle MCP tools delegate to service APIs with safe guidance."""
+    cwd = os.path.abspath("repo/bound-mcp-memory-lifecycle")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+    project = Project.create(
+        id="proj-tool-memory-lifecycle",
+        name="MCP Memory Lifecycle Project",
+        summary="Lifecycle coverage",
+        repo_paths=[cwd],
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-lifecycle-source",
+        type="decision",
+        title="Original decision",
+        content="Original content",
+        tags=["core"],
+        level="L1",
+    )
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    get_tool = server.tools["engram_memory_get"]
+    update_tool = server.tools["engram_memory_update"]
+    supersede_tool = server.tools["engram_memory_supersede"]
+    demote_tool = server.tools["engram_memory_demote"]
+    archive_tool = server.tools["engram_memory_archive"]
+    delete_tool = server.tools["engram_memory_delete"]
+
+    got = yaml.safe_load(get_tool(memory_ref="mem-lifecycle-source"))
+    assert got["ok"] is True
+    assert got["memory"]["id"] == "mem-lifecycle-source"
+
+    updated = yaml.safe_load(
+        update_tool(memory_ref="mem-lifecycle-source", updates={"title": "Updated decision"})
+    )
+    assert updated["ok"] is True
+    assert updated["memory"]["title"] == "Updated decision"
+
+    superseded = yaml.safe_load(
+        supersede_tool(
+            memory_ref="mem-lifecycle-source",
+            title="Replacement decision",
+            content="Replacement content",
+        )
+    )
+    assert superseded["ok"] is True
+    source_after_supersede = yaml.safe_load(get_tool(memory_ref="mem-lifecycle-source"))
+    assert source_after_supersede["memory"]["superseded_by"] == superseded["memory"]["id"]
+
+    demoted = yaml.safe_load(
+        demote_tool(memory_ref=superseded["memory"]["id"], reason="Lower priority")
+    )
+    assert demoted["ok"] is True
+    assert demoted["memory"]["level"] == "L2"
+
+    archived = yaml.safe_load(archive_tool(memory_ref=superseded["memory"]["id"]))
+    assert archived["ok"] is True
+    assert archived["memory"]["superseded_by"] == superseded["memory"]["id"]
+
+    Memory.create(
+        project_id=project.id,
+        id="mem-active-delete-blocked",
+        type="note",
+        title="Active memory",
+        content="should require force",
+        tags=[],
+        level="L2",
+    )
+    blocked_delete = yaml.safe_load(delete_tool(memory_ref="mem-active-delete-blocked"))
+    assert blocked_delete["ok"] is False
+    assert blocked_delete["error"] == "MEMORY_DELETE_REQUIRES_FORCE"
+
+    forced_delete = yaml.safe_load(delete_tool(memory_ref="mem-active-delete-blocked", force=True))
+    assert forced_delete["ok"] is True
+    assert forced_delete["deleted"] is True
 
 
 def test_mcp_tool_memory_search_raises_project_not_bound(tmp_db, monkeypatch) -> None:
