@@ -1,33 +1,26 @@
-# Implementation Plan - Task b884eb2c
+# Implementation Plan - Phase 12.2 (Task 243bdd98)
 
 ## Scope
-Define and implement the Phase 12.1 service-layer task-quality validation contract for ready promotion, expanding from missing-field checks to deterministic weak-metadata heuristics and a stable error payload shape consumable by services/MCP.
+Enforce richer task-quality validation when promoting tasks to `ready`, reusing the Phase 12.1 validation contract and preserving deterministic error payloads.
 
-## Constraints and Boundaries
-- One-task session only: execute only task `b884eb2c`.
-- No edits in `planning/`, `workflow/`, or `.github/`.
-- Keep contract metadata-focused only; do not introduce lifecycle behavior beyond validation.
-- Preserve CLI/service boundary: implementation stays in services and tests.
+## Files in scope
+- src/engram/services/task/validation.py
+- src/engram/services/task/update_resolution.py
+- src/engram/mcp/tools/helpers.py
+- tests/test_services_task.py
 
-## Inputs to Use
-- `src/engram/services/task/validation.py`
-- `src/engram/services/task/update_resolution.py`
-- `tests/test_services_task.py`
-- `docs/CODEX_IMPLEMENTATION_PHASES_WORKFLOW_REDESIGN.md`
+## Plan
+1. Confirm the ready-promotion gate in service update resolution always uses the Phase 12.1 evaluator outputs (`missing_fields`, `weak_fields`, `weak_field_reasons`, `evaluated_fields`) without ad hoc checks.
+2. Ensure update flows that transition into `ready` from non-ready statuses consistently call the same validation function with effective field values.
+3. If needed, align MCP error guidance for `READY_METADATA_INCOMPLETE` with richer quality failures (weak vs missing metadata) while keeping compatibility.
+4. Add/adjust focused tests for:
+   - rejection on weak metadata with field-specific reasons,
+   - rejection on missing metadata,
+   - success path for valid metadata,
+   - stability of response payload shape.
+5. Run focused task-service tests for ready promotion, then run full `pytest`.
 
-## Planned Changes
-1. Review current ready-metadata validation contract and identify extension points for weak-field detection.
-2. Define deterministic weak-field heuristics for evaluated metadata fields (description, acceptance, relevant files, and any additional task metadata currently gated by ready promotion).
-3. Implement a stable validation result/payload shape that distinguishes missing fields from weak fields without coupling to CLI formatting.
-4. Wire the richer validation contract through task update/promotion resolution paths used by services and MCP.
-5. Add focused unit tests in `tests/test_services_task.py` covering pass/fail permutations, deterministic weak-field outcomes, and payload stability.
-
-## Validation Plan
-- Run focused module tests: `uv run pytest tests/test_services_task.py -q`
-- Run workflow verification gate: `engram_workflow_verify`
-- If verification fails, fix the first actionable issue and rerun.
-
-## Out of Scope
-- Workflow start/selection policy changes.
-- Finish/verify gate behavior changes unrelated to task metadata validation.
-- Any task other than `b884eb2c`.
+## Non-goals
+- No changes outside Task 243bdd98 scope.
+- No workflow/planning/.github edits.
+- No unrelated refactors.
