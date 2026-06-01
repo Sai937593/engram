@@ -39,7 +39,7 @@ start ➔ implement ➔ verify ➔ finish_and_commit
    - Adhere to codebase rules (e.g., file sizes, public symbol limits, boundaries).
 
 4. **Verify Locally**
-   - Invoke `engram_workflow_verify` to run the project's quality gate checks (formatting, linting, hook scripts, and tests).
+   - Invoke `engram_workflow_verify` to run the project's repo-local quality gate checks (formatting, linting, and tests).
    - If verification fails, address only the failing items and retry.
    - Do not manually run `git add` unless explicitly instructed; a successful verify call stages the files for you.
 
