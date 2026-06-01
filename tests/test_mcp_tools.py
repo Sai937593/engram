@@ -1032,6 +1032,8 @@ def test_mcp_task_create_many_validation_failure_is_per_entry_and_atomic(
     assert "details" in res
     assert res["details"]["count"] == 1
     assert res["details"]["errors"][0]["index"] == 1
+    assert res["details"]["errors"][0]["error"]["code"] == "INVALID_TASK_PRIORITY"
+    assert "allowed_priorities" in res["details"]["errors"][0]["error"]["details"]
 
     after_ids = {t.id for t in Task.list_by_project(project.id)}
     assert after_ids == before_ids

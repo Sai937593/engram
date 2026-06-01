@@ -1072,11 +1072,137 @@ def test_create_task_starts_unverified(tmp_db):
         verification="Run pytest tests test services task.",
         relevant_files=["tests/test_services_task.py"],
     )
+    assert dto["status"] == "open"
     assert dto["is_verified"] is False
 
     # Check persistence
     persisted = get_task(project.id, dto["id"])
+    assert persisted["status"] == "open"
     assert persisted["is_verified"] is False
+
+
+def test_create_task_missing_required_fields_returns_actionable_error_and_writes_nothing(
+    tmp_db, monkeypatch
+):
+    """Strict create validation rejects missing required fields with zero writes."""
+    import engram.services.task.crud as crud
+    from engram.services.task.ready_metadata_quality import evaluate_executable_task_quality
+
+    def _strict_validate(**kwargs: Any) -> None:
+        missing, weak, reasons = evaluate_executable_task_quality(
+            title=kwargs.get("title"),
+            description=kwargs.get("description"),
+            acceptance=kwargs.get("acceptance"),
+            phase_id=kwargs.get("phase_id"),
+            verification=kwargs.get("verification"),
+            relevant_files=kwargs.get("relevant_files"),
+            search_hints=kwargs.get("search_hints"),
+        )
+        if missing or weak:
+            raise ValidationError(
+                code="TASK_METADATA_INCOMPLETE",
+                message="Task metadata is incomplete or too weak for immediate execution.",
+                details={
+                    "evaluated_fields": [
+                        "title",
+                        "description",
+                        "acceptance",
+                        "phase_id",
+                        "verification",
+                        "relevant_files",
+                        "search_hints",
+                    ],
+                    "missing_fields": missing,
+                    "weak_fields": weak,
+                    "weak_field_reasons": reasons,
+                },
+            )
+
+    monkeypatch.setattr(crud, "_validate_executable_task_metadata", _strict_validate)
+
+    project = _create_project("proj-strict-missing", "/tmp/proj-strict-missing")
+    before_rows = _task_rows(project.id)
+
+    with pytest.raises(ValidationError) as exc:
+        create_task(
+            project_id=project.id,
+            title="Task missing executable metadata.",
+            description=None,
+            acceptance=None,
+            phase_id=None,
+            verification=None,
+            relevant_files=None,
+            search_hints=None,
+        )
+
+    assert exc.value.code == "TASK_METADATA_INCOMPLETE"
+    assert "missing_fields" in exc.value.details
+    assert "phase_id" in exc.value.details["missing_fields"]
+    assert "verification" in exc.value.details["missing_fields"]
+    assert "relevant_files" in exc.value.details["missing_fields"]
+    assert _task_rows(project.id) == before_rows
+
+
+def test_create_task_weak_payload_returns_actionable_validation_details(tmp_db, monkeypatch):
+    """Strict create validation returns field-level weakness details."""
+    import engram.services.task.crud as crud
+    from engram.services.task.ready_metadata_quality import evaluate_executable_task_quality
+
+    def _strict_validate(**kwargs: Any) -> None:
+        missing, weak, reasons = evaluate_executable_task_quality(
+            title=kwargs.get("title"),
+            description=kwargs.get("description"),
+            acceptance=kwargs.get("acceptance"),
+            phase_id=kwargs.get("phase_id"),
+            verification=kwargs.get("verification"),
+            relevant_files=kwargs.get("relevant_files"),
+            search_hints=kwargs.get("search_hints"),
+        )
+        if missing or weak:
+            raise ValidationError(
+                code="TASK_METADATA_INCOMPLETE",
+                message="Task metadata is incomplete or too weak for immediate execution.",
+                details={
+                    "evaluated_fields": [
+                        "title",
+                        "description",
+                        "acceptance",
+                        "phase_id",
+                        "verification",
+                        "relevant_files",
+                        "search_hints",
+                    ],
+                    "missing_fields": missing,
+                    "weak_fields": weak,
+                    "weak_field_reasons": reasons,
+                },
+            )
+
+    monkeypatch.setattr(crud, "_validate_executable_task_metadata", _strict_validate)
+
+    project = _create_project("proj-strict-weak", "/tmp/proj-strict-weak")
+    phase = Phase.create(project_id=project.id, id="phase001", title="Strict Phase")
+
+    with pytest.raises(ValidationError) as exc:
+        create_task(
+            project_id=project.id,
+            title="Too short",
+            description="short desc",
+            acceptance="short acc",
+            phase_id=phase.id,
+            verification="short ver",
+            relevant_files=["broad"],
+            search_hints=None,
+        )
+
+    assert exc.value.code == "TASK_METADATA_INCOMPLETE"
+    assert "weak_fields" in exc.value.details
+    assert "weak_field_reasons" in exc.value.details
+    assert "title" in exc.value.details["weak_fields"]
+    assert "verification" in exc.value.details["weak_fields"]
+    assert "relevant_files" in exc.value.details["weak_fields"]
+    assert "title" in exc.value.details["weak_field_reasons"]
+    assert _task_rows(project.id) == []
 
 
 def test_update_task_verification_persists(tmp_db):
