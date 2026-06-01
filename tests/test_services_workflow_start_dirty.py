@@ -30,7 +30,7 @@ def test_start_workflow_dirty_tree_branch_mismatch(tmp_db: Any, mock_startup_con
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
     )
 
     git_mock = GitMock()
@@ -47,7 +47,7 @@ def test_start_workflow_dirty_tree_branch_mismatch(tmp_db: Any, mock_startup_con
     # Task status should NOT be in-progress
     refreshed = Task.get(task.id)
     assert refreshed is not None
-    assert refreshed.status == "ready"
+    assert refreshed.status == "open"
 
 
 def test_start_workflow_dirty_tree_same_branch(tmp_db: Any, mock_startup_context: None) -> None:
@@ -65,7 +65,7 @@ def test_start_workflow_dirty_tree_same_branch(tmp_db: Any, mock_startup_context
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
     )
 
     git_mock = GitMock()
@@ -96,7 +96,7 @@ def test_start_workflow_clean_tree_different_branch(
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
     )
 
     git_mock = GitMock()

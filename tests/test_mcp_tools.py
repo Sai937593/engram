@@ -460,7 +460,7 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
         title="First Task",
         phase=phase.title,
         phase_id=phase.id,
-        status="ready",
+        status="open",
     )
     Task.create(
         project_id=project.id,
@@ -487,15 +487,15 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
         assert set(t.keys()) == {"id", "title", "status"}
 
     # Filtered by status
-    res_ready = yaml.safe_load(handler(status="ready"))
-    assert res_ready["ok"] is True
-    assert len(res_ready["tasks"]) == 1
-    assert res_ready["tasks"][0]["id"] == "task-1"
+    res_open = yaml.safe_load(handler(status="open"))
+    assert res_open["ok"] is True
+    assert len(res_open["tasks"]) == 1
+    assert res_open["tasks"][0]["id"] == "task-1"
 
     # Filtered by phase
     res_phase = yaml.safe_load(handler(phase="Task Phase"))
     assert res_phase["ok"] is True
-    # By default, status is None, which filters by "ready"
+    # By default, status is None, which filters by "open"
     assert len(res_phase["tasks"]) == 1
     assert res_phase["tasks"][0]["id"] == "task-1"
 
@@ -655,7 +655,7 @@ def test_mcp_tool_task_next_returns_next_task(tmp_db, monkeypatch) -> None:
         title="Next Actionable Task",
         phase=phase.title,
         phase_id=phase.id,
-        status="ready",
+        status="open",
     )
 
     res_task = yaml.safe_load(handler())
@@ -1551,8 +1551,8 @@ def test_mcp_workflow_start_returns_compact_blocked_markdown_for_draft_only(tmp_
         raise EngramServiceError(
             code="WORKFLOW_START_DRAFT_ONLY",
             message=(
-                "No ready task is available to start. Remaining tasks are draft-only and must "
-                "be promoted to ready first."
+                "No open task is available to start. Remaining tasks are draft-only and must "
+                "be promoted to open first."
             ),
         )
 
@@ -1566,10 +1566,10 @@ def test_mcp_workflow_start_returns_compact_blocked_markdown_for_draft_only(tmp_
 
     res_start_blocked = asyncio.run(start_handler())
     assert "# Start Blocked" in res_start_blocked
-    assert "Reason: No ready task is available to start." in res_start_blocked
+    assert "Reason: No open task is available to start." in res_start_blocked
     assert "## Next action" in res_start_blocked
     assert res_start_blocked.count("## Next action") == 1
-    assert "set status=ready via engram_task_update" in res_start_blocked
+    assert "set status=open via engram_task_update" in res_start_blocked
     assert "ok:" not in res_start_blocked.lower()
     assert "error:" not in res_start_blocked.lower()
 

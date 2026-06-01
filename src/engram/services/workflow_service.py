@@ -52,8 +52,8 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
             raise EngramServiceError(
                 code="WORKFLOW_START_DRAFT_ONLY",
                 message=(
-                    "No ready task is available to start. Remaining tasks are draft-only and must "
-                    "be promoted to ready first."
+                    "No open task is available to start. Remaining tasks are draft-only and must "
+                    "be promoted to open first."
                 ),
             )
         startup_res = orchestrate_startup_task_memory_retrieval(

@@ -74,8 +74,8 @@ def register_workflow_tools(server: Any) -> None:
                     reason=exc.message,
                     next_guidance=(
                         "Complete minimum execution metadata on draft task(s), then set "
-                        "status=ready via engram_task_update and rerun engram_workflow_start. "
-                        "If ready-promotion fails, use READY_METADATA_INCOMPLETE details to "
+                        "status=open via engram_task_update and rerun engram_workflow_start. "
+                        "If open-promotion fails, use TASK_METADATA_INCOMPLETE details to "
                         "fix missing/weak fields before retrying."
                     ),
                 )

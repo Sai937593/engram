@@ -31,7 +31,7 @@ def test_start_workflow_happy_path_branch_exists(tmp_db: Any, mock_startup_conte
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
     )
 
     git_mock = GitMock()
@@ -72,7 +72,7 @@ def test_start_workflow_happy_path_new_branch(tmp_db: Any, mock_startup_context:
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
     )
 
     git_mock = GitMock()
@@ -133,7 +133,7 @@ def test_start_workflow_blocks_when_only_draft_tasks_remain(
         start_workflow(project.id, "/tmp/proj-draft-only")
 
     assert exc_info.value.code == "WORKFLOW_START_DRAFT_ONLY"
-    assert "No ready task is available to start." in exc_info.value.message
+    assert "No open task is available to start." in exc_info.value.message
     assert len(git_mock.calls) == 0
 
 
@@ -160,7 +160,7 @@ def test_start_workflow_unbound_repo(tmp_db: Any, mock_startup_context: None) ->
         title="Fix bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
     )
 
     import tempfile
@@ -197,7 +197,7 @@ def test_start_workflow_picks_task_after_legacy_dependency_normalization(
         INSERT INTO tasks (id, project_id, title, status, priority, phase, phase_id, depends_on)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        ("tsk20001", project.id, "2.4 Target task", "todo", "high", "Phase Two", "ph-2", "2.3"),
+        ("tsk20001", project.id, "2.4 Target task", "open", "high", "Phase Two", "ph-2", "2.3"),
     )
     conn.commit()
     conn.close()

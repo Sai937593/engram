@@ -86,10 +86,10 @@ def is_draft_only_pending(project_id: str) -> bool:
     """Return True when remaining pending work is draft-only."""
     counts = Task.count_by_status(project_id)
     draft = counts.get("draft", 0)
-    ready = counts.get("ready", 0) + counts.get("open", 0) + counts.get("todo", 0)
+    open_count = counts.get("open", 0) + counts.get("ready", 0) + counts.get("todo", 0)
     in_progress = counts.get("in-progress", 0) + counts.get("in_progress", 0)
     pending = sum(count for status, count in counts.items() if status not in ("done", "cancelled"))
-    return draft > 0 and ready == 0 and in_progress == 0 and draft == pending
+    return draft > 0 and open_count == 0 and in_progress == 0 and draft == pending
 
 
 def resolve_commit_type(task: Task, requested_type: str | None, allowed_types: set[str]) -> str:

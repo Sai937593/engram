@@ -91,7 +91,7 @@ def test_successful_start_contract(tmp_db: Any, monkeypatch: Any) -> None:
         title="Fix startup bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
         description="Fix the bugs in start logic",
         acceptance="It works",
         relevant_files=["src/start.py"],
@@ -159,7 +159,7 @@ def test_blocked_start_contract(tmp_db: Any, monkeypatch: Any) -> None:
         title="Fix startup bugs",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
     )
 
     git_mock = GitMock()
@@ -208,7 +208,7 @@ def test_start_contract_sparse_metadata_in_service_and_mcp(tmp_db: Any, monkeypa
         title="Sparse task title",
         phase="Phase Sparse",
         phase_id="ph-sparse",
-        status="ready",
+        status="open",
         tags=["sparse", "startup", "guidance"],
     )
 
@@ -281,7 +281,7 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
         title="Write tests",
         phase="Phase One",
         phase_id="ph-1",
-        status="ready",
+        status="open",
         memory_review_outcome="created",
     )
 
