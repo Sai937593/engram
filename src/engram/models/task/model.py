@@ -18,6 +18,49 @@ from engram.models.task.serialization import (
 
 
 class Task:
+    @staticmethod
+    def _prepare_create_fields(
+        project_id,
+        title,
+        description=None,
+        status="open",
+        priority="medium",
+        phase=None,
+        phase_id=None,
+        depends_on=None,
+        acceptance=None,
+        tags=None,
+        relevant_files=None,
+        memory_review_outcome=None,
+        id=None,
+        verification=None,
+        search_hints=None,
+        objective=None,
+        is_verified=False,
+    ):
+        if description is None:
+            description = objective
+        if not id:
+            id = uuid.uuid4().hex[:8]
+        return (
+            id,
+            project_id,
+            title,
+            description,
+            status,
+            priority,
+            phase,
+            phase_id,
+            depends_on,
+            acceptance,
+            ",".join(tags or []),
+            serialize_relevant_files(normalize_relevant_files(relevant_files)),
+            memory_review_outcome,
+            verification,
+            serialize_search_hints(normalize_search_hints(search_hints)),
+            1 if is_verified else 0,
+        )
+
     def __init__(
         self,
         id,
@@ -86,44 +129,41 @@ class Task:
         objective=None,
         is_verified=False,
     ):
-        if description is None:
-            description = objective
-        if not id:
-            id = uuid.uuid4().hex[:8]
-
+        params = cls._prepare_create_fields(
+            project_id=project_id,
+            title=title,
+            description=description,
+            status=status,
+            priority=priority,
+            phase=phase,
+            phase_id=phase_id,
+            depends_on=depends_on,
+            acceptance=acceptance,
+            tags=tags,
+            relevant_files=relevant_files,
+            memory_review_outcome=memory_review_outcome,
+            id=id,
+            verification=verification,
+            search_hints=search_hints,
+            objective=objective,
+            is_verified=is_verified,
+        )
         conn = get_db_connection()
         conn.execute(
             "INSERT INTO tasks (id, project_id, title, description, status, priority, "
             "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome, verification, search_hints, is_verified) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                id,
-                project_id,
-                title,
-                description,
-                status,
-                priority,
-                phase,
-                phase_id,
-                depends_on,
-                acceptance,
-                ",".join(tags or []),
-                serialize_relevant_files(normalize_relevant_files(relevant_files)),
-                memory_review_outcome,
-                verification,
-                serialize_search_hints(normalize_search_hints(search_hints)),
-                1 if is_verified else 0,
-            ),
+            params,
         )
         conn.commit()
         conn.close()
-
-        AuditLog.log("tasks", id, "create")
+        task_id = params[0]
+        AuditLog.log("tasks", task_id, "create")
         args = [
-            id,
+            task_id,
             project_id,
             title,
-            description,
+            params[3],
             status,
             priority,
             phase,
@@ -139,6 +179,53 @@ class Task:
             is_verified,
         ]
         return cls(*args)
+
+    @classmethod
+    def create_many(cls, project_id: str, payloads: list[dict[str, object]]) -> list[Task]:
+        insert_sql = (
+            "INSERT INTO tasks (id, project_id, title, description, status, priority, "
+            "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome, "
+            "verification, search_hints, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        prepared_rows: list[tuple[object, ...]] = []
+        created_tasks: list[Task] = []
+        for payload in payloads:
+            params = cls._prepare_create_fields(project_id=project_id, **payload)
+            prepared_rows.append(params)
+            created_tasks.append(
+                cls(
+                    id=params[0],
+                    project_id=params[1],
+                    title=params[2],
+                    description=params[3],
+                    status=params[4],
+                    priority=params[5],
+                    phase=params[6],
+                    phase_id=params[7],
+                    depends_on=params[8],
+                    acceptance=params[9],
+                    tags=(params[10].split(",") if params[10] else []),
+                    relevant_files=deserialize_relevant_files(params[11]),
+                    memory_review_outcome=params[12],
+                    verification=params[13],
+                    search_hints=deserialize_search_hints(params[14]),
+                    is_verified=bool(params[15]),
+                )
+            )
+        conn = get_db_connection()
+        try:
+            conn.execute("BEGIN")
+            for row in prepared_rows:
+                conn.execute(insert_sql, row)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        for task in created_tasks:
+            AuditLog.log("tasks", task.id, "create")
+        return created_tasks
 
     @classmethod
     def from_row(cls, row):

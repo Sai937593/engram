@@ -555,6 +555,64 @@ def test_create_many_tasks_returns_per_entry_errors_and_writes_nothing(tmp_db):
     assert _task_rows(project.id) == []
 
 
+def test_create_many_tasks_rolls_back_all_rows_when_persistence_fails(tmp_db, monkeypatch):
+    import engram.models.task.model as task_model
+
+    project = _create_project("proj-batch-3", "/tmp/proj-batch-3")
+    phase = Phase.create(project_id=project.id, id="phase001", title="MCP Phase")
+    original_get_conn = task_model.get_db_connection
+
+    class _FailingConnection:
+        def __init__(self, inner):
+            self._inner = inner
+            self._insert_calls = 0
+
+        def execute(self, sql, params=()):
+            if isinstance(sql, str) and sql.startswith("INSERT INTO tasks"):
+                self._insert_calls += 1
+                if self._insert_calls == 2:
+                    raise RuntimeError("simulated insert failure")
+            return self._inner.execute(sql, params)
+
+        def commit(self):
+            return self._inner.commit()
+
+        def rollback(self):
+            return self._inner.rollback()
+
+        def close(self):
+            return self._inner.close()
+
+    monkeypatch.setattr(
+        task_model,
+        "get_db_connection",
+        lambda: _FailingConnection(original_get_conn()),
+    )
+
+    with pytest.raises(RuntimeError, match="simulated insert failure"):
+        create_many_tasks(
+            project.id,
+            [
+                {
+                    "title": "Batch task one",
+                    "description": "Task one details",
+                    "phase_id": phase.id,
+                    "verification": "pytest tests/test_services_task.py",
+                    "relevant_files": ["tests/test_services_task.py"],
+                },
+                {
+                    "title": "Batch task two",
+                    "description": "Task two details",
+                    "phase_id": phase.id,
+                    "verification": "pytest tests/test_services_task.py",
+                    "relevant_files": ["tests/test_services_task.py"],
+                },
+            ],
+        )
+
+    assert _task_rows(project.id) == []
+
+
 def test_update_task_happy_path(tmp_db):
     project = _create_project("proj-u", "/tmp/proj-u")
     Task.create(project_id=project.id, id="task0001", title="Original Title", status="open")

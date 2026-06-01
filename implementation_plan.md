@@ -1,35 +1,33 @@
-# Implementation Plan: Add batch task payload validation service (30d66252)
+# Implementation Plan: Atomic create-many task service (8d29fab0)
 
 ## Scope
-Add a batch task creation service entry point that accepts multiple create-task payloads, applies the same normalization and executable-metadata validation as single-task creation, and reports per-entry validation failures before any writes occur.
+Implement all-or-nothing persistence for `create_many_tasks` after preflight validation succeeds, while preserving existing single-task defaults, dependency normalization behavior, and response shape.
 
-## Files
-- src/engram/services/task/crud.py
-- src/engram/services/task/__init__.py
-- src/engram/services/task/validation.py
-- tests/test_services_task.py
+## Proposed changes
+1. Add a task-model batch insert path:
+- Introduce a new `Task.create_many(project_id: str, payloads: list[dict[str, object]]) -> list[Task]` method in `src/engram/models/task/model.py`.
+- Perform all inserts in a single DB transaction (`BEGIN` + commit/rollback semantics via one shared connection).
+- Reuse existing field serialization/default behavior equivalent to `Task.create` (id generation, objective->description compatibility, tags/relevant_files/search_hints serialization, status/priority passthrough).
+- On any insert failure, rollback and re-raise so zero rows persist.
 
-## Steps
-1. Inspect current single-task creation path in `crud.py` and validation helpers in `validation.py`.
-2. Add a new batch service function (service layer only) that:
-   - accepts a list of task-create payloads,
-   - normalizes each payload using existing normalization logic,
-   - validates each payload using current executable-metadata rules,
-   - accumulates per-entry errors with stable index mapping,
-   - aborts before writes if any entry fails validation.
-3. If all entries validate, delegate to existing task creation write path for each payload.
-4. Export the new batch function in `src/engram/services/task/__init__.py`.
-5. Add focused tests in `tests/test_services_task.py` covering:
-   - all-valid batch creates expected tasks,
-   - mixed-invalid batch returns per-entry errors and creates nothing,
-   - validation behavior parity with single-task path for core required fields.
-6. Run required verification command:
-   - `uv run pytest tests/test_services_task.py -q -k create_m`
-7. Run `engram_workflow_verify`; if blocked/failing, fix and rerun until pass.
-8. Record task memory review outcome (`no_change` unless durable memory is produced).
-9. Run `engram_workflow_finish` and stop.
+2. Switch service batch create to atomic model API:
+- Update `create_many_tasks` in `src/engram/services/task/crud.py` to:
+  - Keep current full preflight validation and per-index error aggregation behavior unchanged.
+  - After successful preflight, call `Task.create_many(...)` once.
+  - Return `_task_to_dict(...)` for each created task in stable input order.
 
-## Risks / Checks
-- Preserve current single-create behavior unchanged.
-- Keep service module adapter-safe (no CLI/MCP imports).
-- Ensure no partial writes happen on validation failure.
+3. Focused tests for atomicity and behavior preservation:
+- Extend `tests/test_services_task.py` with tests that verify:
+  - Successful valid batch still creates all tasks and preserves normalization/defaults.
+  - If persistence fails mid-batch (simulated via monkeypatching DB execute), no new task rows are persisted.
+  - Existing validation-failure path still writes zero rows and returns `TASK_BATCH_VALIDATION_FAILED` details.
+
+## Verification
+- Run focused tests first:
+  - `uv run pytest tests/test_services_task.py -k create_many_tasks`
+- Then run full workflow verification via MCP:
+  - `engram_workflow_verify`
+
+## Risks and mitigations
+- Risk: Divergence between `Task.create` and `Task.create_many` defaults/serialization.
+- Mitigation: Keep field handling logic structurally aligned and cover with regression assertions in create-many tests.

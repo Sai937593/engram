@@ -240,11 +240,8 @@ def create_many_tasks(
             details={"errors": errors, "count": len(errors)},
         )
 
-    created: list[dict[str, object]] = []
-    for payload in validated_payloads:
-        task_item = _Task.create(project_id=project_id, **payload)
-        created.append(_task_to_dict(task_item))
-    return created
+    created = _Task.create_many(project_id=project_id, payloads=validated_payloads)
+    return [_task_to_dict(task_item) for task_item in created]
 
 
 def update_task(project_id: str, task_ref: str, **kwargs: Any) -> dict[str, object]:
