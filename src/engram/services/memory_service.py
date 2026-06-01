@@ -11,6 +11,7 @@ from engram.services.memory_update_support import (
     VALID_MEMORY_TYPES,
     get_project_memory,
     normalize_memory_create_payload,
+    resolve_batch_memory_deletes,
     resolve_batch_memory_updates,
     validate_memory_updates,
 )
@@ -230,6 +231,24 @@ def update_memories(project_id: str, entries: list[dict[str, JsonValue]]) -> dic
         conn.close()
     updated_ids = [memory_item.id for memory_item, _ in resolved_entries]
     return {"updated_count": len(updated_ids), "updated_ids": updated_ids}
+
+
+def delete_memories(project_id: str, memory_refs: list[str]) -> dict[str, JsonValue]:
+    """Delete multiple memories atomically after full batch prevalidation."""
+    resolved_memories = resolve_batch_memory_deletes(project_id, memory_refs)
+    conn = get_db_connection()
+    try:
+        conn.execute("BEGIN")
+        for memory_item in resolved_memories:
+            conn.execute("DELETE FROM memories WHERE id = ?", (memory_item.id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    deleted_ids = [memory_item.id for memory_item in resolved_memories]
+    return {"deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
 
 
 def _serialize_memory(memory_item: Memory, *, compact: bool) -> dict[str, JsonValue]:

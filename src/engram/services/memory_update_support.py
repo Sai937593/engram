@@ -59,6 +59,37 @@ def resolve_batch_memory_updates(
     return resolved
 
 
+def resolve_batch_memory_deletes(project_id: str, memory_refs: list[str]) -> list[Memory]:
+    """Prevalidate and resolve a batch of memory references before deletion."""
+    if not memory_refs:
+        raise ValidationError(
+            code="INVALID_MEMORY_BATCH_DELETE",
+            message="Batch memory delete requires at least one memory reference.",
+            details={"field": "memory_refs"},
+        )
+
+    resolved: list[Memory] = []
+    seen_refs: set[str] = set()
+    for index, raw_ref in enumerate(memory_refs):
+        memory_ref = str(raw_ref).strip()
+        if not memory_ref:
+            raise ValidationError(
+                code="INVALID_MEMORY_REFERENCE",
+                message="Memory reference cannot be empty.",
+                details={"index": index, "memory_ref": raw_ref},
+            )
+        if memory_ref in seen_refs:
+            raise ValidationError(
+                code="DUPLICATE_MEMORY_REFERENCE",
+                message="Batch memory delete includes duplicate memory reference.",
+                details={"index": index, "memory_ref": memory_ref},
+            )
+        seen_refs.add(memory_ref)
+        resolved.append(get_project_memory(project_id, memory_ref))
+
+    return resolved
+
+
 def get_project_memory(project_id: str, memory_ref: str) -> Memory:
     """Resolve a memory reference and enforce project scoping."""
     candidate = memory_ref.strip()

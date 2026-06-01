@@ -21,6 +21,7 @@ from engram.services.memory_lifecycle_service import (
 )
 from engram.services.memory_service import (
     create_memory,
+    delete_memories,
     get_memory,
     get_recent_memories,
     list_memories,
@@ -753,6 +754,109 @@ def test_update_memories_is_atomic_when_one_entry_is_invalid(tmp_db):
     assert first.title == "First old"
     assert second.scope == "project"
     assert second.level == "L2"
+
+
+def test_delete_memories_deletes_multiple_rows_atomically(tmp_db):
+    project = _create_project("proj-delm-a", "/tmp/proj-delm-a")
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="Delete one",
+        content="First",
+        scope="project",
+        level="L2",
+        id="delm0001",
+    )
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="Delete two",
+        content="Second",
+        scope="project",
+        level="L3",
+        id="delm0002",
+    )
+
+    result = delete_memories(project.id, ["delm0001", "delm0002"])
+
+    assert result == {"deleted_count": 2, "deleted_ids": ["delm0001", "delm0002"]}
+    with pytest.raises(EngramServiceError):
+        get_memory(project.id, "delm0001")
+    with pytest.raises(EngramServiceError):
+        get_memory(project.id, "delm0002")
+
+
+def test_delete_memories_rejects_empty_batch(tmp_db):
+    project = _create_project("proj-delm-b", "/tmp/proj-delm-b")
+    with pytest.raises(ValidationError) as raised:
+        delete_memories(project.id, [])
+
+    assert raised.value.code == "INVALID_MEMORY_BATCH_DELETE"
+
+
+def test_delete_memories_rejects_duplicate_memory_refs(tmp_db):
+    project = _create_project("proj-delm-c", "/tmp/proj-delm-c")
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="Dup",
+        content="Dup",
+        scope="project",
+        level="L3",
+        id="delm1001",
+    )
+    with pytest.raises(ValidationError) as raised:
+        delete_memories(project.id, ["delm1001", "delm1001"])
+
+    assert raised.value.code == "DUPLICATE_MEMORY_REFERENCE"
+
+
+def test_delete_memories_rejects_foreign_or_unknown_refs(tmp_db):
+    project_a = _create_project("proj-delm-d1", "/tmp/proj-delm-d1")
+    project_b = _create_project("proj-delm-d2", "/tmp/proj-delm-d2")
+    create_memory(
+        project_id=project_a.id,
+        type="note",
+        title="A title",
+        content="A content",
+        scope="project",
+        level="L3",
+        id="delm2001",
+    )
+
+    with pytest.raises(EngramServiceError) as raised:
+        delete_memories(project_b.id, ["delm2001"])
+
+    assert raised.value.code == "MEMORY_NOT_FOUND"
+
+
+def test_delete_memories_is_noop_when_one_ref_is_invalid(tmp_db):
+    project = _create_project("proj-delm-e", "/tmp/proj-delm-e")
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="First keep",
+        content="First",
+        scope="project",
+        level="L1",
+        id="delm3001",
+    )
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Second keep",
+        content="Second",
+        scope="project",
+        level="L2",
+        id="delm3002",
+    )
+
+    with pytest.raises(EngramServiceError):
+        delete_memories(project.id, ["delm3001", "missing00"])
+
+    first = Memory.get("delm3001")
+    second = Memory.get("delm3002")
+    assert first is not None and second is not None
 
 
 def test_supersede_memory_creates_replacement_and_hides_old_by_default(tmp_db):
