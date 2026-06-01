@@ -1,40 +1,32 @@
-# Implementation Plan: Expand regression coverage for batch creation (5cd2e288)
+# Implementation Plan: Replace verify command plan with MVP target checks (8b3bd43b)
 
 ## Scope
-Add regression tests to lock down batch task creation behavior across service and MCP layers without changing production behavior.
+Update verify command resolution in the workflow verify service to the Phase 4 command contract and add targeted tests for exact order/content, without changing unrelated verify behavior.
 
 ## Files to update
-- tests/test_services_task.py
-- tests/test_mcp_tools.py
-- tests/test_mcp_server.py
-- tests/test_mcp_startup_reliability.py
+- src/engram/services/workflow_verify_service.py
+- tests/test_services_workflow_verify.py
 
 ## Planned changes
-1. Add/extend service-level tests for `create_many` success path:
-   - Assert all requested tasks are created.
-   - Assert response payload shape remains stable.
+1. Replace `VERIFY_COMMANDS` with the exact Phase 4 base commands in this order:
+   - `ruff format .`
+   - `ruff check . --fix`
+   - `python -m engram.hooks.py_structure`
+   - `pytest tests/ -m "not slow" -x --tb=short -q`
 
-2. Add/extend service-level tests for invalid batch rejection:
-   - Submit a mixed-validity batch.
-   - Assert operation fails atomically.
-   - Assert zero task rows are persisted after failure.
+2. Keep `_resolve_verify_commands` explicit and ordered:
+   - If `uv.lock` exists, prefix each base command with `uv run`.
+   - Otherwise, keep the existing Python-module fallback structure.
 
-3. Add MCP tool contract regression coverage:
-   - Verify `task_create_many` remains registered.
-   - Verify stable success/error response shape exposed by MCP tool.
-
-4. Add startup/server coverage as needed:
-   - Guard against regressions where tool registration disappears.
+3. Update/extend service tests to lock the command contract:
+   - Assert pass-path execution runs all commands in exact order.
+   - Assert persisted pass details reflect the new command set.
+   - Add focused assertions for command resolution behavior.
 
 ## Verification
 Run:
-- `uv run pytest tests/test_services_task.py -q -k create_many`
-- `uv run pytest tests/test_mcp_tools.py -q -k task_create_many`
-- `uv run pytest tests/test_mcp_server.py -q -k task_create_many`
-- `uv run pytest tests/test_mcp_startup_reliability.py -q -k task_create_many`
-
-Then run a broader sanity pass if required by failures.
+- `uv run pytest tests/test_services_workflow_verify.py -q`
 
 ## Notes
-- No changes under `planning/`, `workflow/`, or `.github/`.
-- Keep changes test-focused and scoped to this task.
+- Stay in scope: no staging, no `is_verified` mutation, no MCP formatter changes.
+- No edits under `planning/`, `workflow/`, or `.github/`.

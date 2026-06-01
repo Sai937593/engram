@@ -13,8 +13,10 @@ from engram.services.errors import EngramServiceError
 from engram.services.workflow_verification_service import record_workflow_verification
 
 VERIFY_COMMANDS: tuple[tuple[str, ...], ...] = (
-    ("ruff", "check", "."),
-    ("pytest", "tests", "-q"),
+    ("ruff", "format", "."),
+    ("ruff", "check", ".", "--fix"),
+    ("engram.hooks.py_structure",),
+    ("pytest", "tests/", "-m", "not slow", "-x", "--tb=short", "-q"),
 )
 
 
@@ -43,7 +45,13 @@ def _compact_failure_details(command: str, output: str) -> str:
 
 def _resolve_verify_commands(repo_path: str) -> list[list[str]]:
     if os.path.exists(os.path.join(repo_path, "uv.lock")):
-        return [["uv", "run", *cmd] for cmd in VERIFY_COMMANDS]
+        resolved: list[list[str]] = []
+        for cmd in VERIFY_COMMANDS:
+            if cmd == ("engram.hooks.py_structure",):
+                resolved.append(["uv", "run", "python", "-m", *cmd])
+            else:
+                resolved.append(["uv", "run", *cmd])
+        return resolved
     return [["python", "-m", *cmd] for cmd in VERIFY_COMMANDS]
 
 
@@ -100,7 +108,10 @@ def verify_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
             }
 
     summary = "All local quality checks passed."
-    details = "Checks: `ruff check .`, `pytest tests -q`."
+    details = (
+        "Checks: `uv run ruff format .`, `uv run ruff check . --fix`, "
+        '`uv run python -m engram.hooks.py_structure`, `uv run pytest tests/ -m "not slow" -x --tb=short -q`.'
+    )
     record = record_workflow_verification(
         project_id=project_id,
         task_id=task.id,
