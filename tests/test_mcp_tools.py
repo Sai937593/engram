@@ -67,6 +67,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_memory_search"].__name__ == "engram_memory_search"
     assert "engram_task_create" in server.tools
     assert server.tools["engram_task_create"].__name__ == "engram_task_create"
+    assert "engram_task_create_many" in server.tools
+    assert server.tools["engram_task_create_many"].__name__ == "engram_task_create_many"
     assert "engram_task_update" in server.tools
     assert server.tools["engram_task_update"].__name__ == "engram_task_update"
     assert "engram_task_note_append" in server.tools
@@ -802,6 +804,118 @@ def test_mcp_task_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_err["ok"] is False
     assert "error" in res_err
     assert res_err["error"] == "INVALID_TASK_PRIORITY"
+
+
+def test_mcp_task_create_many_happy_path(tmp_db, monkeypatch) -> None:
+    """Verify engram_task_create_many creates all tasks and returns compact refs."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(
+        project_id=project.id,
+        id="phase-task-create-many",
+        title="Task create many phase",
+        status="active",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    create_many_handler = server.tools["engram_task_create_many"]
+
+    res = yaml.safe_load(
+        create_many_handler(
+            tasks=[
+                {
+                    "title": "Batch task one",
+                    "description": "Desc 1",
+                    "phase_id": phase.id,
+                    "acceptance": "First acceptance criterion",
+                    "verification": "uv run pytest -q tests/test_mcp_tools.py -k batch_one",
+                    "relevant_files": ["src/engram/mcp/tools/task_tools.py"],
+                },
+                {
+                    "title": "Batch task two",
+                    "description": "Desc 2",
+                    "phase_id": phase.id,
+                    "acceptance": "Second acceptance criterion",
+                    "verification": "uv run pytest -q tests/test_mcp_tools.py -k batch_two",
+                    "relevant_files": ["src/engram/mcp/tools/__init__.py"],
+                },
+            ]
+        )
+    )
+    assert res["ok"] is True
+    assert len(res["tasks"]) == 2
+    assert {t["title"] for t in res["tasks"]} == {"Batch task one", "Batch task two"}
+    for item in res["tasks"]:
+        assert set(item.keys()) == {"id", "title"}
+        assert Task.get(item["id"]) is not None
+
+
+def test_mcp_task_create_many_validation_failure_is_per_entry_and_atomic(tmp_db, monkeypatch) -> None:
+    """Verify batch validation errors are index-specific and create zero tasks."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-writes")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-writes",
+        name="MCP Tool Writes Project",
+        summary="Service tool writes summary",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(
+        project_id=project.id,
+        id="phase-task-create-many-invalid",
+        title="Task create many invalid phase",
+        status="active",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    create_many_handler = server.tools["engram_task_create_many"]
+
+    before_ids = {t.id for t in Task.list_by_project(project.id)}
+    res = yaml.safe_load(
+        create_many_handler(
+            tasks=[
+                {
+                    "title": "Valid payload",
+                    "description": "Desc valid",
+                    "phase_id": phase.id,
+                    "acceptance": "Valid acceptance criterion",
+                    "verification": "uv run pytest -q tests/test_mcp_tools.py -k batch_valid",
+                    "relevant_files": ["src/engram/mcp/tools/task_batch_tools.py"],
+                },
+                {
+                    "title": "Invalid payload",
+                    "description": "Desc invalid",
+                    "phase_id": phase.id,
+                    "acceptance": "Invalid acceptance criterion",
+                    "verification": "uv run pytest -q tests/test_mcp_tools.py -k batch_invalid",
+                    "relevant_files": ["src/engram/mcp/tools/task_batch_tools.py"],
+                    "priority": "ultra-high",
+                },
+            ]
+        )
+    )
+    assert res["ok"] is False
+    assert res["error"] == "TASK_BATCH_VALIDATION_FAILED"
+    assert "details" in res
+    assert res["details"]["count"] == 1
+    assert res["details"]["errors"][0]["index"] == 1
+
+    after_ids = {t.id for t in Task.list_by_project(project.id)}
+    assert after_ids == before_ids
 
 
 def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:

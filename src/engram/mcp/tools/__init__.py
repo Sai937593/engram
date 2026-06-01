@@ -13,6 +13,7 @@ from engram.mcp.tools.helpers import (
 from engram.mcp.tools.memory_lifecycle_tools import register_memory_lifecycle_tools
 from engram.mcp.tools.memory_tools import register_memory_tools
 from engram.mcp.tools.phase_tools import register_phase_tools
+from engram.mcp.tools.task_batch_tools import register_task_batch_tools
 from engram.mcp.tools.task_maintenance_tools import register_task_maintenance_tools
 from engram.mcp.tools.task_tools import register_task_tools
 from engram.mcp.tools.workflow_tools import register_workflow_tools
@@ -36,6 +37,7 @@ from engram.services.task import (
     block_task,
     cancel_task,
     complete_task,
+    create_many_tasks,
     create_task,
     get_next_task,
     get_task,
@@ -56,6 +58,7 @@ __all__ = [
     "register_memory_tools",
     "register_memory_lifecycle_tools",
     "register_phase_tools",
+    "register_task_batch_tools",
     "register_task_maintenance_tools",
     "register_task_tools",
     "register_workflow_tools",
@@ -73,6 +76,7 @@ __all__ = [
     "block_task",
     "cancel_task",
     "complete_task",
+    "create_many_tasks",
     "create_task",
     "get_next_task",
     "get_task",
@@ -90,6 +94,7 @@ __all__ = [
 def register_tools(server: Any) -> None:
     """Register all modular MCP tools on the server."""
     register_task_tools(server)
+    register_task_batch_tools(server)
     register_task_maintenance_tools(server)
     register_memory_tools(server)
     register_memory_lifecycle_tools(server)

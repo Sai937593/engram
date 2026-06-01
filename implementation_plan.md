@@ -1,33 +1,28 @@
-# Implementation Plan: Atomic create-many task service (8d29fab0)
+# Implementation Plan: Register batch task creation MCP tool (28c8a290)
 
 ## Scope
-Implement all-or-nothing persistence for `create_many_tasks` after preflight validation succeeds, while preserving existing single-task defaults, dependency normalization behavior, and response shape.
+Add `engram_task_create_many` as a thin MCP adapter over the existing atomic service entry point, preserving compact MCP success/error response conventions and returning exact per-entry validation failures without partial writes.
 
 ## Proposed changes
-1. Add a task-model batch insert path:
-- Introduce a new `Task.create_many(project_id: str, payloads: list[dict[str, object]]) -> list[Task]` method in `src/engram/models/task/model.py`.
-- Perform all inserts in a single DB transaction (`BEGIN` + commit/rollback semantics via one shared connection).
-- Reuse existing field serialization/default behavior equivalent to `Task.create` (id generation, objective->description compatibility, tags/relevant_files/search_hints serialization, status/priority passthrough).
-- On any insert failure, rollback and re-raise so zero rows persist.
+1. Add tool handler in `src/engram/mcp/tools/task_tools.py`:
+- Register `engram_task_create_many(tasks: list[dict[str, Any]]) -> str` under `register_task_tools`.
+- Resolve current project once and delegate to the existing service-layer batch API (`create_many_tasks` through `engram.mcp.tools` exports).
+- On success, return compact YAML via `_respond` with `ok: true` and created task refs (IDs/titles) for the full batch.
+- On `EngramServiceError`, return `_respond_error` unchanged so `TASK_BATCH_VALIDATION_FAILED` details remain exact and per-entry.
 
-2. Switch service batch create to atomic model API:
-- Update `create_many_tasks` in `src/engram/services/task/crud.py` to:
-  - Keep current full preflight validation and per-index error aggregation behavior unchanged.
-  - After successful preflight, call `Task.create_many(...)` once.
-  - Return `_task_to_dict(...)` for each created task in stable input order.
+2. Ensure module exports support the new adapter path:
+- Update `src/engram/mcp/tools/__init__.py` only if needed so `create_many_tasks` is available through `engram.mcp.tools` like other task service delegates.
+- Keep the change minimal and consistent with existing import/export patterns.
 
-3. Focused tests for atomicity and behavior preservation:
-- Extend `tests/test_services_task.py` with tests that verify:
-  - Successful valid batch still creates all tasks and preserves normalization/defaults.
-  - If persistence fails mid-batch (simulated via monkeypatching DB execute), no new task rows are persisted.
-  - Existing validation-failure path still writes zero rows and returns `TASK_BATCH_VALIDATION_FAILED` details.
+3. Add focused MCP tests in `tests/test_mcp_tools.py`:
+- Registration test asserts `engram_task_create_many` is present in `register_tools`.
+- Happy-path test validates compact success response and that all requested tasks are created.
+- Validation-failure test asserts error code/details include per-index failures and confirms zero tasks persisted for the batch.
 
 ## Verification
-- Run focused tests first:
-  - `uv run pytest tests/test_services_task.py -k create_many_tasks`
-- Then run full workflow verification via MCP:
-  - `engram_workflow_verify`
+1. `uv run pytest tests/test_mcp_tools.py -q -k task_create_many`
+2. `engram_workflow_verify`
 
 ## Risks and mitigations
-- Risk: Divergence between `Task.create` and `Task.create_many` defaults/serialization.
-- Mitigation: Keep field handling logic structurally aligned and cover with regression assertions in create-many tests.
+- Risk: Response shape drifts from existing MCP write-tool compactness.
+- Mitigation: Match current `_respond`/`_respond_error` patterns and assert shape directly in MCP tests.
