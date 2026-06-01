@@ -7,10 +7,13 @@ from typing import Any
 from engram.mcp.tools.helpers import _respond, _respond_error, slim_phase_dict
 from engram.services.errors import EngramServiceError
 from engram.services.phase_service import (
+    archive_phase,
+    cancel_phase,
     complete_phase,
     create_phase,
     list_phases,
     start_phase,
+    update_phase,
 )
 from engram.services.project_service import resolve_current_project
 
@@ -92,6 +95,71 @@ def register_phase_tools(server: Any) -> None:
                 {
                     "ok": True,
                     "phase": phase,
+                }
+            )
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+    @server.tool()
+    def engram_phase_update(
+        phase_ref: str,
+        title: str | None = None,
+        description: str | None = None,
+        acceptance: str | None = None,
+        evidence: str | None = None,
+    ) -> str:
+        """Update mutable phase metadata fields in the currently bound engram project."""
+        try:
+            project = resolve_current_project()
+            phase = update_phase(
+                project_id=str(project["id"]),
+                phase_ref=phase_ref,
+                title=title,
+                description=description,
+                acceptance=acceptance,
+                evidence=evidence,
+            )
+            return _respond(
+                {
+                    "ok": True,
+                    "phase": phase,
+                }
+            )
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+    @server.tool()
+    def engram_phase_cancel(phase_ref: str, reason: str | None = None) -> str:
+        """Cancel a phase after validating lifecycle safety rules."""
+        try:
+            project = resolve_current_project()
+            phase = cancel_phase(
+                project_id=str(project["id"]),
+                phase_ref=phase_ref,
+                reason=reason,
+            )
+            return _respond(
+                {
+                    "ok": True,
+                    "phase": phase,
+                }
+            )
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+    @server.tool()
+    def engram_phase_archive(phase_ref: str) -> str:
+        """Archive a terminal phase after validating lifecycle safety rules."""
+        try:
+            project = resolve_current_project()
+            result = archive_phase(
+                project_id=str(project["id"]),
+                phase_ref=phase_ref,
+            )
+            return _respond(
+                {
+                    "ok": True,
+                    **result,
                 }
             )
         except EngramServiceError as exc:

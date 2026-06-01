@@ -217,6 +217,9 @@ def test_mcp_tools_graceful_degradation_unresolved_workspace(unresolved_workspac
         "engram_phase_create": {"title": "P1"},
         "engram_phase_start": {"phase_ref": "P1"},
         "engram_phase_complete": {"phase_ref": "P1"},
+        "engram_phase_update": {"phase_ref": "P1"},
+        "engram_phase_cancel": {"phase_ref": "P1"},
+        "engram_phase_archive": {"phase_ref": "P1"},
     }
 
     # Patch sys.modules to remove "pytest" so project_service behaves as in production
@@ -279,6 +282,9 @@ def test_mcp_tools_graceful_degradation_uninitialized_workspace(uninitialized_wo
         "engram_phase_create": {"title": "P1"},
         "engram_phase_start": {"phase_ref": "P1"},
         "engram_phase_complete": {"phase_ref": "P1"},
+        "engram_phase_update": {"phase_ref": "P1"},
+        "engram_phase_cancel": {"phase_ref": "P1"},
+        "engram_phase_archive": {"phase_ref": "P1"},
     }
 
     # Patch sys.modules to remove "pytest" so project_service behaves as in production

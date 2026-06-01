@@ -80,6 +80,12 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_phase_start"].__name__ == "engram_phase_start"
     assert "engram_phase_complete" in server.tools
     assert server.tools["engram_phase_complete"].__name__ == "engram_phase_complete"
+    assert "engram_phase_update" in server.tools
+    assert server.tools["engram_phase_update"].__name__ == "engram_phase_update"
+    assert "engram_phase_cancel" in server.tools
+    assert server.tools["engram_phase_cancel"].__name__ == "engram_phase_cancel"
+    assert "engram_phase_archive" in server.tools
+    assert server.tools["engram_phase_archive"].__name__ == "engram_phase_archive"
     assert "engram_task_start" in server.tools
     assert server.tools["engram_task_start"].__name__ == "engram_task_start"
     assert "engram_task_done" in server.tools
@@ -1124,6 +1130,77 @@ def test_mcp_phase_complete_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     res = yaml.safe_load(handler(phase_ref="Phase 1"))
     assert res["ok"] is True
     assert res["phase"]["status"] == "done"
+
+
+def test_mcp_phase_lifecycle_maintenance_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_phase_update/cancel/archive tools delegate lifecycle behavior safely."""
+    cwd = os.path.abspath("repo/bound-mcp-phase-maintenance")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-phase-maint",
+        name="MCP Phase Maintenance Project",
+        summary="Phase lifecycle maintenance coverage",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(
+        project_id=project.id,
+        id="pha-maint-1",
+        title="Lifecycle Phase",
+        description="Initial description",
+        status="active",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    update_handler = server.tools["engram_phase_update"]
+    cancel_handler = server.tools["engram_phase_cancel"]
+    archive_handler = server.tools["engram_phase_archive"]
+
+    updated = yaml.safe_load(
+        update_handler(
+            phase_ref=phase.id,
+            title="Lifecycle Phase Updated",
+            description="Refined description",
+            acceptance="Clear acceptance criteria",
+            evidence="Captured verification evidence",
+        )
+    )
+    assert updated["ok"] is True
+    assert updated["phase"]["title"] == "Lifecycle Phase Updated"
+    assert updated["phase"]["description"] == "Refined description"
+
+    from engram.models.task import Task
+
+    Task.create(
+        project_id=project.id,
+        id="task-phase-blocker",
+        title="Unfinished blocker task",
+        phase_id=phase.id,
+        status="todo",
+    )
+    cancelled_err = yaml.safe_load(cancel_handler(phase_ref=phase.id, reason="No longer needed"))
+    assert cancelled_err["ok"] is False
+    assert cancelled_err["error"] == "UNFINISHED_TASKS"
+    assert "fix" in cancelled_err
+
+    blocker = Task.get("task-phase-blocker")
+    blocker.update(status="done")
+    cancelled = yaml.safe_load(cancel_handler(phase_ref=phase.id, reason="No longer needed"))
+    assert cancelled["ok"] is True
+    assert cancelled["phase"]["status"] == "cancelled"
+
+    archived = yaml.safe_load(archive_handler(phase_ref=phase.id))
+    assert archived["ok"] is True
+    assert archived["archived"] is True
+    assert archived["phase"]["id"] == phase.id
+
+    archived_err = yaml.safe_load(archive_handler(phase_ref=phase.id))
+    assert archived_err["ok"] is False
+    assert archived_err["error"] == "PHASE_NOT_FOUND"
+    assert "fix" in archived_err
 
 
 def test_mcp_task_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
