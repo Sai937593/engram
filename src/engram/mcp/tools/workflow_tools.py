@@ -73,9 +73,10 @@ def register_workflow_tools(server: Any) -> None:
                 return format_start_blocked(
                     reason=exc.message,
                     next_guidance=(
-                        "Complete minimum execution metadata on the draft task(s) "
-                        "(description, acceptance, relevant_files), then set status=ready "
-                        "via engram_task_update and rerun engram_workflow_start."
+                        "Complete minimum execution metadata on draft task(s), then set "
+                        "status=ready via engram_task_update and rerun engram_workflow_start. "
+                        "If ready-promotion fails, use READY_METADATA_INCOMPLETE details to "
+                        "fix missing/weak fields before retrying."
                     ),
                 )
             return engram.mcp.tools._respond_error(exc)

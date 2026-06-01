@@ -5,6 +5,10 @@ from __future__ import annotations
 from engram.db import get_db_connection as _get_db_connection
 from engram.services.errors import EngramServiceError as _EngramServiceError
 from engram.services.errors import ValidationError as _ValidationError
+from engram.services.task.ready_metadata_quality import (
+    EVALUATED_READY_FIELDS,
+    evaluate_ready_metadata_quality,
+)
 
 VALID_TASK_STATUSES = {
     "draft",
@@ -156,25 +160,26 @@ def validate_ready_promotion_metadata(
     acceptance: str | None,
     relevant_files: list[str] | None,
 ) -> None:
-    """Validate minimal metadata required to promote a task into ready."""
+    """Validate metadata quality required to promote a task into ready."""
     if status != "ready":
         return
 
-    missing_fields: list[str] = []
-    if not description or not description.strip():
-        missing_fields.append("description")
-    if not acceptance or not acceptance.strip():
-        missing_fields.append("acceptance")
-    if not relevant_files:
-        missing_fields.append("relevant_files")
+    missing_fields, weak_fields, weak_field_reasons = evaluate_ready_metadata_quality(
+        description=description,
+        acceptance=acceptance,
+        relevant_files=relevant_files,
+    )
 
-    if missing_fields:
+    if missing_fields or weak_fields:
         raise _ValidationError(
             code="READY_METADATA_INCOMPLETE",
-            message="Task cannot be promoted to ready until minimum execution metadata is complete.",
+            message="Task cannot be promoted to ready until required metadata is complete and sufficiently specific.",
             details={
                 "status": status,
+                "evaluated_fields": EVALUATED_READY_FIELDS,
                 "missing_fields": missing_fields,
-                "required_fields": ["description", "acceptance", "relevant_files"],
+                "weak_fields": weak_fields,
+                "weak_field_reasons": weak_field_reasons,
+                "required_fields": EVALUATED_READY_FIELDS,
             },
         )

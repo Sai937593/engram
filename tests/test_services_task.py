@@ -484,6 +484,13 @@ def test_update_task_ready_promotion_requires_minimum_metadata(tmp_db):
 
     assert exc.value.code == "READY_METADATA_INCOMPLETE"
     assert exc.value.details["missing_fields"] == ["description", "acceptance", "relevant_files"]
+    assert exc.value.details["weak_fields"] == []
+    assert exc.value.details["weak_field_reasons"] == {}
+    assert exc.value.details["evaluated_fields"] == [
+        "description",
+        "acceptance",
+        "relevant_files",
+    ]
 
 
 def test_update_task_ready_promotion_succeeds_with_minimum_metadata(tmp_db):
@@ -499,6 +506,60 @@ def test_update_task_ready_promotion_succeeds_with_minimum_metadata(tmp_db):
         relevant_files=["src/engram/services/task/update_resolution.py"],
     )
     assert updated["status"] == "ready"
+
+
+def test_update_task_ready_promotion_rejects_weak_metadata(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0003d", title="Task title", status="draft")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(
+            project_id=project.id,
+            task_ref="task0003d",
+            status="ready",
+            description="Too short",
+            acceptance="Done quickly.",
+            relevant_files=["services"],
+        )
+
+    assert exc.value.code == "READY_METADATA_INCOMPLETE"
+    assert exc.value.details["missing_fields"] == []
+    assert exc.value.details["weak_fields"] == ["description", "acceptance", "relevant_files"]
+    assert exc.value.details["weak_field_reasons"] == {
+        "description": "Description must include at least 4 words and 24 characters.",
+        "acceptance": "Acceptance must include at least 6 words and 32 characters.",
+        "relevant_files": "Relevant files must include at least one concrete path-like entry.",
+    }
+
+
+def test_update_task_ready_promotion_recovers_after_metadata_repair(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+    Task.create(project_id=project.id, id="task0003e", title="Task title", status="draft")
+
+    with pytest.raises(ValidationError) as exc:
+        update_task(
+            project_id=project.id,
+            task_ref="task0003e",
+            status="ready",
+            description="Too short",
+            acceptance="Done quickly.",
+            relevant_files=["services"],
+        )
+
+    assert exc.value.code == "READY_METADATA_INCOMPLETE"
+    assert exc.value.details["missing_fields"] == []
+    assert exc.value.details["weak_fields"] == ["description", "acceptance", "relevant_files"]
+    assert get_task(project.id, "task0003e")["status"] == "draft"
+
+    repaired = update_task(
+        project_id=project.id,
+        task_ref="task0003e",
+        status="ready",
+        description="Implement deterministic task quality validation regression coverage.",
+        acceptance="Ready promotion succeeds only after all required metadata is specific and concrete.",
+        relevant_files=["tests/test_services_task.py", "tests/test_mcp_tools.py"],
+    )
+    assert repaired["status"] == "ready"
 
 
 def test_update_task_prevents_direct_cycle_and_self_dependency(tmp_db):
