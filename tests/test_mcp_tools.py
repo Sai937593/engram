@@ -112,6 +112,11 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_retire"].__name__ == "engram_task_retire"
     assert "engram_workflow_start" in server.tools
     assert server.tools["engram_workflow_start"].__name__ == "engram_workflow_start"
+    assert "engram_workflow_finish_and_commit" in server.tools
+    assert (
+        server.tools["engram_workflow_finish_and_commit"].__name__
+        == "engram_workflow_finish_and_commit"
+    )
     assert "engram_workflow_finish" in server.tools
     assert server.tools["engram_workflow_finish"].__name__ == "engram_workflow_finish"
     assert "engram_workflow_verify" in server.tools
@@ -1347,7 +1352,10 @@ def test_mcp_task_done_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res["id"] == "task-done-1"
     assert res["status"] == "done"
     assert res["phase_complete"] is True
-    assert res["next"] == "Log lessons with engram_memory_create, then call engram_workflow_finish"
+    assert (
+        res["next"]
+        == "Log lessons with engram_memory_create, then call engram_workflow_finish_and_commit"
+    )
     assert "task" not in res
 
     # Assert evidence is saved to model
@@ -1491,7 +1499,8 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     register_tools(server)
 
     start_handler = server.tools["engram_workflow_start"]
-    finish_handler = server.tools["engram_workflow_finish"]
+    finish_handler = server.tools["engram_workflow_finish_and_commit"]
+    finish_alias_handler = server.tools["engram_workflow_finish"]
     verify_handler = server.tools["engram_workflow_verify"]
 
     # 1. Happy path: Start (handler is now async)
@@ -1512,6 +1521,12 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         in res_finish
     )
     assert finish_called_args == [("proj-tool-workflow", cwd, "feat")]
+
+    # 2b. Backward compatibility: deprecated alias still works
+    finish_called_args.clear()
+    res_finish_alias = asyncio.run(finish_alias_handler(commit_type="fix"))
+    assert "# Task Finished" in res_finish_alias
+    assert finish_called_args == [("proj-tool-workflow", cwd, "fix")]
 
     # 3. Happy path: Verify returns compact markdown with one next action
     res_verify = asyncio.run(verify_handler())
@@ -1540,7 +1555,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "## Next action" in res_verify_pass
     assert res_verify_pass.count("## Next action") == 1
     assert (
-        "Verification succeeded and staged changes are ready. Continue implementation or run engram_workflow_finish when ready."
+        "Verification succeeded and staged changes are ready. Continue implementation or run engram_workflow_finish_and_commit when ready."
         in res_verify_pass
     )
 
@@ -1572,7 +1587,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "## Next action" in res_finish_blocked
     assert res_finish_blocked.count("## Next action") == 1
     assert (
-        "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
+        "Run or rerun engram_workflow_verify, then call engram_workflow_finish_and_commit again."
         in res_finish_blocked
     )
     assert "ok:" not in res_finish_blocked.lower()
@@ -1593,7 +1608,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "## Next action" in res_finish_failed
     assert res_finish_failed.count("## Next action") == 1
     assert (
-        "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
+        "Run or rerun engram_workflow_verify, then call engram_workflow_finish_and_commit again."
         in res_finish_failed
     )
 
@@ -1615,7 +1630,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "## Next action" in res_finish_stale
     assert res_finish_stale.count("## Next action") == 1
     assert (
-        "Run or rerun engram_workflow_verify, then call engram_workflow_finish again."
+        "Run or rerun engram_workflow_verify, then call engram_workflow_finish_and_commit again."
         in res_finish_stale
     )
 
@@ -1635,7 +1650,7 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res_finish_memory_blocked.count("## Next action") == 1
     assert (
         "Record memory_review_outcome on the active task via engram_task_update, then call "
-        "engram_workflow_finish again." in res_finish_memory_blocked
+        "engram_workflow_finish_and_commit again." in res_finish_memory_blocked
     )
 
     # 5. Error path: Project bound but has no repo_paths configured

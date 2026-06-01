@@ -291,7 +291,7 @@ def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
     from engram.mcp.tools import register_tools
 
     register_tools(server)
-    finish_handler = server.tools["engram_workflow_finish"]
+    finish_handler = server.tools["engram_workflow_finish_and_commit"]
 
     # --- Case A: Phase Not Complete (Stop-after-finish contract) ---
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
@@ -368,7 +368,7 @@ def test_finish_failures_contract(tmp_db: Any, monkeypatch: Any) -> None:
     from engram.mcp.tools import register_tools
 
     register_tools(server)
-    finish_handler = server.tools["engram_workflow_finish"]
+    finish_handler = server.tools["engram_workflow_finish_and_commit"]
 
     res_mcp_no_task = yaml.safe_load(asyncio.run(finish_handler()))
     assert res_mcp_no_task["ok"] is False
@@ -412,7 +412,7 @@ def test_finish_failures_contract(tmp_db: Any, monkeypatch: Any) -> None:
 
 
 def test_finish_verification_gate_e2e_contract(tmp_db: Any, monkeypatch: Any) -> None:
-    """Verify that engram_workflow_finish MCP tool handles all verification gating states end-to-end."""
+    """Verify that engram_workflow_finish_and_commit MCP tool handles all verification gating states end-to-end."""
     import os
     from pathlib import Path
 
@@ -438,7 +438,7 @@ def test_finish_verification_gate_e2e_contract(tmp_db: Any, monkeypatch: Any) ->
     from engram.mcp.tools import register_tools
 
     register_tools(server)
-    finish_handler = server.tools["engram_workflow_finish"]
+    finish_handler = server.tools["engram_workflow_finish_and_commit"]
 
     # 1. Never-Verified task state
     res_missing = asyncio.run(finish_handler())
@@ -450,7 +450,10 @@ def test_finish_verification_gate_e2e_contract(tmp_db: Any, monkeypatch: Any) ->
     )
     assert "## Next action" in res_missing
     assert res_missing.count("## Next action") == 1
-    assert "Run engram_workflow_verify, then call engram_workflow_finish again." in res_missing
+    assert (
+        "Run engram_workflow_verify, then call engram_workflow_finish_and_commit again."
+        in res_missing
+    )
 
     # 2. Failed Verification (task marked verified, eligibility now checks verification record)
     task.update(is_verified=True)

@@ -195,7 +195,7 @@ def register_task_tools(server: Any) -> None:
                     "id": task["id"],
                     "status": task["status"],
                     "phase_complete": phase_complete,
-                    "next": "Log lessons with engram_memory_create, then call engram_workflow_finish",
+                    "next": "Log lessons with engram_memory_create, then call engram_workflow_finish_and_commit",
                 }
             )
         except EngramServiceError as exc:

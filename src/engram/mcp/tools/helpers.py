@@ -45,7 +45,7 @@ def _respond_error(exc: EngramServiceError) -> str:
         "NO_TASK_IN_PROGRESS": "Start a task first using engram_task_start.",
         "TASK_NOT_FOUND": "List tasks using engram_task_list to find the correct task ID or reference.",
         "TASK_AMBIGUOUS": "Use the exact 8-character task ID instead of the title. Run engram_task_list to find the task ID.",
-        "DIRTY_WORKING_TREE": "Commit your changes using engram_workflow_finish or stash them before starting a new task.",
+        "DIRTY_WORKING_TREE": "Commit your changes using engram_workflow_finish_and_commit or stash them before starting a new task.",
         "INVALID_TASK_STATUS": "Use a valid task status (draft, ready, in-progress, done, blocked, or cancelled) and update using engram_task_update.",
         "READY_METADATA_INCOMPLETE": "Add or strengthen task description, acceptance criteria, and relevant_files, then retry engram_task_update with status=ready.",
         "TASK_METADATA_INCOMPLETE": "Add or strengthen task title, description, acceptance, phase_id, verification, and relevant_files/search_hints, then retry.",
@@ -61,9 +61,9 @@ def _respond_error(exc: EngramServiceError) -> str:
         "AMBIGUOUS_PHASE": "Use the exact phase ID instead of title to avoid ambiguous matches.",
         "INVALID_PHASE_UPDATE": "Retry engram_phase_update using only string values for metadata fields.",
         "INVALID_PHASE_TRANSITION": "Use engram_phase_list to inspect the current phase status, then choose a valid lifecycle transition.",
-        "TASK_NOT_VERIFIED": "Run engram_workflow_verify first, then retry engram_workflow_finish.",
-        "WORKTREE_HAS_UNSTAGED_CHANGES": "Stage all intended changes before running engram_workflow_finish.",
-        "WORKTREE_HAS_UNTRACKED_FILES": "Stage or remove untracked files before running engram_workflow_finish.",
+        "TASK_NOT_VERIFIED": "Run engram_workflow_verify first, then retry engram_workflow_finish_and_commit.",
+        "WORKTREE_HAS_UNSTAGED_CHANGES": "Stage all intended changes before running engram_workflow_finish_and_commit.",
+        "WORKTREE_HAS_UNTRACKED_FILES": "Stage or remove untracked files before running engram_workflow_finish_and_commit.",
     }
 
     details = _compact_error_details(exc)

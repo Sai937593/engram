@@ -15,6 +15,50 @@ from engram.mcp.tools.workflow_tool_helpers import (
 from engram.services.errors import EngramServiceError
 
 
+async def _run_finish_and_commit(commit_type: str | None = None) -> str:
+    """Run shared finish-and-commit workflow logic for MCP finish tool aliases."""
+    project_id: str | None = None
+    try:
+        project = engram.mcp.tools.resolve_current_project()
+        project_id = str(project["id"])
+        repo_paths = project.get("repo_paths", [])
+        if not repo_paths:
+            raise EngramServiceError(
+                code="PROJECT_NO_REPOS",
+                message="No repository paths configured for this project.",
+            )
+        res = await anyio.to_thread.run_sync(
+            functools.partial(
+                engram.mcp.tools.finish_workflow,
+                project_id=project_id,
+                repo_path=repo_paths[0],
+                commit_type=commit_type,
+            )
+        )
+        phase_complete = res["phase_complete"]
+        next_guidance = (
+            "Phase complete. Ask the user for permission to run the engram-phase-transition skill."
+            if phase_complete
+            else "Stop here. The active task is finished and committed. Await further instructions."
+        )
+        from engram.services.workflow_formatter import format_finish_success
+
+        return format_finish_success(
+            task_id=res["id"],
+            commit_msg=res["commit"],
+            phase_complete=phase_complete,
+            next_guidance=next_guidance,
+            task_title=res.get("task_title"),
+            memory_review_outcome=res.get("memory_review_outcome"),
+        )
+    except EngramServiceError as exc:
+        if exc.code in FINISH_GATE_ERROR_CODES and project_id:
+            return format_verification_finish_blocked(
+                project_id=project_id, reason=exc.message, code=exc.code
+            )
+        return engram.mcp.tools._respond_error(exc)
+
+
 def register_workflow_tools(server: Any) -> None:
     """Register workflow and project tools on the server."""
 
@@ -82,48 +126,14 @@ def register_workflow_tools(server: Any) -> None:
             return engram.mcp.tools._respond_error(exc)
 
     @server.tool()
-    async def engram_workflow_finish(commit_type: str | None = None) -> str:
+    async def engram_workflow_finish_and_commit(commit_type: str | None = None) -> str:
         """Finish the active task: commit, push, and mark done."""
-        project_id: str | None = None
-        try:
-            project = engram.mcp.tools.resolve_current_project()
-            project_id = str(project["id"])
-            repo_paths = project.get("repo_paths", [])
-            if not repo_paths:
-                raise EngramServiceError(
-                    code="PROJECT_NO_REPOS",
-                    message="No repository paths configured for this project.",
-                )
-            res = await anyio.to_thread.run_sync(
-                functools.partial(
-                    engram.mcp.tools.finish_workflow,
-                    project_id=project_id,
-                    repo_path=repo_paths[0],
-                    commit_type=commit_type,
-                )
-            )
-            phase_complete = res["phase_complete"]
-            next_guidance = (
-                "Phase complete. Ask the user for permission to run the engram-phase-transition skill."
-                if phase_complete
-                else "Stop here. The active task is finished and committed. Await further instructions."
-            )
-            from engram.services.workflow_formatter import format_finish_success
+        return await _run_finish_and_commit(commit_type=commit_type)
 
-            return format_finish_success(
-                task_id=res["id"],
-                commit_msg=res["commit"],
-                phase_complete=phase_complete,
-                next_guidance=next_guidance,
-                task_title=res.get("task_title"),
-                memory_review_outcome=res.get("memory_review_outcome"),
-            )
-        except EngramServiceError as exc:
-            if exc.code in FINISH_GATE_ERROR_CODES and project_id:
-                return format_verification_finish_blocked(
-                    project_id=project_id, reason=exc.message, code=exc.code
-                )
-            return engram.mcp.tools._respond_error(exc)
+    @server.tool()
+    async def engram_workflow_finish(commit_type: str | None = None) -> str:
+        """Deprecated alias for engram_workflow_finish_and_commit."""
+        return await _run_finish_and_commit(commit_type=commit_type)
 
     @server.tool()
     async def engram_workflow_verify() -> str:
@@ -146,7 +156,7 @@ def register_workflow_tools(server: Any) -> None:
             from engram.services.workflow_formatter import format_verify_result
 
             next_guidance = (
-                "Verification succeeded and staged changes are ready. Continue implementation or run engram_workflow_finish when ready."
+                "Verification succeeded and staged changes are ready. Continue implementation or run engram_workflow_finish_and_commit when ready."
                 if res["passed"]
                 else "Fix the first actionable target, then rerun engram_workflow_verify."
             )
