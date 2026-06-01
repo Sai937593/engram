@@ -1,3 +1,8 @@
+<!--
+TEMPLATE NOTE:
+This is an inactive template file located under `agent-files/root-agents-template.md`.
+When bootstrapping or updating the active agent instructions for the repository, copy this template to the root as `AGENTS.md`.
+-->
 # Engram Agent Instructions
 
 These instructions apply to work in this repository.
