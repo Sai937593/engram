@@ -2,84 +2,55 @@
 
 Use this skill when the user asks to start or implement a specific Engram-managed task.
 
-This skill is written for the current redesign branch state. Do not call future simplified tools such as `engram_workflow_finish_and_commit`, `engram_memory_list`, `engram_memory_update_many`, or `engram_task_create_many` until they exist in the repository.
-
 ## Goal
 
-Execute one scoped Engram task using the current MCP workflow.
+Execute one scoped Engram task using the simplified MVP task loop.
 
-## Current available workflow tools
+## The Simplified MVP Loop
 
-Use these current tools:
+The core task execution loop consists of four sequential steps:
+1. **Start**: Start or resume a task to obtain context.
+2. **Implement**: Make focused, reviewable code changes.
+3. **Verify**: Run verification checks locally to format, lint, test, and automatically stage changes on success.
+4. **Finish and Commit**: Commit staged changes and push.
 
-- `engram_workflow_start`
-- `engram_workflow_verify`
-- `engram_workflow_finish`
+```text
+start ➔ implement ➔ verify ➔ finish_and_commit
+```
 
-The current branch also has task and memory tools. Use those only when needed.
+## Available Workflow Tools
 
-## Required flow
+- `engram_workflow_start`: Selects, resumes, or starts the next actionable task, returning a clear work order and context.
+- `engram_workflow_verify`: Runs all required repo-local verification checks. If all checks pass, it automatically stages the changes via `git add -A` and marks the task as verified (`is_verified = true`).
+- `engram_workflow_finish_and_commit` (or alias `engram_workflow_finish`): Finalizes the task by committing the staged changes and pushing, then marks the task as done. It blocks if there are unstaged or untracked changes.
 
-1. Call `engram_workflow_start`.
-2. Read the returned work order carefully.
-3. Inspect only the files needed for the task.
-4. Produce a short implementation plan.
-5. Implement the scoped change.
-6. Run focused checks if useful while editing.
-7. Call `engram_workflow_verify`.
-8. Fix any verification failures.
-9. Repeat verification until it passes.
-10. Complete the current memory-review gate using current tools.
-11. Call `engram_workflow_finish`.
-12. Stop. Do not auto-start another task.
+## Required Execution Steps
 
-## Current memory-review gate
+1. **Call Start**
+   Invoke `engram_workflow_start` to activate the task and read the returned work order carefully.
 
-The current redesign branch blocks `engram_workflow_finish` unless the task has a memory review outcome recorded.
+2. **Understand and Plan**
+   - Inspect only the files related to the active task.
+   - For non-trivial tasks, produce a brief implementation plan and await user approval before writing code.
 
-This is transitional. Until the implementation removes the per-task memory-review gate, do this before finish:
+3. **Implement Changes**
+   - Keep code modifications highly localized and scoped tightly to the task's acceptance criteria.
+   - Do not perform unrelated refactoring.
+   - Adhere to codebase rules (e.g., file sizes, public symbol limits, boundaries).
 
-1. Decide whether the task produced durable memory.
-2. If not, record `no_change`.
-3. If yes, use the existing memory tools to create or update memory as appropriate.
-4. Record the task memory review outcome with the current task update tool.
+4. **Verify Locally**
+   - Invoke `engram_workflow_verify` to run the project's quality gate checks (formatting, linting, hook scripts, and tests).
+   - If verification fails, address only the failing items and retry.
+   - Do not manually run `git add` unless explicitly instructed; a successful verify call stages the files for you.
 
-Acceptable current outcomes are expected to include:
+5. **Finish and Commit**
+   - Ensure the working tree is clean except for the staged files (verify command handles staging).
+   - Call `engram_workflow_finish_and_commit` (or `engram_workflow_finish` if the alias is required) to commit and push the changes.
+   - Stop. Do not automatically start the next task.
 
-- `created`
-- `superseded`
-- `demoted`
-- `archived`
-- `deleted`
-- `no_change`
+## Implementation Discipline
 
-Prefer `no_change` unless the task produced durable project knowledge.
-
-Do not use Python or raw SQLite to perform memory review.
-
-## Implementation discipline
-
-- Stay inside the task scope.
-- Do not make opportunistic unrelated refactors.
-- Do not change project workflow design unless the task asks for it.
-- Do not edit files after verification passes unless you rerun verification.
-- Do not run `git add` manually as part of this skill unless the current tool output explicitly instructs you to do so.
-- Let `engram_workflow_finish` handle commit behavior in the current implementation.
-
-## Failure handling
-
-If any Engram tool blocks:
-
-1. Read the error and suggested fix.
-2. Fix only the blocking issue.
-3. Retry the same step.
-4. If the block is about unclear product/design direction, stop and ask the user.
-
-## Completion response
-
-When finished, report only:
-
-- task completed
-- verification status
-- commit/push status if provided by the tool
-- any important caveat
+- **No Manual Staging**: Let `engram_workflow_verify` handle `git add` upon a successful test run.
+- **Strict Scope**: Stay within the boundaries defined in the task context.
+- **Clean State**: `finish_and_commit` will block if there are unstaged edits or untracked files. Make sure all intended changes are verified and staged, and untracked temporary files are cleaned up or gitignored.
+- **No Per-Task Memory Gates**: Per-task memory review outcomes (e.g., `no_change`, `created`, `superseded`) are no longer required during the active task loop. Memory curation is done at the phase level.
