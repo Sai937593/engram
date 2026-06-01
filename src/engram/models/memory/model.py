@@ -103,6 +103,12 @@ class Memory:
             old_memory = cls.get(supersedes)
             if not old_memory:
                 raise ValueError(f"Memory with ID {supersedes} to supersede not found.")
+            if old_memory.project_id != project_id:
+                raise ValueError("Superseded memory must belong to the same project.")
+            if old_memory.superseded_by is not None:
+                raise ValueError(
+                    f"Memory with ID {supersedes} is already superseded by {old_memory.superseded_by}."
+                )
             old_memory.update(superseded_by=id)
 
         return new_memory

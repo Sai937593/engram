@@ -13,6 +13,12 @@ from engram.db import get_db_connection
 from engram.models.memory import Memory
 from engram.models.project import Project
 from engram.services.errors import EngramServiceError, ValidationError
+from engram.services.memory_lifecycle_service import (
+    archive_memory,
+    delete_memory,
+    demote_memory,
+    supersede_memory,
+)
 from engram.services.memory_service import (
     create_memory,
     get_memory,
@@ -557,6 +563,88 @@ def test_update_memory_rejects_invalid_scope_level_transition(tmp_db):
     error = raised.value
     assert error.code == "INVALID_MEMORY_UPDATE"
     assert "Task-scope memories must not define a level." in str(error.details["reason"])
+
+
+def test_supersede_memory_creates_replacement_and_hides_old_by_default(tmp_db):
+    project = _create_project("proj-life-a", "/tmp/proj-life-a")
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Old",
+        content="Old content",
+        scope="project",
+        level="L2",
+        id="lifea001",
+    )
+
+    replacement = supersede_memory(
+        project.id,
+        "lifea001",
+        title="New",
+        content="New content",
+        id="lifea002",
+    )
+
+    assert replacement["id"] == "lifea002"
+    old = get_memory(project.id, "lifea001")
+    assert old["superseded_by"] == "lifea002"
+    assert [m["id"] for m in list_memories(project.id)] == ["lifea002"]
+
+
+def test_demote_memory_returns_updated_level(tmp_db):
+    project = _create_project("proj-life-b", "/tmp/proj-life-b")
+    create_memory(
+        project_id=project.id,
+        type="constraint",
+        title="Guardrail",
+        content="Keep quality high",
+        scope="project",
+        level="L1",
+        id="lifeb001",
+    )
+
+    demoted = demote_memory(project.id, "lifeb001", reason="Too strict for startup stage.")
+    assert demoted["level"] == "L2"
+
+
+def test_archive_memory_marks_self_superseded_and_hides_from_default_lists(tmp_db):
+    project = _create_project("proj-life-c", "/tmp/proj-life-c")
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="Archive me",
+        content="Temporary note",
+        scope="project",
+        level="L3",
+        id="lifec001",
+    )
+
+    archived = archive_memory(project.id, "lifec001")
+    assert archived["superseded_by"] == "lifec001"
+    assert list_memories(project.id) == []
+    assert [m["id"] for m in list_memories(project.id, include_superseded=True)] == ["lifec001"]
+
+
+def test_delete_memory_prefers_reversible_actions_unless_forced(tmp_db):
+    project = _create_project("proj-life-d", "/tmp/proj-life-d")
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="Active memory",
+        content="Do not hard-delete by default",
+        scope="project",
+        level="L2",
+        id="lifed001",
+    )
+
+    with pytest.raises(ValidationError) as raised:
+        delete_memory(project.id, "lifed001")
+    assert raised.value.code == "MEMORY_DELETE_REQUIRES_FORCE"
+
+    deleted = delete_memory(project.id, "lifed001", force=True)
+    assert deleted == {"id": "lifed001", "deleted": True}
+    with pytest.raises(EngramServiceError):
+        get_memory(project.id, "lifed001")
 
 
 @pytest.mark.slow
