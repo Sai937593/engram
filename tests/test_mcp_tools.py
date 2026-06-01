@@ -1770,6 +1770,50 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         in res_finish_stale
     )
 
+    # 4e. Error path: finish_workflow unstaged worktree changes return finish-blocked markdown
+    def raising_finish_unstaged(project_id, repo_path, commit_type=None):
+        raise EngramServiceError(
+            code="WORKTREE_HAS_UNSTAGED_CHANGES",
+            message="Git working tree has unstaged changes. Stage all intended changes before finish.",
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_unstaged)
+    res_finish_unstaged = asyncio.run(finish_handler(commit_type="feat"))
+    assert "# Finish Blocked" in res_finish_unstaged
+    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_unstaged
+    assert (
+        "Reason: Git working tree has unstaged changes. Stage all intended changes before finish."
+        in res_finish_unstaged
+    )
+    assert "## Next action" in res_finish_unstaged
+    assert res_finish_unstaged.count("## Next action") == 1
+    assert (
+        "Stage all intended changes and ensure no untracked files remain, then call engram_workflow_finish_and_commit again."
+        in res_finish_unstaged
+    )
+
+    # 4f. Error path: finish_workflow untracked files return finish-blocked markdown
+    def raising_finish_untracked(project_id, repo_path, commit_type=None):
+        raise EngramServiceError(
+            code="WORKTREE_HAS_UNTRACKED_FILES",
+            message="Git working tree has untracked files. Stage or remove them before finish.",
+        )
+
+    monkeypatch.setattr("engram.mcp.tools.finish_workflow", raising_finish_untracked)
+    res_finish_untracked = asyncio.run(finish_handler(commit_type="feat"))
+    assert "# Finish Blocked" in res_finish_untracked
+    assert "Task: `t-in-progress` - Verification-gated task" in res_finish_untracked
+    assert (
+        "Reason: Git working tree has untracked files. Stage or remove them before finish."
+        in res_finish_untracked
+    )
+    assert "## Next action" in res_finish_untracked
+    assert res_finish_untracked.count("## Next action") == 1
+    assert (
+        "Stage all intended changes and ensure no untracked files remain, then call engram_workflow_finish_and_commit again."
+        in res_finish_untracked
+    )
+
     # 5. Error path: Project bound but has no repo_paths configured
     monkeypatch.setattr(
         "engram.mcp.tools.resolve_current_project",
