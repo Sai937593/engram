@@ -78,6 +78,7 @@ def validate_and_resolve_update(
     merged_search_hints = kwargs.get("search_hints", task_item.search_hints)
 
     from engram.services.task.validation import validate_executable_task_metadata
+
     validate_executable_task_metadata(
         title=merged_title,
         description=merged_description,

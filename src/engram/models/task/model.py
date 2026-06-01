@@ -236,11 +236,7 @@ class Task:
         )
         mro = row["memory_review_outcome"] if "memory_review_outcome" in row.keys() else None
         ver = row["verification"] if "verification" in row.keys() else None
-        sh = (
-            deserialize_search_hints(row["search_hints"])
-            if "search_hints" in row.keys()
-            else []
-        )
+        sh = deserialize_search_hints(row["search_hints"]) if "search_hints" in row.keys() else []
         is_verified = bool(row["is_verified"]) if "is_verified" in row.keys() else False
         args = [
             row["id"],
@@ -268,7 +264,14 @@ class Task:
             kwargs["description"] = kwargs.pop("objective")
 
         # Material fields that affect execution or specifications make previous verification stale
-        material_fields = {"title", "description", "acceptance", "relevant_files", "verification", "search_hints"}
+        material_fields = {
+            "title",
+            "description",
+            "acceptance",
+            "relevant_files",
+            "verification",
+            "search_hints",
+        }
         if any(f in kwargs for f in material_fields):
             kwargs["is_verified"] = False
 
@@ -296,9 +299,9 @@ class Task:
                         serialize_search_hints(new)
                         if key == "search_hints"
                         else (
-                            int(new) if isinstance(new, bool) else (
-                                val if not isinstance(val, list) else ",".join(val)
-                            )
+                            int(new)
+                            if isinstance(new, bool)
+                            else (val if not isinstance(val, list) else ",".join(val))
                         )
                     )
                 )

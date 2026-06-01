@@ -88,9 +88,7 @@ def test_verify_workflow_records_pass(tmp_db: Any, tmp_path: Any) -> None:
     assert 'uv run pytest tests/ -m "not slow" -x --tb=short -q' in details
 
 
-def test_verify_workflow_records_failure_with_actionable_target(
-    tmp_db: Any, tmp_path: Any
-) -> None:
+def test_verify_workflow_records_failure_with_actionable_target(tmp_db: Any, tmp_path: Any) -> None:
     project = Project.create(
         id="proj-verify-fail",
         name="Verify Fail Project",
@@ -123,10 +121,41 @@ def test_verify_workflow_records_failure_with_actionable_target(
     latest = get_latest_workflow_verification(project_id=project.id, task_id=task.id)
     assert latest is not None
     assert latest["status"] == "failed"
+    refreshed_task = Task.get(task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.is_verified is False
     details = str(latest["details"])
-    assert "Check:" in details
+    assert "Command: `uv run ruff format .`" in details
+    assert "Exit code: 1" in details
+    assert "Output tail:" in details
     assert "src/engram/services/workflow_service.py:42:1: F401 unused import" in details
     assert "extra line" in details
+
+
+def test_verify_workflow_failure_does_not_stage_files(tmp_db: Any, tmp_path: Any) -> None:
+    project = Project.create(
+        id="proj-verify-fail-no-stage",
+        name="Verify Fail No Stage Project",
+        summary="Service verify fail no stage",
+        repo_paths=[str(tmp_path)],
+    )
+    Task.create(
+        project_id=project.id,
+        id="task-verify-fail-no-stage",
+        title="Run verification",
+        status="in-progress",
+    )
+
+    responses = [SimpleNamespace(returncode=1, stdout="bad", stderr="")]
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    with patch(
+        "engram.services.workflow_verify_service.subprocess.run", side_effect=responses
+    ) as run_mock:
+        verify_workflow(project.id, str(tmp_path))
+
+    called = [list(call.args[0]) for call in run_mock.call_args_list]
+    assert called == [["uv", "run", "ruff", "format", "."]]
+    assert not any(cmd[:2] == ["git", "add"] for cmd in called)
 
 
 def test_verify_workflow_requires_in_progress_task(tmp_db: Any) -> None:

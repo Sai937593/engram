@@ -36,11 +36,11 @@ def _extract_actionable_target(output: str) -> str | None:
     return None
 
 
-def _compact_failure_details(command: str, output: str) -> str:
+def _compact_failure_details(command: str, exit_code: int, output: str) -> str:
     non_empty = [line.strip() for line in output.splitlines() if line.strip()]
-    head = non_empty[:6]
-    preview = "\n".join(head) if head else "No output captured."
-    return f"Check: `{command}`\n\n{preview}"
+    tail = non_empty[-8:]
+    preview = "\n".join(tail) if tail else "No output captured."
+    return f"Command: `{command}`\nExit code: {exit_code}\n\nOutput tail:\n{preview}"
 
 
 def _resolve_verify_commands(repo_path: str) -> list[list[str]]:
@@ -89,7 +89,7 @@ def verify_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
                 if target
                 else f"`{command}` failed."
             )
-            details = _compact_failure_details(command, output)
+            details = _compact_failure_details(command, proc.returncode, output)
             record = record_workflow_verification(
                 project_id=project_id,
                 task_id=task.id,

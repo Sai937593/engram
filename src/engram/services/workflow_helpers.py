@@ -56,7 +56,8 @@ def select_task_to_start(project_id: str) -> tuple[Task | None, bool]:
         in_progress_active = [
             task
             for task in tasks
-            if task.status in {"in_progress", "in-progress"} and task_matches_phase(task, active_phase)
+            if task.status in {"in_progress", "in-progress"}
+            and task_matches_phase(task, active_phase)
         ]
         if in_progress_active:
             return in_progress_active[0], True

@@ -20,6 +20,7 @@ from engram.models.task import Task
 def bypass_strict_task_validation(monkeypatch):
     import engram.services.task.crud as crud
     import engram.services.task.validation as validation
+
     monkeypatch.setattr(validation, "validate_executable_task_metadata", lambda **kwargs: None)
     monkeypatch.setattr(crud, "_validate_executable_task_metadata", lambda **kwargs: None)
 
@@ -860,7 +861,9 @@ def test_mcp_task_create_many_happy_path(tmp_db, monkeypatch) -> None:
         assert Task.get(item["id"]) is not None
 
 
-def test_mcp_task_create_many_validation_failure_is_per_entry_and_atomic(tmp_db, monkeypatch) -> None:
+def test_mcp_task_create_many_validation_failure_is_per_entry_and_atomic(
+    tmp_db, monkeypatch
+) -> None:
     """Verify batch validation errors are index-specific and create zero tasks."""
     cwd = os.path.abspath("repo/bound-mcp-tool-writes")
     monkeypatch.setattr("os.getcwd", lambda: cwd)

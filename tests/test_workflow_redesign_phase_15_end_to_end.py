@@ -21,6 +21,7 @@ from engram.services.project_service import initialize_project, resolve_current_
 def bypass_strict_task_validation(monkeypatch):
     import engram.services.task.crud as crud
     import engram.services.task.validation as validation
+
     monkeypatch.setattr(validation, "validate_executable_task_metadata", lambda **kwargs: None)
     monkeypatch.setattr(crud, "_validate_executable_task_metadata", lambda **kwargs: None)
 

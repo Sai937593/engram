@@ -37,6 +37,7 @@ from engram.services.task import (
 def bypass_strict_task_validation(monkeypatch):
     import engram.services.task.crud as crud
     import engram.services.task.validation as validation
+
     monkeypatch.setattr(validation, "validate_executable_task_metadata", lambda **kwargs: None)
     monkeypatch.setattr(crud, "_validate_executable_task_metadata", lambda **kwargs: None)
 
@@ -387,7 +388,9 @@ def test_create_task_saves_and_returns_dto(tmp_db):
 
     assert dto["project_id"] == project.id
     assert dto["title"] == "Strict executable task validation implementation."
-    assert dto["description"] == "Implement deterministic task quality validation regression coverage."
+    assert (
+        dto["description"] == "Implement deterministic task quality validation regression coverage."
+    )
     assert dto["status"] == "in_progress"
     assert dto["priority"] == "high"
     assert dto["tags"] == ["t1", "t2"]
@@ -1162,6 +1165,3 @@ def test_update_task_non_material_changes_preserve_verification(tmp_db):
         assert updated["is_verified"] is True
         persisted = get_task(project.id, dto["id"])
         assert persisted["is_verified"] is True
-
-
-

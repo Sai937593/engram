@@ -80,4 +80,3 @@ def deserialize_search_hints(value: Any) -> list[str]:
             return normalize_search_hints(value.split(","))
         return normalize_search_hints(loaded)
     return normalize_search_hints(value)
-

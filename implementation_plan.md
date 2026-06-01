@@ -1,32 +1,36 @@
-# Implementation Plan: Replace verify command plan with MVP target checks (8b3bd43b)
+﻿# Implementation Plan - Phase 4.2 (08c04dcc)
 
 ## Scope
-Update verify command resolution in the workflow verify service to the Phase 4 command contract and add targeted tests for exact order/content, without changing unrelated verify behavior.
+Update verify failure recording so the first failing command persists:
+- command string
+- exit code
+- concise output tail
 
-## Files to update
+while keeping active task unverified and ensuring failure path does not stage files.
+
+## Files to change
 - src/engram/services/workflow_verify_service.py
 - tests/test_services_workflow_verify.py
 
 ## Planned changes
-1. Replace `VERIFY_COMMANDS` with the exact Phase 4 base commands in this order:
-   - `ruff format .`
-   - `ruff check . --fix`
-   - `python -m engram.hooks.py_structure`
-   - `pytest tests/ -m "not slow" -x --tb=short -q`
+1. Adjust failure details formatter in `workflow_verify_service.py` to include:
+- failing command string
+- process exit code
+- concise tail from combined stdout/stderr
 
-2. Keep `_resolve_verify_commands` explicit and ordered:
-   - If `uv.lock` exists, prefix each base command with `uv run`.
-   - Otherwise, keep the existing Python-module fallback structure.
+2. Keep existing failure summary behavior concise and deterministic, preserving actionable target extraction.
 
-3. Update/extend service tests to lock the command contract:
-   - Assert pass-path execution runs all commands in exact order.
-   - Assert persisted pass details reflect the new command set.
-   - Add focused assertions for command resolution behavior.
+3. Confirm failure path continues to persist `passed=False` via existing record call (which keeps task unverified semantics).
+
+4. Add/update tests in `tests/test_services_workflow_verify.py` to assert:
+- failure details contain command, exit code, and output tail
+- persisted verification status is `failed`
+- no staging side effects are introduced by verify failure behavior
 
 ## Verification
 Run:
 - `uv run pytest tests/test_services_workflow_verify.py -q`
+- `engram_workflow_verify`
 
 ## Notes
-- Stay in scope: no staging, no `is_verified` mutation, no MCP formatter changes.
-- No edits under `planning/`, `workflow/`, or `.github/`.
+No changes are planned to finish/staging logic outside verify failure record formatting and associated tests.
