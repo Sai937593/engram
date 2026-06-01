@@ -79,3 +79,10 @@ def test_update_phase_rejects_invalid_status(project):
     phase = Phase.create(project_id=project.id, title="Phase")
     with pytest.raises(ValueError, match="Invalid phase status"):
         phase.update(status="todo")
+
+
+def test_delete_phase_removes_row(project):
+    phase = Phase.create(project_id=project.id, title="Delete Me")
+    assert Phase.get(phase.id) is not None
+    phase.delete()
+    assert Phase.get(phase.id) is None

@@ -80,10 +80,24 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_phase_start"].__name__ == "engram_phase_start"
     assert "engram_phase_complete" in server.tools
     assert server.tools["engram_phase_complete"].__name__ == "engram_phase_complete"
+    assert "engram_phase_update" in server.tools
+    assert server.tools["engram_phase_update"].__name__ == "engram_phase_update"
+    assert "engram_phase_cancel" in server.tools
+    assert server.tools["engram_phase_cancel"].__name__ == "engram_phase_cancel"
+    assert "engram_phase_archive" in server.tools
+    assert server.tools["engram_phase_archive"].__name__ == "engram_phase_archive"
     assert "engram_task_start" in server.tools
     assert server.tools["engram_task_start"].__name__ == "engram_task_start"
     assert "engram_task_done" in server.tools
     assert server.tools["engram_task_done"].__name__ == "engram_task_done"
+    assert "engram_task_block" in server.tools
+    assert server.tools["engram_task_block"].__name__ == "engram_task_block"
+    assert "engram_task_unblock" in server.tools
+    assert server.tools["engram_task_unblock"].__name__ == "engram_task_unblock"
+    assert "engram_task_cancel" in server.tools
+    assert server.tools["engram_task_cancel"].__name__ == "engram_task_cancel"
+    assert "engram_task_retire" in server.tools
+    assert server.tools["engram_task_retire"].__name__ == "engram_task_retire"
     assert "engram_workflow_start" in server.tools
     assert server.tools["engram_workflow_start"].__name__ == "engram_workflow_start"
     assert "engram_workflow_finish" in server.tools
@@ -1118,6 +1132,77 @@ def test_mcp_phase_complete_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert res["phase"]["status"] == "done"
 
 
+def test_mcp_phase_lifecycle_maintenance_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
+    """Verify engram_phase_update/cancel/archive tools delegate lifecycle behavior safely."""
+    cwd = os.path.abspath("repo/bound-mcp-phase-maintenance")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-phase-maint",
+        name="MCP Phase Maintenance Project",
+        summary="Phase lifecycle maintenance coverage",
+        repo_paths=[cwd],
+    )
+    phase = Phase.create(
+        project_id=project.id,
+        id="pha-maint-1",
+        title="Lifecycle Phase",
+        description="Initial description",
+        status="active",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    update_handler = server.tools["engram_phase_update"]
+    cancel_handler = server.tools["engram_phase_cancel"]
+    archive_handler = server.tools["engram_phase_archive"]
+
+    updated = yaml.safe_load(
+        update_handler(
+            phase_ref=phase.id,
+            title="Lifecycle Phase Updated",
+            description="Refined description",
+            acceptance="Clear acceptance criteria",
+            evidence="Captured verification evidence",
+        )
+    )
+    assert updated["ok"] is True
+    assert updated["phase"]["title"] == "Lifecycle Phase Updated"
+    assert updated["phase"]["description"] == "Refined description"
+
+    from engram.models.task import Task
+
+    Task.create(
+        project_id=project.id,
+        id="task-phase-blocker",
+        title="Unfinished blocker task",
+        phase_id=phase.id,
+        status="todo",
+    )
+    cancelled_err = yaml.safe_load(cancel_handler(phase_ref=phase.id, reason="No longer needed"))
+    assert cancelled_err["ok"] is False
+    assert cancelled_err["error"] == "UNFINISHED_TASKS"
+    assert "fix" in cancelled_err
+
+    blocker = Task.get("task-phase-blocker")
+    blocker.update(status="done")
+    cancelled = yaml.safe_load(cancel_handler(phase_ref=phase.id, reason="No longer needed"))
+    assert cancelled["ok"] is True
+    assert cancelled["phase"]["status"] == "cancelled"
+
+    archived = yaml.safe_load(archive_handler(phase_ref=phase.id))
+    assert archived["ok"] is True
+    assert archived["archived"] is True
+    assert archived["phase"]["id"] == phase.id
+
+    archived_err = yaml.safe_load(archive_handler(phase_ref=phase.id))
+    assert archived_err["ok"] is False
+    assert archived_err["error"] == "PHASE_NOT_FOUND"
+    assert "fix" in archived_err
+
+
 def test_mcp_task_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     """Verify engram_task_start tool starts a task and handles validation/dependency errors."""
     cwd = os.path.abspath("repo/bound-mcp-tool-writes")
@@ -1214,6 +1299,58 @@ def test_mcp_task_done_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     res_err = yaml.safe_load(handler(task_ref="missing-task"))
     assert res_err["ok"] is False
     assert res_err["error"] == "TASK_NOT_FOUND"
+
+
+def test_mcp_task_maintenance_lifecycle_tools(tmp_db, monkeypatch) -> None:
+    """Verify task block/unblock/cancel/retire MCP tools delegate to services with compact output."""
+    cwd = os.path.abspath("repo/bound-mcp-tool-maintenance")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-maintenance",
+        name="MCP Task Maintenance Project",
+        summary="Service tool task maintenance summary",
+        repo_paths=[cwd],
+    )
+    Task.create(project_id=project.id, id="task-block-1", title="Blockable Task", status="todo")
+    Task.create(project_id=project.id, id="task-cancel-1", title="Cancelable Task", status="ready")
+    Task.create(project_id=project.id, id="task-retire-1", title="Retirable Task", status="done")
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    block_handler = server.tools["engram_task_block"]
+    unblock_handler = server.tools["engram_task_unblock"]
+    cancel_handler = server.tools["engram_task_cancel"]
+    retire_handler = server.tools["engram_task_retire"]
+
+    blocked = yaml.safe_load(block_handler(task_ref="task-block-1", reason="Waiting on dependency"))
+    assert blocked == {"ok": True, "id": "task-block-1", "status": "blocked"}
+
+    invalid_unblock = yaml.safe_load(
+        unblock_handler(task_ref="task-block-1", target_status="in-progress")
+    )
+    assert invalid_unblock["ok"] is False
+    assert invalid_unblock["error"] == "INVALID_TASK_TRANSITION_TARGET"
+    assert "engram_task_unblock" in invalid_unblock["fix"]
+
+    unblocked = yaml.safe_load(
+        unblock_handler(task_ref="task-block-1", target_status="ready", note="Dependency resolved")
+    )
+    assert unblocked == {"ok": True, "id": "task-block-1", "status": "ready"}
+
+    cancelled = yaml.safe_load(cancel_handler(task_ref="task-cancel-1", reason="No longer needed"))
+    assert cancelled == {"ok": True, "id": "task-cancel-1", "status": "cancelled"}
+
+    invalid_retire = yaml.safe_load(retire_handler(task_ref="task-block-1"))
+    assert invalid_retire["ok"] is False
+    assert invalid_retire["error"] == "INVALID_TASK_TRANSITION"
+    assert "valid lifecycle tool" in invalid_retire["fix"]
+
+    retired = yaml.safe_load(retire_handler(task_ref="task-retire-1", reason="Cleanup"))
+    assert retired == {"ok": True, "deleted": True, "id": "task-retire-1", "status": "done"}
+    assert Task.get("task-retire-1") is None
 
 
 def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:

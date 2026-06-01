@@ -52,6 +52,14 @@ def _respond_error(exc: EngramServiceError) -> str:
         "UNFINISHED_TASKS": "Complete all unfinished tasks in the phase using engram_task_done, or update/cancel them using engram_task_update before completing the phase.",
         "PROJECT_NOT_BOUND": "Run engram_project_init to initialize Engram in this repository.",
         "UNRESOLVED_WORKSPACE": "Run git init first to initialize a git repository.",
+        "INVALID_TASK_TRANSITION": "Use engram_task_get to inspect current status, then choose a valid lifecycle tool (engram_task_start, engram_task_done, engram_task_block, engram_task_unblock, engram_task_cancel, or engram_task_retire).",
+        "INVALID_TASK_TRANSITION_TARGET": "Retry engram_task_unblock with target_status set to one of: draft, ready, or todo.",
+        "TASK_ALREADY_IN_PROGRESS": "Complete, block, or cancel the current in-progress task before starting another one.",
+        "INVALID_PHASE_REFERENCE": "Provide a non-empty phase ID or exact phase title, then retry the phase lifecycle tool.",
+        "PHASE_NOT_FOUND": "Run engram_phase_list to find a valid phase ID or exact title, then retry.",
+        "AMBIGUOUS_PHASE": "Use the exact phase ID instead of title to avoid ambiguous matches.",
+        "INVALID_PHASE_UPDATE": "Retry engram_phase_update using only string values for metadata fields.",
+        "INVALID_PHASE_TRANSITION": "Use engram_phase_list to inspect the current phase status, then choose a valid lifecycle transition.",
     }
 
     details = _compact_error_details(exc)

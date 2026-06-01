@@ -3,23 +3,18 @@ from typing import Any
 
 from engram.db import get_db_connection
 from engram.models.audit import AuditLog
+from engram.models.phase_lifecycle import start_phase as start_phase_transition
 from engram.models.phase_persistence import (
+    delete_phase_row,
     fetch_phase_row,
     fetch_project_phase_rows,
     insert_phase,
     resolve_next_order_index,
     update_phase_fields,
 )
-from engram.models.phase_transitions import (
-    activate_phase,
-    demote_phase_to_planned,
-    list_other_active_phase_ids,
-)
 
 
 class Phase:
-    """Domain model for project phases."""
-
     VALID_STATUSES = {"planned", "active", "done", "blocked", "cancelled"}
 
     def __init__(
@@ -54,7 +49,6 @@ class Phase:
         evidence: str | None = None,
         id: str | None = None,
     ) -> "Phase":
-        """Create and persist a phase."""
         cls._validate_status(status)
         phase_id = id or uuid.uuid4().hex[:8]
 
@@ -92,7 +86,6 @@ class Phase:
 
     @classmethod
     def get(cls, id: str) -> "Phase | None":
-        """Get a phase by id."""
         conn = get_db_connection()
         row = fetch_phase_row(conn, id)
         conn.close()
@@ -102,7 +95,6 @@ class Phase:
 
     @classmethod
     def list_by_project(cls, project_id: str) -> list["Phase"]:
-        """List project phases ordered by index."""
         conn = get_db_connection()
         rows = fetch_project_phase_rows(conn, project_id)
         conn.close()
@@ -110,7 +102,6 @@ class Phase:
 
     @classmethod
     def from_row(cls, row: Any) -> "Phase":
-        """Build a Phase object from a database row."""
         return cls(
             row["id"],
             row["project_id"],
@@ -123,7 +114,6 @@ class Phase:
         )
 
     def update(self, **kwargs: Any) -> None:
-        """Update mutable phase fields."""
         pending_updates: dict[str, Any] = {}
         allowed_fields = {"title", "description", "status", "order_index", "acceptance", "evidence"}
 
@@ -156,54 +146,24 @@ class Phase:
         conn.commit()
         conn.close()
 
+    def delete(self) -> None:
+        conn = get_db_connection()
+        delete_phase_row(conn, self.id)
+        conn.commit()
+        conn.close()
+        AuditLog.log("phases", self.id, "delete")
+
     @classmethod
     def start(cls, phase_id: str) -> tuple["Phase", int]:
-        """Set a phase active and demote any other active phases in the same project."""
         phase = cls.get(phase_id)
         if phase is None:
             raise ValueError(f"Phase '{phase_id}' not found.")
-
-        conn = get_db_connection()
-        audit_events: list[dict[str, str]] = []
-        demoted_ids = list_other_active_phase_ids(conn, phase.project_id, phase.id)
-
-        for demoted_id in demoted_ids:
-            demote_phase_to_planned(conn, demoted_id)
-            audit_events.append(
-                {
-                    "target_id": demoted_id,
-                    "old_value": "active",
-                    "new_value": "planned",
-                }
-            )
-
-        if phase.status != "active":
-            activate_phase(conn, phase.id)
-            audit_events.append(
-                {
-                    "target_id": phase.id,
-                    "old_value": str(phase.status),
-                    "new_value": "active",
-                }
-            )
-
-        conn.commit()
-        conn.close()
-
-        for event in audit_events:
-            AuditLog.log(
-                "phases",
-                event["target_id"],
-                "update",
-                field="status",
-                old_value=event["old_value"],
-                new_value=event["new_value"],
-            )
+        demoted_count = start_phase_transition(phase.id, phase.project_id, phase.status)
 
         refreshed = cls.get(phase.id)
         if refreshed is None:
             raise ValueError(f"Phase '{phase_id}' not found after update.")
-        return refreshed, len(demoted_ids)
+        return refreshed, demoted_count
 
     @classmethod
     def _validate_status(cls, status: str) -> None:

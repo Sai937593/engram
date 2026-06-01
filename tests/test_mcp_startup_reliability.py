@@ -207,12 +207,19 @@ def test_mcp_tools_graceful_degradation_unresolved_workspace(unresolved_workspac
         "engram_task_note_append": {"task_ref": "task-1", "note": "N"},
         "engram_task_start": {"task_ref": "task-1"},
         "engram_task_done": {"task_ref": "task-1"},
+        "engram_task_block": {"task_ref": "task-1"},
+        "engram_task_unblock": {"task_ref": "task-1"},
+        "engram_task_cancel": {"task_ref": "task-1"},
+        "engram_task_retire": {"task_ref": "task-1"},
         "engram_memory_create": {"type": "lesson", "title": "T", "content": "C"},
         "engram_memory_search": {},
         "engram_phase_list": {},
         "engram_phase_create": {"title": "P1"},
         "engram_phase_start": {"phase_ref": "P1"},
         "engram_phase_complete": {"phase_ref": "P1"},
+        "engram_phase_update": {"phase_ref": "P1"},
+        "engram_phase_cancel": {"phase_ref": "P1"},
+        "engram_phase_archive": {"phase_ref": "P1"},
     }
 
     # Patch sys.modules to remove "pytest" so project_service behaves as in production
@@ -265,12 +272,19 @@ def test_mcp_tools_graceful_degradation_uninitialized_workspace(uninitialized_wo
         "engram_task_note_append": {"task_ref": "task-1", "note": "N"},
         "engram_task_start": {"task_ref": "task-1"},
         "engram_task_done": {"task_ref": "task-1"},
+        "engram_task_block": {"task_ref": "task-1"},
+        "engram_task_unblock": {"task_ref": "task-1"},
+        "engram_task_cancel": {"task_ref": "task-1"},
+        "engram_task_retire": {"task_ref": "task-1"},
         "engram_memory_create": {"type": "lesson", "title": "T", "content": "C"},
         "engram_memory_search": {},
         "engram_phase_list": {},
         "engram_phase_create": {"title": "P1"},
         "engram_phase_start": {"phase_ref": "P1"},
         "engram_phase_complete": {"phase_ref": "P1"},
+        "engram_phase_update": {"phase_ref": "P1"},
+        "engram_phase_cancel": {"phase_ref": "P1"},
+        "engram_phase_archive": {"phase_ref": "P1"},
     }
 
     # Patch sys.modules to remove "pytest" so project_service behaves as in production

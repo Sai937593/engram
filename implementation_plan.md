@@ -1,29 +1,41 @@
-# Implementation Plan - Phase 13.3 (Task b7119baf)
+# Implementation Plan - Task 28a30425
 
 ## Scope
-Expose finalized memory lifecycle operations through MCP memory tools and refine `engram_memory_search` output to be compact, Markdown-first, and actionable while preserving safe failure guidance.
+Expose MCP phase lifecycle maintenance actions (`update`, `cancel`, `archive`) by delegating to existing phase lifecycle services, and close regression gaps for unsafe/invalid transitions without expanding beyond this task.
 
-## Files in scope
-- src/engram/mcp/tools/memory_tools.py
+## Files
+- src/engram/mcp/tools/phase_tools.py
 - src/engram/mcp/tools/helpers.py
-- src/engram/services/memory_service.py (only if MCP adapter gaps require service-facing shape tweaks)
+- src/engram/mcp/tools/__init__.py (only if export assertions require updates)
 - tests/test_mcp_tools.py
 - tests/test_mcp_server.py
+- tests/test_services_phase.py (only if regression gap requires service-level assertion adjustments)
 
-## Plan
-1. Audit existing MCP memory tool surface and map acceptance coverage for get, update, supersede, demote, archive, and delete to confirm missing/partial handlers.
-2. Implement or refine thin MCP adapters so lifecycle tools delegate to memory services (no direct DB mutation/filter logic in MCP layer).
-3. Update memory-search response formatting to Markdown-first compact output while preserving miss guidance and deterministic error/help text.
-4. Ensure default discovery behavior still hides superseded/archived entries unless explicitly requested through maintenance/audit paths.
-5. Add/adjust regression tests in MCP test suites for:
-   - lifecycle happy paths,
-   - compact actionable response contracts,
-   - safe failure guidance for misses/invalid operations.
-6. Run required verification commands:
-   - `uv run pytest tests/test_mcp_tools.py tests/test_mcp_server.py -q`
-   - `uv run pytest -q`
+## Steps
+1. Extend MCP phase tool registration with:
+   - `engram_phase_update(phase_ref, title?, description?, acceptance?, evidence?)`
+   - `engram_phase_cancel(phase_ref, reason?)`
+   - `engram_phase_archive(phase_ref)`
+2. Ensure each new tool:
+   - resolves current project via `resolve_current_project`,
+   - delegates lifecycle behavior to `update_phase`, `cancel_phase`, `archive_phase` service functions,
+   - returns compact deterministic payloads via `_respond`,
+   - maps service errors via `_respond_error` with actionable `fix` guidance.
+3. Add/update MCP regression tests for:
+   - tool registration presence,
+   - successful update/cancel/archive responses,
+   - invalid transition / unfinished-task blocking behavior surfaced through MCP errors,
+   - phase-not-found and invalid input error surfacing.
+4. Add/update helper fix mappings only if lifecycle errors currently lack actionable guidance for new MCP paths.
+5. Run required verification target:
+   - `uv run pytest tests/test_mcp_tools.py tests/test_mcp_server.py tests/test_services_phase.py -q`
+6. If green, run full verification gate:
+   - `uv run pytest -q` (if needed by workflow verify output)
+   - `engram_workflow_verify`
+7. Record memory review outcome on task `28a30425`, then run `engram_workflow_finish`.
 
-## Non-goals
-- No schema redesign or model-layer rewrite beyond what is strictly needed for MCP delegation compatibility.
-- No edits in `planning/`, `workflow/`, or `.github/`.
-- No additional Engram task work in this session.
+## Constraints Checklist
+- Exactly one Engram task this session: `28a30425`.
+- No changes under `planning/`, `workflow/`, `.github/`.
+- Keep service boundaries adapter-safe; MCP remains an adapter layer.
+- Keep edits minimal and scoped to lifecycle MCP exposure + regression gaps.

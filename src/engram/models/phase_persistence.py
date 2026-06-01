@@ -73,3 +73,8 @@ def update_phase_fields(conn: Any, phase_id: str, updates: dict[str, Any]) -> No
     set_fragments.append("updated_at = datetime('now')")
     params.append(phase_id)
     conn.execute(f"UPDATE phases SET {', '.join(set_fragments)} WHERE id = ?", params)
+
+
+def delete_phase_row(conn: Any, phase_id: str) -> None:
+    """Delete one phase row by ID."""
+    conn.execute("DELETE FROM phases WHERE id = ?", (phase_id,))

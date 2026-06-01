@@ -11,6 +11,12 @@ from engram.services.task.crud import (
     update_task,
 )
 from engram.services.task.lifecycle import complete_task, get_next_task, start_task
+from engram.services.task.maintenance import (
+    block_task,
+    cancel_task,
+    retire_task,
+    unblock_task,
+)
 from engram.services.task.validation import VALID_TASK_UPDATE_FIELDS, resolve_task_ref
 
 __all__ = [
@@ -21,6 +27,10 @@ __all__ = [
     "list_tasks",
     "start_task",
     "complete_task",
+    "block_task",
+    "unblock_task",
+    "cancel_task",
+    "retire_task",
     "get_next_task",
     "resolve_task_ref",
     "record_memory_review_outcome",

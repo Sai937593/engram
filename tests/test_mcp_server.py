@@ -18,6 +18,7 @@ MCP_MODULES = (
     "engram.mcp.server",
     "engram.mcp.tools",
     "engram.mcp.tools.helpers",
+    "engram.mcp.tools.task_maintenance_tools",
     "engram.mcp.tools.task_tools",
     "engram.mcp.tools.memory_tools",
     "engram.mcp.tools.phase_tools",
