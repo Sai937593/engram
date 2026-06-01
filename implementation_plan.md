@@ -1,32 +1,26 @@
-# Implementation Plan - Phase 14.1 (Task ae8430b3)
+# Implementation Plan - Task a9b40139
 
 ## Scope
-Extend task lifecycle services so maintenance flows can block, unblock, cancel, and archive/delete tasks through service-layer transitions with deterministic validation and JSON-safe payloads.
+Expose MCP task lifecycle adapters for block, unblock, cancel, and retire actions by delegating to the task lifecycle service layer. Keep workflow_start/workflow_finish as the primary execution path.
 
-## Files in scope
-- src/engram/services/task/lifecycle.py
-- src/engram/services/task/crud.py
-- src/engram/services/task/validation.py
-- src/engram/models/task/model.py (only if status enums/metadata fields are required)
-- tests/test_services_task.py
+## Files
+- src/engram/mcp/tools/task_tools.py
+- src/engram/mcp/tools/helpers.py
+- src/engram/services/task/__init__.py (only if export surface needs adjustment)
+- tests/test_mcp_tools.py
+- tests/test_mcp_server.py
 
-## Plan
-1. Audit current task service APIs and existing status transition guards for start/done/update to identify reusable validation hooks.
-2. Add explicit service operations for:
-   - block task
-   - unblock task
-   - cancel task
-   - archive/delete-style retirement (matching existing model semantics)
-3. Implement deterministic validation errors for illegal transitions (invalid source status, active-task invariants, dependency/task-safety constraints).
-4. Ensure each new operation returns stable JSON-safe task payloads consistent with current service response shape.
-5. Add focused regression tests in `tests/test_services_task.py` for:
-   - happy paths for each lifecycle transition
-   - invalid transition failures with clear error codes/messages
-   - one-task-at-a-time workflow invariants preserved
-6. Run required verification command:
-   - `uv run pytest tests/test_services_task.py -q`
+## Steps
+1. Inspect existing task MCP tool patterns and helper response formatting for compact success/error output.
+2. Add/update MCP handlers for task lifecycle actions that call service-layer lifecycle functions only (no DB access in MCP adapters).
+3. Ensure deterministic mapping of service errors (invalid transition/missing refs) into compact, recovery-oriented MCP error responses.
+4. Wire tool registration/exposure so the new lifecycle actions are available to Codex-facing MCP surfaces.
+5. Add/adjust focused tests in MCP tool and server suites for success paths and invalid transition recovery guidance.
+6. Run required verification tests:
+   - uv run pytest tests/test_mcp_tools.py tests/test_mcp_server.py -q
 
-## Non-goals
-- No direct model mutations from MCP adapters.
-- No changes in `planning/`, `workflow/`, or `.github/`.
-- No additional Engram task work in this session.
+## Constraints Checklist
+- No direct mutation logic duplicated in MCP adapters.
+- No service imports of MCP/CLI code.
+- Keep outputs compact and actionable.
+- Maintain lifecycle tools as secondary surfaces; do not bypass workflow loop.
