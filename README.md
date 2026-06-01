@@ -107,7 +107,7 @@ During development, the agent captures critical decisions or constraints via `en
 ```
 
 **Finish the Task:**
-Once verification passes, the agent calls `engram_workflow_finish` to stage changes, validate Conventional Commit constraints, run unit tests, commit, and mark the task as done.
+Once verification passes, the agent calls `engram_workflow_finish_and_commit` (or transitional alias `engram_workflow_finish`) to commit and push already-staged verified changes and mark the task as done.
 
 ---
 
@@ -135,9 +135,10 @@ Engram exposes the following interface to connected AI agents:
 
 ### Primary Tools
 - `engram_workflow_start` â€” Begin the next task, resolve context, and verify the worktree branch.
-- `engram_workflow_finish` â€” Verify quality metrics, run test suites, commit changes, and complete the active task.
+- `engram_workflow_verify` — Run verification checks and stage changes on success.
+- `engram_workflow_finish_and_commit` (alias `engram_workflow_finish`) — Commit and push staged verified changes, then complete the active task.
 - `engram_task_create` / `engram_task_update` / `engram_task_note_append` â€” Programmatic task and evidence management.
-- `engram_memory_create` / `engram_memory_search` â€” Add and query persistent project memory.
+- `engram_memory_create` / `engram_memory_update` / `engram_memory_delete` / `engram_memory_update_many` / `engram_memory_delete_many` / `engram_memory_search` — Add, curate, and query persistent project memory.
 - `engram_phase_list` / `engram_phase_create` / `engram_phase_start` / `engram_phase_complete` â€” Multi-task milestone grouping and transition gates.
 
 ## Design Choices
@@ -149,3 +150,5 @@ Engram exposes the following interface to connected AI agents:
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+

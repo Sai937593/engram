@@ -63,7 +63,7 @@ Refer to the table below to transition from the old CLI commands to their MCP se
 | `engram context startup` | **REMOVED** | Read resource `engram://startup` |
 | `engram context task <id>` | **REMOVED** | Read resource `engram://task/{task_id}/context` |
 | `engram start` | **REMOVED** | Call tool `engram_workflow_start` |
-| `engram finish` | **REMOVED** | Call tool `engram_workflow_finish` |
+| `engram finish` | **REMOVED** | Call tool `engram_workflow_finish_and_commit` (preferred) or transitional alias `engram_workflow_finish` |
 | `engram task list` | **REMOVED** | Call tool `engram_task_list` |
 | `engram task get` | **REMOVED** | Call tool `engram_task_get` |
 | `engram task next` | **REMOVED** | Call tool `engram_task_next` |
@@ -93,7 +93,9 @@ The MCP server exposes 17 tools for full interactive capabilities:
 
 *   **Workflow Control:**
     *   `engram_workflow_start`: Starts the session workflow. Claims next actionable task, updates branch, and returns startup context.
-    *   `engram_workflow_finish`: Stage changes, execute validation tests, confirm Conventional Commit, commit, and mark task done.
+    *   `engram_workflow_verify`: Runs local verification checks and stages changes on success.
+    *   `engram_workflow_finish_and_commit`: Commits and pushes already-staged verified changes, then marks the task done.
+    *   `engram_workflow_finish`: Deprecated transitional alias for `engram_workflow_finish_and_commit`.
 *   **Task Management:**
     *   `engram_task_list`: Filters and lists project tasks by status or phase.
     *   `engram_task_get`: Retrieves full details of a specific task.
@@ -108,7 +110,9 @@ The MCP server exposes 17 tools for full interactive capabilities:
     *   `engram_memory_get`: Retrieves a memory by id.
     *   `engram_memory_create`: Creates a memory from normal user-facing fields (for example `title`, `content`).
     *   `engram_memory_update`: Updates a memory by id.
+    *   `engram_memory_update_many`: Updates multiple memories in one batch operation.
     *   `engram_memory_delete`: Deletes a memory by id.
+    *   `engram_memory_delete_many`: Deletes multiple memories in one batch operation.
     *   `engram_memory_search`: Runs FTS5 + semantic hybrid query search over all project memories.
 *   **Phase Management:**
     *   `engram_phase_list`: Lists all milestone phases for the project in priority order.
@@ -150,10 +154,10 @@ During the coding phase, the agent implements the scoped task and records diagno
 
 ### Step 5: Verification & Session Completion
 When the implementation is complete and verified:
-*   The agent calls `engram_workflow_finish` to stage changes, execute validation tests, confirm the Conventional Commit message, and push the branch.
+*   The agent calls `engram_workflow_finish_and_commit` to commit and push already-staged verified changes.
 
 ### Step 6: Phase-Level Memory Review
-During phase completion, review durable lessons and decisions using memory CRUD tools (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`) before running `engram_phase_complete`.
+During phase completion, review durable lessons and decisions using memory CRUD plus batch helpers (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`, `engram_memory_update_many`, `engram_memory_delete_many`) before running `engram_phase_complete`.
 
 ---
 

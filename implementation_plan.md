@@ -1,50 +1,39 @@
-﻿# Implementation Plan - Phase 8.3 Memory Batch MCP Tools
+# Implementation Plan - Phase 8.4 Batch Memory Ops Docs Refresh
 
 ## Scope
-Implement two MCP memory lifecycle tools:
+Refresh agent-facing documentation and templates so memory workflow guidance includes batch helpers:
 - `engram_memory_update_many`
 - `engram_memory_delete_many`
 
-No generic batch mutate tool will be added.
+Keep guidance concise, workflow-focused, and aligned with MVP contracts.
 
 ## Files to Change
-- `src/engram/mcp/tools/memory_lifecycle_tools.py`
-- `src/engram/mcp/tools/__init__.py` (only if exports require updates)
-- `src/engram/mcp/server.py` (only if direct registration changes are required)
-- `src/engram/mcp/schemas.py` (only if lightweight tool schema mapping is already expected by current patterns)
-- `tests/test_mcp_tools.py`
-- `tests/test_mcp_server.py` (only if registration assertions need extension)
+- `docs/USER_MANUAL.md`
+- `src/engram/USER_MANUAL.md`
+- `agent-files/skills/engram-phase-review-template.md`
+- `agent-files/skills/engram-task-decomposition-template.md` (only if memory tool listings or guidance references require consistency wording)
+- `README.md`
 
 ## Planned Implementation
-1. Add `engram_memory_update_many` MCP handler in `memory_lifecycle_tools.py`.
-2. Add `engram_memory_delete_many` MCP handler in `memory_lifecycle_tools.py`.
-3. Keep argument contracts simple and deterministic:
-   - Require non-empty batch payload input.
-   - Raise clear validation errors via existing `ValidationError` path for invalid/missing inputs.
-   - Avoid partial mutation by delegating atomic behavior to underlying service methods.
-4. Delegate both tools to existing service-layer batch APIs (Phase 8.1/8.2 dependency) through current project resolution.
-5. Return compact success payloads with actionable summary fields (counts/ids/outcome) rather than verbose records.
-6. Preserve existing lifecycle tools and behavior unchanged.
+1. Update both USER_MANUAL copies:
+- Add `engram_memory_update_many` and `engram_memory_delete_many` to the memory tool inventory.
+- Update phase-level memory review step wording to mention CRUD plus batch update/delete helpers.
+- Preserve compact workflow framing and avoid lifecycle-governance jargon (tags, levels, supersede, demote, always_include, scope, memory types) in normal agent guidance.
+2. Update phase review skill template tool list and memory curation wording to include/allow batch update/delete helpers while keeping existing simple CRUD-first framing.
+3. Review decomposition template for any memory tool list references and adjust only if required for consistency.
+4. Update README MCP/tool workflow references:
+- Prefer `engram_workflow_finish_and_commit` naming with alias note if already referenced.
+- Mention batch memory helpers where memory operations are summarized.
+5. Ensure root `AGENTS.md` is untouched and no `.engram/reports/*.md` files are created.
 
-## Planned Tests
-1. Registration tests:
-   - Assert both tool names are present after `register_tools(server)`.
-2. MCP behavior tests for each new tool:
-   - Happy path returns `ok: true` and compact summary fields.
-   - Invalid input returns clear validation error payload.
-   - Service error path is surfaced via `_respond_error` with no raw traceback.
-3. If needed, monkeypatch service functions to confirm MCP tool delegates through service API boundaries.
-
-## Verification
-- Run focused tests first:
-  - `uv run pytest tests/test_mcp_tools.py -k "memory_update_many or memory_delete_many or register_tools"`
-- Run broader MCP checks if needed:
-  - `uv run pytest tests/test_mcp_server.py tests/test_mcp_tools.py`
-- Then run workflow verification gate:
-  - `engram_workflow_verify`
+## Planned Verification
+1. Run targeted checks for expected strings:
+- Confirm both batch tool names appear in all intended files.
+- Confirm disallowed lifecycle-governance terms are not newly introduced in agent-facing workflow sections.
+2. Run repository verification gate via workflow tool:
+- `engram_workflow_verify`
 
 ## Non-goals
-- No CLI changes.
-- No memory model/schema redesign.
-- No generic batch mutation MCP surface.
-- No unrelated refactoring.
+- No Python/service/tool implementation changes.
+- No CLI behavior changes.
+- No workflow redesign beyond wording alignment.
