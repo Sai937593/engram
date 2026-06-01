@@ -31,6 +31,10 @@ class GitMock:
         self.commit_stderr: str = ""
         self.push_returncode: int = 0
         self.push_stderr: str = ""
+        self.diff_returncode: int = 0
+        self.diff_stdout: str = ""
+        self.diff_stderr: str = ""
+        self.untracked_files: str = ""
 
     def __call__(self, args: list[str], **kwargs: Any) -> MockCompletedProcess:
         """Intercept and log subprocess.run git calls."""
@@ -41,6 +45,12 @@ class GitMock:
             return MockCompletedProcess(0, stdout=self.status)
         if len(args) >= 3 and args[1] == "show-ref" and args[2] == "--verify":
             return MockCompletedProcess(self.show_ref_returncode)
+        if args == ["git", "diff", "--quiet"]:
+            return MockCompletedProcess(
+                self.diff_returncode, stdout=self.diff_stdout, stderr=self.diff_stderr
+            )
+        if args == ["git", "ls-files", "--others", "--exclude-standard"]:
+            return MockCompletedProcess(0, stdout=self.untracked_files)
         if len(args) >= 2 and args[1] == "add":
             return MockCompletedProcess(self.add_returncode)
         if len(args) >= 2 and args[1] == "commit":

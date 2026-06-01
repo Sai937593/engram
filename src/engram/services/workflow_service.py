@@ -138,6 +138,11 @@ def finish_workflow(
             message="Active task is missing memory_review_outcome.",
         )
     validate_memory_review_outcome_field(task.memory_review_outcome)
+    if not task.is_verified:
+        raise EngramServiceError(
+            code="TASK_NOT_VERIFIED",
+            message="Active task is not verified. Run engram_workflow_verify before finish.",
+        )
     eligibility = evaluate_verification_eligibility(
         project_id=project_id,
         task_id=task.id,
@@ -149,6 +154,29 @@ def finish_workflow(
             code=eligibility["reason_code"],
             message=eligibility["reason"],
         )
+    unstaged = subprocess.run(
+        ["git", "diff", "--quiet"],
+        capture_output=True,
+        text=True,
+        cwd=repo_path,
+        stdin=subprocess.DEVNULL,
+    )
+    if unstaged.returncode not in {0, 1}:
+        raise EngramServiceError(
+            code="GIT_OPERATION_FAILED",
+            message=f"Git command git diff failed: {unstaged.stderr.strip() or unstaged.stdout.strip()}",
+        )
+    if unstaged.returncode == 1:
+        raise EngramServiceError(
+            code="WORKTREE_HAS_UNSTAGED_CHANGES",
+            message="Git working tree has unstaged changes. Stage all intended changes before finish.",
+        )
+    untracked = _run(["git", "ls-files", "--others", "--exclude-standard"], repo_path)
+    if untracked:
+        raise EngramServiceError(
+            code="WORKTREE_HAS_UNTRACKED_FILES",
+            message="Git working tree has untracked files. Stage or remove them before finish.",
+        )
     try:
         resolved = resolve_commit_type(task, commit_type, CONVENTIONAL_COMMIT_TYPES)
     except ValueError as e:
@@ -157,7 +185,6 @@ def finish_workflow(
             message=f"Invalid commit type '{commit_type}'. Must be one of: {', '.join(sorted(CONVENTIONAL_COMMIT_TYPES))}",
         ) from e
 
-    _run(["git", "add", "-A"], repo_path)
     phase_title = get_effective_phase_title(task)
     commit_msg = f"{resolved}({slugify(phase_title) or 'misc'}): {task.title} [{task.id}]"
 

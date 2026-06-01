@@ -13,6 +13,11 @@ VERIFICATION_GATE_ERROR_CODES = {
 }
 
 FINISH_GATE_ERROR_CODES = VERIFICATION_GATE_ERROR_CODES | {"MEMORY_REVIEW_OUTCOME_MISSING"}
+FINISH_GATE_ERROR_CODES = FINISH_GATE_ERROR_CODES | {
+    "TASK_NOT_VERIFIED",
+    "WORKTREE_HAS_UNSTAGED_CHANGES",
+    "WORKTREE_HAS_UNTRACKED_FILES",
+}
 
 
 def format_verification_finish_blocked(
@@ -25,6 +30,13 @@ def format_verification_finish_blocked(
     if code == "MEMORY_REVIEW_OUTCOME_MISSING":
         next_guidance = (
             "Record memory_review_outcome on the active task via engram_task_update, "
+            "then call engram_workflow_finish again."
+        )
+    if code == "TASK_NOT_VERIFIED":
+        next_guidance = "Run engram_workflow_verify, then call engram_workflow_finish again."
+    if code in {"WORKTREE_HAS_UNSTAGED_CHANGES", "WORKTREE_HAS_UNTRACKED_FILES"}:
+        next_guidance = (
+            "Stage all intended changes and ensure no untracked files remain, "
             "then call engram_workflow_finish again."
         )
 

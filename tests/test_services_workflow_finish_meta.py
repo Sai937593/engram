@@ -31,6 +31,7 @@ def test_finish_workflow_commit_type_resolution(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
         memory_review_outcome="created",
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id, task_id=task_a.id, passed=True, summary="all checks passed"
@@ -49,6 +50,7 @@ def test_finish_workflow_commit_type_resolution(tmp_db: Any) -> None:
         status="in-progress",
         tags=["bug", "regression"],
         memory_review_outcome="created",
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id, task_id=task_b.id, passed=True, summary="all checks passed"
@@ -66,6 +68,7 @@ def test_finish_workflow_commit_type_resolution(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
         memory_review_outcome="created",
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id, task_id=task_c.id, passed=True, summary="all checks passed"
@@ -93,6 +96,7 @@ def test_finish_workflow_phase_complete_detection(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
         memory_review_outcome="created",
+        is_verified=True,
     )
     Task.create(
         project_id=project.id,
@@ -112,7 +116,7 @@ def test_finish_workflow_phase_complete_detection(tmp_db: Any) -> None:
     # Case B: Only done/cancelled tasks in the phase -> phase_complete = True
     task_2 = Task.get("t-2")
     assert task_2 is not None
-    task_2.update(status="in-progress", memory_review_outcome="created")
+    task_2.update(status="in-progress", memory_review_outcome="created", is_verified=True)
     record_workflow_verification(
         project_id=project.id, task_id=task_2.id, passed=True, summary="all checks passed"
     )

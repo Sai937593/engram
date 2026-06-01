@@ -531,14 +531,14 @@ def test_e2e_workflow_finish_blocks_without_verification_or_memory_review(dispos
     # Start the workflow BEFORE creating files to avoid dirty working tree
     asyncio.run(mock_server.tools["engram_workflow_start"]())
 
-    # --- Case A: Missing Verification ---
+    # --- Case A: Active task not verified ---
     mock_server.tools["engram_task_update"](
         task_ref=t1_id,
         updates={"memory_review_outcome": "no_change"},
     )
     finish_res_a = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
     assert "# Finish Blocked" in finish_res_a
-    assert "No verification record exists for the active task." in finish_res_a
+    assert "Active task is not verified. Run engram_workflow_verify before finish." in finish_res_a
 
     # Reset memory review outcome to None for subsequent tests
     mock_server.tools["engram_task_update"](
@@ -571,10 +571,10 @@ def test_e2e_workflow_finish_blocks_without_verification_or_memory_review(dispos
         updates={"memory_review_outcome": "no_change"},
     )
 
-    # Attempt to finish -> should block because of failed verification
+    # Attempt to finish -> blocked because failed verify leaves task unverified
     finish_res_b = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
     assert "# Finish Blocked" in finish_res_b
-    assert "The latest verification for the active task failed." in finish_res_b
+    assert "Active task is not verified. Run engram_workflow_verify before finish." in finish_res_b
 
     # Reset memory review outcome to None
     mock_server.tools["engram_task_update"](

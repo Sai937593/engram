@@ -16,7 +16,7 @@ from tests.test_services_workflow_helpers import GitMock
 
 
 def test_finish_workflow_happy_path(tmp_db: Any) -> None:
-    """Verify finish_workflow successfully stages, commits, pushes, and marks task done."""
+    """Verify finish_workflow commits/pushes staged work and marks task done."""
     project = Project.create(
         id="proj-1",
         name="Project 1",
@@ -30,6 +30,7 @@ def test_finish_workflow_happy_path(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
         memory_review_outcome="created",
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id,
@@ -52,15 +53,11 @@ def test_finish_workflow_happy_path(tmp_db: Any) -> None:
     assert refreshed is not None
     assert refreshed.status == "done"
 
-    # Verify git actions executed in order
-    expected_calls = [
-        ["git", "add", "-A"],
-        ["git", "commit", "-m", "feat(phase-one): Refactor auth [t-1]"],
-        ["git", "push", "-u", "origin", "HEAD"],
-    ]
-    # Check that they were called
-    for call in expected_calls:
-        assert call in git_mock.calls
+    assert ["git", "add", "-A"] not in git_mock.calls
+    assert ["git", "diff", "--quiet"] in git_mock.calls
+    assert ["git", "ls-files", "--others", "--exclude-standard"] in git_mock.calls
+    assert ["git", "commit", "-m", "feat(phase-one): Refactor auth [t-1]"] in git_mock.calls
+    assert ["git", "push", "-u", "origin", "HEAD"] in git_mock.calls
 
 
 def test_finish_workflow_no_in_progress_task(tmp_db: Any) -> None:
@@ -94,6 +91,7 @@ def test_finish_workflow_git_push_fails(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
         memory_review_outcome="created",
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id,
@@ -134,6 +132,7 @@ def test_finish_workflow_nothing_to_commit(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
         memory_review_outcome="created",
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id,
@@ -172,7 +171,7 @@ def test_finish_workflow_requires_verification(tmp_db: Any) -> None:
         summary="Service testing",
         repo_paths=["/tmp/proj-1"],
     )
-    Task.create(
+    task = Task.create(
         project_id=project.id,
         id="t-1",
         title="Refactor auth",
@@ -180,9 +179,15 @@ def test_finish_workflow_requires_verification(tmp_db: Any) -> None:
         status="in-progress",
         memory_review_outcome="created",
     )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
     with pytest.raises(EngramServiceError) as exc_info:
         finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
-    assert exc_info.value.code == "VERIFICATION_MISSING"
+    assert exc_info.value.code == "TASK_NOT_VERIFIED"
 
 
 def test_finish_workflow_failed_verification(tmp_db: Any) -> None:
@@ -200,6 +205,7 @@ def test_finish_workflow_failed_verification(tmp_db: Any) -> None:
         phase="Phase One",
         status="in-progress",
         memory_review_outcome="created",
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id,
@@ -230,6 +236,7 @@ def test_finish_workflow_stale_verification(tmp_db: Any, tmp_path: Any) -> None:
         status="in-progress",
         relevant_files=["src/helper.py"],
         memory_review_outcome="created",
+        is_verified=True,
     )
 
     # Create relevant file and record a verification at an older timestamp
@@ -348,6 +355,7 @@ def test_finish_workflow_accepts_all_valid_memory_review_outcomes(
         phase="Phase One",
         status="in-progress",
         memory_review_outcome=outcome,
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id,
@@ -379,6 +387,7 @@ def test_finish_workflow_rejects_invalid_memory_review_outcome(tmp_db: Any) -> N
         phase="Phase One",
         status="in-progress",
         memory_review_outcome="invalid-outcome",
+        is_verified=True,
     )
     record_workflow_verification(
         project_id=project.id,
@@ -390,3 +399,63 @@ def test_finish_workflow_rejects_invalid_memory_review_outcome(tmp_db: Any) -> N
     with pytest.raises(EngramServiceError) as exc_info:
         finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
     assert exc_info.value.code == "INVALID_MEMORY_REVIEW_OUTCOME"
+
+
+def test_finish_workflow_blocks_unstaged_changes(tmp_db: Any) -> None:
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+        memory_review_outcome="created",
+        is_verified=True,
+    )
+    record_workflow_verification(
+        project_id=project.id, task_id=task.id, passed=True, summary="all checks passed"
+    )
+    git_mock = GitMock()
+    git_mock.diff_returncode = 1
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        with pytest.raises(EngramServiceError) as exc_info:
+            finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
+    assert exc_info.value.code == "WORKTREE_HAS_UNSTAGED_CHANGES"
+    refreshed = Task.get(task.id)
+    assert refreshed is not None
+    assert refreshed.status == "in-progress"
+
+
+def test_finish_workflow_blocks_untracked_files(tmp_db: Any) -> None:
+    project = Project.create(
+        id="proj-1",
+        name="Project 1",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-1"],
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-1",
+        title="Refactor auth",
+        phase="Phase One",
+        status="in-progress",
+        memory_review_outcome="created",
+        is_verified=True,
+    )
+    record_workflow_verification(
+        project_id=project.id, task_id=task.id, passed=True, summary="all checks passed"
+    )
+    git_mock = GitMock()
+    git_mock.untracked_files = "new_file.py\n"
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        with pytest.raises(EngramServiceError) as exc_info:
+            finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
+    assert exc_info.value.code == "WORKTREE_HAS_UNTRACKED_FILES"
+    refreshed = Task.get(task.id)
+    assert refreshed is not None
+    assert refreshed.status == "in-progress"

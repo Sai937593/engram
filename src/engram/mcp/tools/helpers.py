@@ -61,6 +61,9 @@ def _respond_error(exc: EngramServiceError) -> str:
         "AMBIGUOUS_PHASE": "Use the exact phase ID instead of title to avoid ambiguous matches.",
         "INVALID_PHASE_UPDATE": "Retry engram_phase_update using only string values for metadata fields.",
         "INVALID_PHASE_TRANSITION": "Use engram_phase_list to inspect the current phase status, then choose a valid lifecycle transition.",
+        "TASK_NOT_VERIFIED": "Run engram_workflow_verify first, then retry engram_workflow_finish.",
+        "WORKTREE_HAS_UNSTAGED_CHANGES": "Stage all intended changes before running engram_workflow_finish.",
+        "WORKTREE_HAS_UNTRACKED_FILES": "Stage or remove untracked files before running engram_workflow_finish.",
     }
 
     details = _compact_error_details(exc)
