@@ -56,7 +56,7 @@ def select_task_to_start(project_id: str) -> tuple[Task | None, bool]:
         in_progress_active = [
             task
             for task in tasks
-            if task.status == "in-progress" and task_matches_phase(task, active_phase)
+            if task.status in {"in_progress", "in-progress"} and task_matches_phase(task, active_phase)
         ]
         if in_progress_active:
             return in_progress_active[0], True
@@ -69,13 +69,13 @@ def select_task_to_start(project_id: str) -> tuple[Task | None, bool]:
         if next_unphased:
             return next_unphased, False
 
-        in_progress_any = [task for task in tasks if task.status == "in-progress"]
+        in_progress_any = [task for task in tasks if task.status in {"in_progress", "in-progress"}]
         if in_progress_any:
             return in_progress_any[0], True
 
         return Task.get_next(project_id), False
 
-    in_progress_any = [task for task in tasks if task.status == "in-progress"]
+    in_progress_any = [task for task in tasks if task.status in {"in_progress", "in-progress"}]
     if in_progress_any:
         return in_progress_any[0], True
 
@@ -86,8 +86,8 @@ def is_draft_only_pending(project_id: str) -> bool:
     """Return True when remaining pending work is draft-only."""
     counts = Task.count_by_status(project_id)
     draft = counts.get("draft", 0)
-    ready = counts.get("ready", 0)
-    in_progress = counts.get("in-progress", 0)
+    ready = counts.get("ready", 0) + counts.get("open", 0) + counts.get("todo", 0)
+    in_progress = counts.get("in-progress", 0) + counts.get("in_progress", 0)
     pending = sum(count for status, count in counts.items() if status not in ("done", "cancelled"))
     return draft > 0 and ready == 0 and in_progress == 0 and draft == pending
 

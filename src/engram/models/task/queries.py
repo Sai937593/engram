@@ -28,7 +28,7 @@ class _TaskQueryHelper:
             FROM tasks t1
             LEFT JOIN tasks t2 ON t1.depends_on = t2.id
             WHERE t1.project_id = ?
-              AND t1.status = 'ready'
+              AND t1.status IN ('open', 'ready', 'todo')
               AND (t1.depends_on IS NULL OR t2.status = 'done')
             """,
             (project_id,),
@@ -85,7 +85,7 @@ def get_next(project_id: str, active_phase_id: str | None = None) -> Task | None
             LEFT JOIN tasks t2 ON t1.depends_on = t2.id
             WHERE t1.project_id = ?
               AND t1.phase_id = ?
-              AND t1.status = 'ready'
+              AND t1.status IN ('open', 'ready', 'todo')
               AND (t1.depends_on IS NULL OR t2.status = 'done')
             ORDER BY {priority_order}, t1.created_at ASC
             LIMIT 1
@@ -101,7 +101,7 @@ def get_next(project_id: str, active_phase_id: str | None = None) -> Task | None
         SELECT t1.* FROM tasks t1
         LEFT JOIN tasks t2 ON t1.depends_on = t2.id
         WHERE t1.project_id = ?
-          AND t1.status = 'ready'
+          AND t1.status IN ('open', 'ready', 'todo')
           AND (t1.depends_on IS NULL OR t2.status = 'done')
         ORDER BY {priority_order}, t1.created_at ASC
         LIMIT 1

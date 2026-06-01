@@ -39,7 +39,13 @@ def validate_and_resolve_update(
         )
 
     if "status" in kwargs:
-        validate_status_field(kwargs["status"])
+        status_val = kwargs["status"]
+        if status_val in {"draft", "ready", "todo"}:
+            status_val = "open"
+        elif status_val == "in-progress":
+            status_val = "in_progress"
+        kwargs["status"] = status_val
+        validate_status_field(status_val)
     if "priority" in kwargs:
         validate_priority_field(kwargs["priority"])
     if "memory_review_outcome" in kwargs:

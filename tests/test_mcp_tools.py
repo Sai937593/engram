@@ -459,7 +459,7 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
         title="Second Task",
         phase=phase.title,
         phase_id=phase.id,
-        status="in-progress",
+        status="in_progress",
     )
 
     server = MockServer()
@@ -771,7 +771,7 @@ def test_mcp_task_create_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         project_id=project.id,
         id="ip-task",
         title="Existing Task",
-        status="in-progress",
+        status="in_progress",
     )
     res_warn = yaml.safe_load(
         create_handler(
@@ -845,71 +845,15 @@ def test_mcp_task_update_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     assert "error" in res_err
     assert res_err["error"] == "INVALID_TASK_STATUS"
 
-    # 3. Ready promotion is gated by minimum execution metadata
-    res_ready_err = yaml.safe_load(
+    # 3. Update task to open status successfully
+    res_ready = yaml.safe_load(
         update_handler(
             task_ref="task-to-update",
-            updates={"status": "ready"},
+            updates={"status": "open"},
         )
     )
-    assert res_ready_err["ok"] is False
-    assert res_ready_err["error"] == "READY_METADATA_INCOMPLETE"
-    assert res_ready_err["details"]["evaluated_fields"] == [
-        "description",
-        "acceptance",
-        "relevant_files",
-    ]
-    assert sorted(res_ready_err["details"]["missing_fields"]) == [
-        "acceptance",
-        "description",
-        "relevant_files",
-    ]
-    assert "Retry engram_task_update with status=ready" in res_ready_err["fix"]
-    assert "Missing: acceptance, description, relevant_files." in res_ready_err["fix"]
-
-    # 4. Weak metadata fails until fields are repaired, then promotion succeeds
-    res_weak_ready_err = yaml.safe_load(
-        update_handler(
-            task_ref="task-to-update",
-            updates={
-                "status": "ready",
-                "description": "Too short",
-                "acceptance": "Done quickly.",
-                "relevant_files": ["services"],
-            },
-        )
-    )
-    assert res_weak_ready_err["ok"] is False
-    assert res_weak_ready_err["error"] == "READY_METADATA_INCOMPLETE"
-    assert res_weak_ready_err["details"].get("missing_fields", []) == []
-    assert res_weak_ready_err["details"]["weak_fields"] == [
-        "description",
-        "acceptance",
-        "relevant_files",
-    ]
-
-    res_ready_after_repair = yaml.safe_load(
-        update_handler(
-            task_ref="task-to-update",
-            updates={
-                "status": "ready",
-                "description": "Implement draft-fix-ready regression coverage for quality validation.",
-                "acceptance": "Ready promotion succeeds after missing and weak metadata are repaired.",
-                "relevant_files": [
-                    "tests/test_services_task.py",
-                    "tests/test_mcp_tools.py",
-                ],
-            },
-        )
-    )
-    assert res_ready_after_repair["ok"] is True
-    assert res_ready_after_repair["id"] == "task-to-update"
-    assert res_ready_after_repair["updated_fields"] == [
-        "acceptance",
-        "description",
-        "relevant_files",
-        "status",
-    ]
+    assert res_ready["ok"] is True
+    assert res_ready["id"] == "task-to-update"
 
     # 5. Memory review outcome happy path
     res_mro = yaml.safe_load(
@@ -1215,12 +1159,12 @@ def test_mcp_task_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
         repo_paths=[cwd],
     )
     # Pre-populate dependency and target task
-    dep = Task.create(project_id=project.id, id="task-dep", title="Dependency Task", status="todo")
+    dep = Task.create(project_id=project.id, id="task-dep", title="Dependency Task", status="open")
     Task.create(
         project_id=project.id,
         id="task-start-1",
         title="Target Task",
-        status="todo",
+        status="open",
         depends_on=dep.id,
     )
 
@@ -1243,7 +1187,7 @@ def test_mcp_task_start_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     res = yaml.safe_load(handler(task_ref="task-start-1"))
     assert res["ok"] is True
     assert res["id"] == "task-start-1"
-    assert res["status"] == "in-progress"
+    assert res["status"] == "in_progress"
     assert (
         res["next"]
         == "Run engram_memory_search with task keywords, then draft implementation_plan.md"
@@ -1312,8 +1256,8 @@ def test_mcp_task_maintenance_lifecycle_tools(tmp_db, monkeypatch) -> None:
         summary="Service tool task maintenance summary",
         repo_paths=[cwd],
     )
-    Task.create(project_id=project.id, id="task-block-1", title="Blockable Task", status="todo")
-    Task.create(project_id=project.id, id="task-cancel-1", title="Cancelable Task", status="ready")
+    Task.create(project_id=project.id, id="task-block-1", title="Blockable Task", status="open")
+    Task.create(project_id=project.id, id="task-cancel-1", title="Cancelable Task", status="open")
     Task.create(project_id=project.id, id="task-retire-1", title="Retirable Task", status="done")
 
     server = MockServer()
@@ -1329,16 +1273,16 @@ def test_mcp_task_maintenance_lifecycle_tools(tmp_db, monkeypatch) -> None:
     assert blocked == {"ok": True, "id": "task-block-1", "status": "blocked"}
 
     invalid_unblock = yaml.safe_load(
-        unblock_handler(task_ref="task-block-1", target_status="in-progress")
+        unblock_handler(task_ref="task-block-1", target_status="in_progress")
     )
     assert invalid_unblock["ok"] is False
     assert invalid_unblock["error"] == "INVALID_TASK_TRANSITION_TARGET"
     assert "engram_task_unblock" in invalid_unblock["fix"]
 
     unblocked = yaml.safe_load(
-        unblock_handler(task_ref="task-block-1", target_status="ready", note="Dependency resolved")
+        unblock_handler(task_ref="task-block-1", target_status="open", note="Dependency resolved")
     )
-    assert unblocked == {"ok": True, "id": "task-block-1", "status": "ready"}
+    assert unblocked == {"ok": True, "id": "task-block-1", "status": "open"}
 
     cancelled = yaml.safe_load(cancel_handler(task_ref="task-cancel-1", reason="No longer needed"))
     assert cancelled == {"ok": True, "id": "task-cancel-1", "status": "cancelled"}

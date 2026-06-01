@@ -63,7 +63,7 @@ def register_task_tools(server: Any) -> None:
     def engram_task_create(
         title: str,
         description: str | None = None,
-        status: str = "todo",
+        status: str = "open",
         priority: str = "medium",
         phase: str | None = None,
         phase_id: str | None = None,
@@ -79,7 +79,7 @@ def register_task_tools(server: Any) -> None:
             from engram.models.task import Task
 
             has_in_progress = any(
-                t.status == "in-progress" for t in Task.list_by_project(project_id)
+                t.status in {"in_progress", "in-progress"} for t in Task.list_by_project(project_id)
             )
             task = engram.mcp.tools.create_task(
                 project_id=project_id,

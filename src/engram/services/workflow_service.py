@@ -79,7 +79,7 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
             message=f"Git working tree is dirty, and starting this task requires branch '{target_branch}'.",
         )
     if not is_resuming:
-        task.update(status="in-progress")
+        task.update(status="in_progress")
 
     show = subprocess.run(
         ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{target_branch}"],
@@ -124,7 +124,7 @@ def finish_workflow(
             message=f"Project with ID '{project_id}' not found.",
         )
     tasks = Task.list_by_project(project_id)
-    in_progress = [t for t in tasks if t.status == "in-progress"]
+    in_progress = [t for t in tasks if t.status in {"in_progress", "in-progress"}]
     if not in_progress:
         raise EngramServiceError(
             code="NO_TASK_IN_PROGRESS",

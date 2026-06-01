@@ -130,12 +130,12 @@ def test_resolve_task_ref_does_not_resolve_foreign_project_tasks(tmp_db):
     assert error.details == {"project_id": in_scope.id, "task_ref": "face"}
 
 
-def test_list_tasks_defaults_to_ready_effective_status(tmp_db):
+def test_list_tasks_defaults_to_open_effective_status(tmp_db):
     project = _create_project("proj-g", "/tmp/proj-g")
     dependency = Task.create(
-        project_id=project.id, id="depd0001", title="Unfinished dependency", status="ready"
+        project_id=project.id, id="depd0001", title="Unfinished dependency", status="open"
     )
-    Task.create(project_id=project.id, id="todo0001", title="Todo candidate", status="ready")
+    Task.create(project_id=project.id, id="todo0001", title="Todo candidate", status="open")
     Task.create(
         project_id=project.id,
         id="blok0001",
@@ -147,7 +147,7 @@ def test_list_tasks_defaults_to_ready_effective_status(tmp_db):
     payloads = list_tasks(project.id)
 
     assert {payload["id"] for payload in payloads} == {"todo0001", "depd0001"}
-    assert all(payload["effective_status"] == "ready" for payload in payloads)
+    assert all(payload["effective_status"] == "open" for payload in payloads)
     _assert_json_safe(payloads)
 
 
@@ -155,7 +155,7 @@ def test_list_tasks_supports_status_all(tmp_db):
     project = _create_project("proj-h", "/tmp/proj-h")
     Task.create(project_id=project.id, id="all00001", title="Todo task")
     Task.create(
-        project_id=project.id, id="all00002", title="In progress task", status="in-progress"
+        project_id=project.id, id="all00002", title="In progress task", status="in_progress"
     )
     Task.create(project_id=project.id, id="all00003", title="Done task", status="done")
     Task.create(project_id=project.id, id="all00004", title="Blocked task", status="blocked")
@@ -208,10 +208,8 @@ def test_list_tasks_raises_invalid_task_status(tmp_db):
             "blocked",
             "cancelled",
             "done",
-            "draft",
-            "in-progress",
-            "ready",
-            "todo",
+            "in_progress",
+            "open",
         ],
     }
 
@@ -275,7 +273,7 @@ def test_get_task_returns_json_safe_payload_from_scoped_reference(tmp_db):
     assert payload["id"] == task_item.id
     assert payload["project_id"] == project.id
     assert payload["title"] == "Fetch me"
-    assert payload["effective_status"] == "draft"
+    assert payload["effective_status"] == "open"
     _assert_json_safe(payload)
 
 
@@ -294,14 +292,14 @@ def test_get_next_task_returns_next_actionable_task_payload(tmp_db):
         id="next0002",
         title="Next actionable",
         priority="high",
-        status="ready",
+        status="open",
     )
 
     payload = get_next_task(project.id)
 
     assert payload is not None
     assert payload["id"] == expected.id
-    assert payload["effective_status"] == "ready"
+    assert payload["effective_status"] == "open"
     _assert_json_safe(payload)
 
 
@@ -368,7 +366,7 @@ def test_create_task_saves_and_returns_dto(tmp_db):
         project_id=project.id,
         title="Valid new task",
         description="With description",
-        status="in-progress",
+        status="in_progress",
         priority="high",
         tags=["t1", "t2"],
         relevant_files=["path/a", "path/b"],
@@ -377,7 +375,7 @@ def test_create_task_saves_and_returns_dto(tmp_db):
     assert dto["project_id"] == project.id
     assert dto["title"] == "Valid new task"
     assert dto["description"] == "With description"
-    assert dto["status"] == "in-progress"
+    assert dto["status"] == "in_progress"
     assert dto["priority"] == "high"
     assert dto["tags"] == ["t1", "t2"]
     assert dto["relevant_files"] == ["path/a", "path/b"]
@@ -432,20 +430,20 @@ def test_create_task_rejects_missing_dependency_reference(tmp_db):
 
 def test_update_task_happy_path(tmp_db):
     project = _create_project("proj-u", "/tmp/proj-u")
-    Task.create(project_id=project.id, id="task0001", title="Original Title", status="todo")
+    Task.create(project_id=project.id, id="task0001", title="Original Title", status="open")
 
     updated = update_task(
         project_id=project.id,
         task_ref="task0001",
         title="Updated Title",
-        status="in-progress",
+        status="in_progress",
         priority="high",
         tags=["foo", "bar"],
     )
 
     assert updated["id"] == "task0001"
     assert updated["title"] == "Updated Title"
-    assert updated["status"] == "in-progress"
+    assert updated["status"] == "in_progress"
     assert updated["priority"] == "high"
     assert updated["tags"] == ["foo", "bar"]
 
@@ -479,91 +477,19 @@ def test_update_task_invalid_status_and_priority(tmp_db):
     assert exc.value.code == "INVALID_TASK_PRIORITY"
 
 
-def test_update_task_ready_promotion_requires_minimum_metadata(tmp_db):
+def test_update_task_status_to_open_succeeds(tmp_db):
     project = _create_project("proj-u", "/tmp/proj-u")
-    Task.create(project_id=project.id, id="task0003b", title="Task title", status="draft")
-
-    with pytest.raises(ValidationError) as exc:
-        update_task(project_id=project.id, task_ref="task0003b", status="ready")
-
-    assert exc.value.code == "READY_METADATA_INCOMPLETE"
-    assert exc.value.details["missing_fields"] == ["description", "acceptance", "relevant_files"]
-    assert exc.value.details["weak_fields"] == []
-    assert exc.value.details["weak_field_reasons"] == {}
-    assert exc.value.details["evaluated_fields"] == [
-        "description",
-        "acceptance",
-        "relevant_files",
-    ]
-
-
-def test_update_task_ready_promotion_succeeds_with_minimum_metadata(tmp_db):
-    project = _create_project("proj-u", "/tmp/proj-u")
-    Task.create(project_id=project.id, id="task0003c", title="Task title", status="draft")
+    Task.create(project_id=project.id, id="task0003b", title="Task title", status="open")
 
     updated = update_task(
         project_id=project.id,
-        task_ref="task0003c",
-        status="ready",
-        description="Implement the metadata gate.",
-        acceptance="Promotion only succeeds when minimum metadata exists.",
-        relevant_files=["src/engram/services/task/update_resolution.py"],
-    )
-    assert updated["status"] == "ready"
-
-
-def test_update_task_ready_promotion_rejects_weak_metadata(tmp_db):
-    project = _create_project("proj-u", "/tmp/proj-u")
-    Task.create(project_id=project.id, id="task0003d", title="Task title", status="draft")
-
-    with pytest.raises(ValidationError) as exc:
-        update_task(
-            project_id=project.id,
-            task_ref="task0003d",
-            status="ready",
-            description="Too short",
-            acceptance="Done quickly.",
-            relevant_files=["services"],
-        )
-
-    assert exc.value.code == "READY_METADATA_INCOMPLETE"
-    assert exc.value.details["missing_fields"] == []
-    assert exc.value.details["weak_fields"] == ["description", "acceptance", "relevant_files"]
-    assert exc.value.details["weak_field_reasons"] == {
-        "description": "Description must include at least 4 words and 24 characters.",
-        "acceptance": "Acceptance must include at least 6 words and 32 characters.",
-        "relevant_files": "Relevant files must include at least one concrete path-like entry.",
-    }
-
-
-def test_update_task_ready_promotion_recovers_after_metadata_repair(tmp_db):
-    project = _create_project("proj-u", "/tmp/proj-u")
-    Task.create(project_id=project.id, id="task0003e", title="Task title", status="draft")
-
-    with pytest.raises(ValidationError) as exc:
-        update_task(
-            project_id=project.id,
-            task_ref="task0003e",
-            status="ready",
-            description="Too short",
-            acceptance="Done quickly.",
-            relevant_files=["services"],
-        )
-
-    assert exc.value.code == "READY_METADATA_INCOMPLETE"
-    assert exc.value.details["missing_fields"] == []
-    assert exc.value.details["weak_fields"] == ["description", "acceptance", "relevant_files"]
-    assert get_task(project.id, "task0003e")["status"] == "draft"
-
-    repaired = update_task(
-        project_id=project.id,
-        task_ref="task0003e",
-        status="ready",
+        task_ref="task0003b",
+        status="open",
         description="Implement deterministic task quality validation regression coverage.",
         acceptance="Ready promotion succeeds only after all required metadata is specific and concrete.",
-        relevant_files=["tests/test_services_task.py", "tests/test_mcp_tools.py"],
+        relevant_files=["tests/test_services_task.py"],
     )
-    assert repaired["status"] == "ready"
+    assert updated["status"] == "open"
 
 
 def test_update_task_prevents_direct_cycle_and_self_dependency(tmp_db):
@@ -644,18 +570,18 @@ def test_append_task_note_blank_rejection(tmp_db):
 
 def test_start_task_success(tmp_db):
     project = _create_project("proj-start-t", "/tmp/proj-start-t")
-    t = Task.create(project_id=project.id, id="task0101", title="Task 101", status="todo")
+    t = Task.create(project_id=project.id, id="task0101", title="Task 101", status="open")
 
     dto = start_task(project.id, t.id)
     assert dto["id"] == t.id
-    assert dto["status"] == "in-progress"
+    assert dto["status"] == "in_progress"
 
 
 def test_start_task_fails_if_dependency_unsatisfied(tmp_db):
     project = _create_project("proj-start-t2", "/tmp/proj-start-t2")
-    dep = Task.create(project_id=project.id, id="task0102", title="Dependency", status="todo")
+    dep = Task.create(project_id=project.id, id="task0102", title="Dependency", status="open")
     t = Task.create(
-        project_id=project.id, id="task0103", title="Task 103", status="todo", depends_on=dep.id
+        project_id=project.id, id="task0103", title="Task 103", status="open", depends_on=dep.id
     )
 
     with pytest.raises(ValidationError) as exc:
@@ -671,7 +597,7 @@ def test_start_task_fails_if_dependency_reference_is_missing(tmp_db):
         project_id=project.id,
         id="task0106",
         title="Task 106",
-        status="todo",
+        status="open",
         depends_on="2.3",
     )
 
@@ -685,8 +611,8 @@ def test_start_task_fails_if_dependency_reference_is_missing(tmp_db):
 
 def test_start_task_fails_when_another_task_is_in_progress(tmp_db):
     project = _create_project("proj-start-t4", "/tmp/proj-start-t4")
-    Task.create(project_id=project.id, id="task0107", title="Already active", status="in-progress")
-    t = Task.create(project_id=project.id, id="task0108", title="Candidate", status="todo")
+    Task.create(project_id=project.id, id="task0107", title="Already active", status="in_progress")
+    t = Task.create(project_id=project.id, id="task0108", title="Candidate", status="open")
 
     with pytest.raises(ValidationError) as exc:
         start_task(project.id, t.id)
@@ -705,12 +631,12 @@ def test_start_task_rejects_invalid_source_status(tmp_db):
 
     assert exc.value.code == "INVALID_TASK_TRANSITION"
     assert exc.value.details["from_status"] == "done"
-    assert exc.value.details["to_status"] == "in-progress"
+    assert exc.value.details["to_status"] == "in_progress"
 
 
 def test_complete_task_success_without_evidence(tmp_db):
     project = _create_project("proj-comp-t", "/tmp/proj-comp-t")
-    t = Task.create(project_id=project.id, id="task0104", title="Task 104", status="in-progress")
+    t = Task.create(project_id=project.id, id="task0104", title="Task 104", status="in_progress")
 
     dto = complete_task(project.id, t.id)
     assert dto["id"] == t.id
@@ -720,7 +646,7 @@ def test_complete_task_success_without_evidence(tmp_db):
 
 def test_complete_task_success_with_evidence(tmp_db):
     project = _create_project("proj-comp-t2", "/tmp/proj-comp-t2")
-    t = Task.create(project_id=project.id, id="task0105", title="Task 105", status="in-progress")
+    t = Task.create(project_id=project.id, id="task0105", title="Task 105", status="in_progress")
 
     dto = complete_task(project.id, t.id, evidence="All completed smoothly")
     assert dto["id"] == t.id
@@ -731,26 +657,26 @@ def test_complete_task_success_with_evidence(tmp_db):
 
 def test_complete_task_rejects_invalid_source_status(tmp_db):
     project = _create_project("proj-comp-t3", "/tmp/proj-comp-t3")
-    t = Task.create(project_id=project.id, id="task0110", title="Task 110", status="todo")
+    t = Task.create(project_id=project.id, id="task0110", title="Task 110", status="open")
 
     with pytest.raises(ValidationError) as exc:
         complete_task(project.id, t.id)
 
     assert exc.value.code == "INVALID_TASK_TRANSITION"
-    assert exc.value.details["from_status"] == "todo"
+    assert exc.value.details["from_status"] == "open"
     assert exc.value.details["to_status"] == "done"
 
 
 def test_block_unblock_task_lifecycle_happy_path(tmp_db):
     project = _create_project("proj-life-1", "/tmp/proj-life-1")
-    t = Task.create(project_id=project.id, id="task0111", title="Task 111", status="todo")
+    t = Task.create(project_id=project.id, id="task0111", title="Task 111", status="open")
 
     blocked = block_task(project.id, t.id, reason="Waiting on API key")
     assert blocked["status"] == "blocked"
     assert "Waiting on API key" in blocked["evidence"]
 
-    unblocked = unblock_task(project.id, t.id, target_status="ready", note="API key received")
-    assert unblocked["status"] == "ready"
+    unblocked = unblock_task(project.id, t.id, target_status="open", note="API key received")
+    assert unblocked["status"] == "open"
     assert "API key received" in unblocked["evidence"]
     _assert_json_safe(unblocked)
 
@@ -758,7 +684,7 @@ def test_block_unblock_task_lifecycle_happy_path(tmp_db):
 def test_block_unblock_task_rejects_invalid_transitions(tmp_db):
     project = _create_project("proj-life-2", "/tmp/proj-life-2")
     done = Task.create(project_id=project.id, id="task0112", title="Done", status="done")
-    todo = Task.create(project_id=project.id, id="task0113", title="Todo", status="todo")
+    todo = Task.create(project_id=project.id, id="task0113", title="Todo", status="open")
 
     with pytest.raises(ValidationError) as exc_done:
         block_task(project.id, done.id)
@@ -771,7 +697,7 @@ def test_block_unblock_task_rejects_invalid_transitions(tmp_db):
     blocked = block_task(project.id, todo.id)
     assert blocked["status"] == "blocked"
     with pytest.raises(ValidationError) as exc_target:
-        unblock_task(project.id, todo.id, target_status="in-progress")
+        unblock_task(project.id, todo.id, target_status="in_progress")
     assert exc_target.value.code == "INVALID_TASK_TRANSITION_TARGET"
 
 
@@ -789,7 +715,7 @@ def test_cancel_task_happy_path_and_invalid_state(tmp_db):
 
 def test_retire_task_requires_terminal_status_and_deletes_task(tmp_db):
     project = _create_project("proj-life-4", "/tmp/proj-life-4")
-    active = Task.create(project_id=project.id, id="task0115", title="Active", status="todo")
+    active = Task.create(project_id=project.id, id="task0115", title="Active", status="open")
     done = Task.create(project_id=project.id, id="task0116", title="Done", status="done")
 
     with pytest.raises(ValidationError) as exc:

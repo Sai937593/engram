@@ -47,10 +47,10 @@ def test_start_workflow_happy_path_branch_exists(tmp_db: Any, mock_startup_conte
     assert res["is_resuming"] is False
     assert res["context"] == "mock startup context string"
 
-    # Task status should be updated to in-progress
+    # Task status should be updated to in_progress
     refreshed_task = Task.get(task.id)
     assert refreshed_task is not None
-    assert refreshed_task.status == "in-progress"
+    assert refreshed_task.status == "in_progress"
 
     # Checkout target branch should be called
     assert ["git", "checkout", "feat/phase-phase-one"] in git_mock.calls

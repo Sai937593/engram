@@ -21,7 +21,7 @@ class Task:
         project_id,
         title,
         description=None,
-        status="draft",
+        status="open",
         priority="medium",
         phase=None,
         phase_id=None,
@@ -53,7 +53,7 @@ class Task:
         project_id,
         title,
         description=None,
-        status="draft",
+        status="open",
         priority="medium",
         phase=None,
         phase_id=None,
@@ -142,6 +142,11 @@ class Task:
             if not hasattr(self, key):
                 continue
             old = getattr(self, key)
+            if key == "status":
+                if val in {"draft", "ready", "todo"}:
+                    val = "open"
+                elif val == "in-progress":
+                    val = "in_progress"
             new = normalize_relevant_files(val) if key == "relevant_files" else val
             if old != new:
                 updates.append(f"{key} = ?")

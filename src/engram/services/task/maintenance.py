@@ -51,21 +51,21 @@ def block_task(project_id: str, task_ref: str, reason: str | None = None) -> dic
 def unblock_task(
     project_id: str,
     task_ref: str,
-    target_status: str = "todo",
+    target_status: str = "open",
     note: str | None = None,
 ) -> dict[str, object]:
     """Unblock a blocked task back into a planned status."""
     task_item = _get_task(project_id, task_ref)
     if task_item.status != "blocked":
         _raise_invalid_transition(task_item, target_status)
-    if target_status not in {"draft", "ready", "todo"}:
+    if target_status not in {"open", "draft", "ready", "todo"}:
         raise ValidationError(
             code="INVALID_TASK_TRANSITION_TARGET",
-            message="Unblock target status must be draft, ready, or todo.",
+            message="Unblock target status must be open.",
             details={
                 "task_id": task_item.id,
                 "target_status": target_status,
-                "allowed_targets": ["draft", "ready", "todo"],
+                "allowed_targets": ["open"],
             },
         )
     task_item.update(status=target_status, evidence=_append_evidence(task_item, note))

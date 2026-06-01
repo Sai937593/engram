@@ -42,8 +42,14 @@ def _string_list(value: Any) -> list[str]:
 
 def _get_effective_status(task: Task) -> str:
     """Compute dependency-aware status without importing CLI helpers."""
-    if task.status in {"done", "cancelled"}:
-        return task.status
+    status = task.status
+    if status in {"draft", "ready", "todo"}:
+        status = "open"
+    elif status == "in-progress":
+        status = "in_progress"
+
+    if status in {"done", "cancelled"}:
+        return status
 
     visited: set[str] = set()
     current = task
@@ -59,17 +65,23 @@ def _get_effective_status(task: Task) -> str:
         dependency = Task.get(dep_id)
         if not dependency:
             break
-        if dependency.status == "cancelled":
+        dep_status = dependency.status
+        if dep_status in {"draft", "ready", "todo"}:
+            dep_status = "open"
+        elif dep_status == "in-progress":
+            dep_status = "in_progress"
+
+        if dep_status == "cancelled":
             return "cancelled"
-        if dependency.status == "blocked":
+        if dep_status == "blocked":
             has_blocked = True
-        elif dependency.status != "done":
+        elif dep_status != "done":
             has_unfinished = True
         current = dependency
 
     if has_blocked or has_unfinished:
         return "blocked"
-    return task.status
+    return status
 
 
 def project_to_dict(project: Project) -> dict[str, JsonValue]:

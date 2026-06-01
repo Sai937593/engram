@@ -40,8 +40,13 @@ class _Helpers:
     def normalize_status(status: str | None) -> str:
         """Normalize and validate task status filter values."""
         if status is None:
-            return "ready"
+            return "open"
         normalized = status.strip().casefold()
+        if normalized in {"draft", "ready", "todo"}:
+            normalized = "open"
+        elif normalized == "in-progress":
+            normalized = "in_progress"
+
         if normalized in _VALID_TASK_STATUSES:
             return normalized
         raise _EngramServiceError(
@@ -116,7 +121,7 @@ def create_task(
     project_id: str,
     title: str,
     description: str | None = None,
-    status: str = "draft",
+    status: str = "open",
     priority: str = "medium",
     phase: str | None = None,
     phase_id: str | None = None,
@@ -126,7 +131,11 @@ def create_task(
     relevant_files: list[str] | None = None,
     id: str | None = None,
 ) -> dict[str, object]:
-    """Create a new task with validation and return its JSON-safe DTO."""
+    if status in {"draft", "ready", "todo"}:
+        status = "open"
+    elif status == "in-progress":
+        status = "in_progress"
+
     _validate_status_field(status)
     _validate_priority_field(priority)
     dep = _normalize_dependency_ref(project_id, depends_on, task_id=id)

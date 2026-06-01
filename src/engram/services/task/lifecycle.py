@@ -31,23 +31,23 @@ def get_next_task(project_id: str) -> dict[str, object] | None:
 
 
 def start_task(project_id: str, task_ref: str) -> dict[str, object]:
-    """Start a task by marking it in-progress, validating its dependencies."""
+    """Start a task by marking it in_progress, validating its dependencies."""
     task_item = _get_task(project_id, task_ref)
-    if task_item.status not in {"draft", "ready", "todo"}:
+    if task_item.status not in {"open", "draft", "ready", "todo"}:
         raise ValidationError(
             code="INVALID_TASK_TRANSITION",
-            message=f"Cannot transition task '{task_item.id}' from '{task_item.status}' to 'in-progress'.",
+            message=f"Cannot transition task '{task_item.id}' from '{task_item.status}' to 'in_progress'.",
             details={
                 "task_id": task_item.id,
                 "from_status": task_item.status,
-                "to_status": "in-progress",
+                "to_status": "in_progress",
             },
         )
 
     active_tasks = [
         t.id
         for t in Task.list_by_project(project_id)
-        if t.id != task_item.id and t.status == "in-progress"
+        if t.id != task_item.id and t.status in {"in_progress", "in-progress"}
     ]
     if active_tasks:
         raise ValidationError(
@@ -80,7 +80,7 @@ def start_task(project_id: str, task_ref: str) -> dict[str, object]:
                 },
             )
 
-    task_item.update(status="in-progress")
+    task_item.update(status="in_progress")
     return task_to_dict(task_item)
 
 
@@ -91,7 +91,7 @@ def complete_task(
 ) -> dict[str, object]:
     """Complete a task by marking it done, optionally appending evidence."""
     task_item = _get_task(project_id, task_ref)
-    if task_item.status != "in-progress":
+    if task_item.status not in {"in_progress", "in-progress"}:
         raise ValidationError(
             code="INVALID_TASK_TRANSITION",
             message=f"Cannot transition task '{task_item.id}' from '{task_item.status}' to 'done'.",

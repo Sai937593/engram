@@ -57,7 +57,7 @@ def verify_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
         )
 
     tasks = Task.list_by_project(project_id)
-    in_progress = [t for t in tasks if t.status == "in-progress"]
+    in_progress = [t for t in tasks if t.status in {"in_progress", "in-progress"}]
     if not in_progress:
         raise EngramServiceError(
             code="NO_TASK_IN_PROGRESS",

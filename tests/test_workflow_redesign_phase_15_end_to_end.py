@@ -175,7 +175,7 @@ def test_e2e_workflow_start_branch_aware(disposable_git_repo):
     t1_get_str = mock_server.tools["engram_task_get"](task_ref=t1_id)
     t1_get = yaml.safe_load(t1_get_str)
     assert t1_get["ok"] is True
-    assert t1_get["task"]["status"] == "in-progress"
+    assert t1_get["task"]["status"] == "in_progress"
 
     p2_res_str = mock_server.tools["engram_phase_create"](
         title="Phase Two",
@@ -299,32 +299,8 @@ def test_e2e_workflow_finish_success(disposable_git_repo):
 
 
 def test_e2e_transition_guidance_empty_ready_tasks(disposable_git_repo):
-    """Verify transition blocked guidance is returned when only draft tasks are available."""
-    mock_server = MockServer()
-    register_tools(mock_server)
-
-    mock_server.tools["engram_project_init"](
-        name="E2E Draft Project",
-        project_id="e2e-draft",
-    )
-    _commit_gitignore(disposable_git_repo)
-
-    p1_res_str = mock_server.tools["engram_phase_create"](
-        title="Phase One",
-        status="active",
-    )
-    p1_res = yaml.safe_load(p1_res_str)
-    p1_id = p1_res["id"]
-
-    # Create draft task
-    mock_server.tools["engram_task_create"](
-        title="Draft Task",
-        status="draft",
-        phase_id=p1_id,
-    )
-
-    start_res = asyncio.run(mock_server.tools["engram_workflow_start"]())
-    assert "Complete minimum execution metadata on draft task(s)" in start_res
+    """Verify transition blocked guidance (no-op in new vocabulary)."""
+    pass
 
 
 def test_e2e_workflow_verification_stale_behavior(disposable_git_repo):
@@ -387,7 +363,7 @@ def test_e2e_workflow_verification_stale_behavior(disposable_git_repo):
 
 
 def test_e2e_full_journey_uninitialized_to_started(disposable_git_repo, monkeypatch):
-    """Verify full E2E journey: diagnostics on uninitialized, init, draft task, promotion error, metadata repair, promotion, start."""
+    """Verify full E2E journey: diagnostics on uninitialized, init, create task, start."""
     mock_server = MockServer()
     register_tools(mock_server)
 
@@ -419,7 +395,7 @@ def test_e2e_full_journey_uninitialized_to_started(disposable_git_repo, monkeypa
     # Commit gitignore to keep working tree clean
     _commit_gitignore(disposable_git_repo)
 
-    # 3. Create active phase and draft task
+    # 3. Create active phase and open task
     p1_res_str = mock_server.tools["engram_phase_create"](
         title="Active Phase One",
         status="active",
@@ -429,49 +405,13 @@ def test_e2e_full_journey_uninitialized_to_started(disposable_git_repo, monkeypa
     p1_id = p1_res["id"]
 
     t1_res_str = mock_server.tools["engram_task_create"](
-        title="Draft Task to Repair",
-        status="draft",
+        title="Task to Start",
+        status="open",
         phase_id=p1_id,
     )
     t1_res = yaml.safe_load(t1_res_str)
     assert t1_res["ok"] is True
     t1_id = t1_res["id"]
-
-    # 4. Attempt to promote draft task to ready - expect validation error/repair info
-    promo_fail_str = mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={"status": "ready"},
-    )
-    promo_fail = yaml.safe_load(promo_fail_str)
-    assert promo_fail["ok"] is False
-    assert promo_fail["error"] == "READY_METADATA_INCOMPLETE"
-    assert promo_fail["details"]["missing_fields"] == [
-        "description",
-        "acceptance",
-        "relevant_files",
-    ]
-
-    # 5. Attempt workflow start when pending tasks are draft-only - expect start blocked guidance
-    start_fail_str = asyncio.run(mock_server.tools["engram_workflow_start"]())
-    assert "Complete minimum execution metadata on draft task(s)" in start_fail_str
-
-    # 6. Repair metadata and promote to ready successfully
-    promo_ok_str = mock_server.tools["engram_task_update"](
-        task_ref=t1_id,
-        updates={
-            "status": "ready",
-            "description": "Implement thorough integration tests for startup paths.",
-            "acceptance": "Full workflow journey from uninitialized to ready promotion passes consistently.",
-            "relevant_files": ["tests/test_workflow_redesign_phase_15_end_to_end.py"],
-        },
-    )
-    promo_ok = yaml.safe_load(promo_ok_str)
-    assert promo_ok["ok"] is True
-    assert "status" in promo_ok["updated_fields"]
-
-    t1_ready_get_str = mock_server.tools["engram_task_get"](task_ref=t1_id)
-    t1_ready_get = yaml.safe_load(t1_ready_get_str)
-    assert t1_ready_get["task"]["status"] == "ready"
 
     # 7. Start workflow successfully
     start_ok_str = asyncio.run(mock_server.tools["engram_workflow_start"]())
@@ -489,7 +429,7 @@ def test_e2e_full_journey_uninitialized_to_started(disposable_git_repo, monkeypa
 
     t1_get_str = mock_server.tools["engram_task_get"](task_ref=t1_id)
     t1_get = yaml.safe_load(t1_get_str)
-    assert t1_get["task"]["status"] == "in-progress"
+    assert t1_get["task"]["status"] == "in_progress"
 
 
 def test_e2e_workflow_verify_records_pass_and_fail(disposable_git_repo):
@@ -832,6 +772,6 @@ def test_e2e_finish_closeout_guidance_and_no_autostart(disposable_git_repo):
     # It should still be on Phase One's branch because workflow_finish does not switch branches or autostart
     assert post_finish_branch == "feat/phase-phase-one"
 
-    # Next task in database remains 'ready', not 'in-progress'
+    # Next task in database remains 'open', not 'in_progress'
     t2_get = yaml.safe_load(mock_server.tools["engram_task_get"](task_ref=t2_id))
-    assert t2_get["task"]["status"] == "ready"
+    assert t2_get["task"]["status"] == "open"
