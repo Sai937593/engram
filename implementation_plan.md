@@ -1,32 +1,23 @@
-# Implementation Plan - Phase 9.1 (c7de0990)
+## Implementation Plan - Task c2b08d27
 
-## Scope
-Align phase-review and memory-review guidance with Workflow MVP simplification:
-- Keep phase review on normal phase/task/memory tools.
-- Reinforce memory curation at phase level, not per-task finish gates.
-- Explicitly prohibit raw SQLite/ad hoc DB scripts and special phase memory-review start tools.
-- Preserve guidance that root `AGENTS.md` is updated only for stable repository-wide rules.
+### Scope
+- Update phase-review guidance in:
+  - `docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md`
+  - `docs/USER_MANUAL.md`
+  - `src/engram/USER_MANUAL.md`
+- Keep `AGENTS.md` unchanged unless a stable repo-wide rule is required.
 
-## Planned Changes
-1. Update `agent-files/skills/engram-phase-review-template.md`:
-- Confirm tool list only includes normal phase/task/memory tools.
-- Keep explicit prohibition on raw SQLite/ad hoc DB scripts.
-- Ensure wording clearly states phase-level memory review and no special phase memory-review start tool.
-- Keep/clarify `AGENTS.md` update rule as stable repository-wide only.
+### Planned Changes
+1. Align all three docs to describe phase review as phase-level memory curation using existing memory tools.
+2. Ensure phase completion flow explicitly points to `engram_phase_complete` after memory review and cleanup.
+3. Remove or correct contradictory guidance about:
+   - raw SQLite access by agents,
+   - dedicated/special phase memory-review start tools.
+4. Sync tool lists so memory batch helpers are consistently documented where phase review instructions appear.
 
-2. Update `docs/skills/memory-review.md`:
-- Reframe as phase-level curation guidance for durable knowledge.
-- Explicitly state this is not a per-task finish gate.
-- Add explicit prohibition on raw SQLite access and direct `.engram/memory.db` inspection/mutation.
-- Reference normal memory CRUD and phase completion tools only.
-- Remove wording that implies special phase memory-review start behavior.
+### Verification
+1. Run the task-provided grep check:
+   - `rg -n "phase review|memory review|engram_phase_complete|engram_memory_(list|get|create|update|delete|update_many|delete_many)|special phase memory review|raw SQLite" docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md docs/USER_MANUAL.md src/engram/USER_MANUAL.md AGENTS.md`
+2. Run `engram_workflow_verify`.
+3. If verify passes, run `engram_workflow_finish_and_commit`.
 
-## Verification
-1. Run:
-`rg -n "engram_phase_complete|engram_memory_(list|get|create|update|delete|update_many|delete_many)|raw SQLite|special phase memory review|AGENTS.md" agent-files/skills/engram-phase-review-template.md docs/skills/memory-review.md`
-2. Run `mcp__engram.engram_workflow_verify`.
-3. If verify passes, run `mcp__engram.engram_workflow_finish_and_commit`.
-
-## Out of Scope
-- Any workflow/service code changes.
-- Changes outside the two target documentation files.

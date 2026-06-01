@@ -110,7 +110,9 @@ The MCP server exposes 17 tools for full interactive capabilities:
     *   `engram_memory_get`: Retrieves a memory by id.
     *   `engram_memory_create`: Creates a memory from normal user-facing fields (for example `title`, `content`).
     *   `engram_memory_update`: Updates a memory by id.
+    *   `engram_memory_update_many`: Updates multiple memories in one batch operation.
     *   `engram_memory_delete`: Deletes a memory by id.
+    *   `engram_memory_delete_many`: Deletes multiple memories in one batch operation.
     *   `engram_memory_search`: Runs FTS5 + semantic hybrid query search over all project memories.
 *   **Phase Management:**
     *   `engram_phase_list`: Lists all milestone phases for the project in priority order.
@@ -155,7 +157,7 @@ When the implementation is complete and verified:
 *   The agent calls `engram_workflow_finish_and_commit` to commit and push already-staged verified changes.
 
 ### Step 6: Phase-Level Memory Review
-During phase completion, review durable lessons and decisions using memory CRUD tools (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`) before running `engram_phase_complete`.
+During phase completion, review durable lessons and decisions using memory CRUD plus batch helpers (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`, `engram_memory_update_many`, `engram_memory_delete_many`) before running `engram_phase_complete`.
 
 ---
 
