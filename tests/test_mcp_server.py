@@ -509,6 +509,7 @@ def test_register_tools_registers_expected_fastmcp_tools() -> None:
         "engram_task_create_many",
         "engram_memory_search",
         "engram_memory_list",
+        "engram_memory_create",
         "engram_memory_get",
         "engram_memory_update",
         "engram_memory_supersede",
@@ -518,6 +519,95 @@ def test_register_tools_registers_expected_fastmcp_tools() -> None:
     }
     for tool_name in expected_tools:
         assert tool_name in server.tools
+
+
+def test_mcp_memory_tools_default_contract_is_compact_and_lifecycle_light(tmp_db, monkeypatch):
+    """Regression: default list/get/create/update/delete contract stays compact for agents."""
+    import os
+
+    from engram.models.project import Project
+
+    cwd = os.path.abspath("repo/fake-memory-contract-repo")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+    Project.create(
+        id="proj-mcp-memory-contract",
+        name="MCP Memory Contract Project",
+        summary="Regression coverage for simplified memory interface",
+        repo_paths=[cwd],
+    )
+
+    class MockServer:
+        def __init__(self) -> None:
+            self.tools: dict[str, Any] = {}
+
+        def tool(self, **kwargs: Any) -> Any:
+            def decorator(func: Any) -> Any:
+                self.tools[func.__name__] = func
+                return func
+
+            return decorator
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+
+    created = yaml.safe_load(
+        server.tools["engram_memory_create"](
+            content="Use compact default memory outputs.",
+            title="Compact default",
+        )
+    )
+    assert created["ok"] is True
+    assert set(created.keys()) == {"ok", "id", "type"}
+    memory_id = created["id"]
+
+    listed = yaml.safe_load(server.tools["engram_memory_list"]())
+    assert listed["ok"] is True
+    assert listed["memories"][0]["id"] == memory_id
+    assert set(listed["memories"][0].keys()) == {
+        "id",
+        "title",
+        "content",
+        "content_preview",
+        "created_at",
+        "updated_at",
+    }
+    assert "scope" not in listed["memories"][0]
+    assert "level" not in listed["memories"][0]
+    assert "always_include" not in listed["memories"][0]
+    assert "superseded_by" not in listed["memories"][0]
+
+    fetched = yaml.safe_load(server.tools["engram_memory_get"](memory_ref=memory_id))
+    assert fetched["ok"] is True
+    assert fetched["memory"]["id"] == memory_id
+    assert set(fetched["memory"].keys()) == {
+        "id",
+        "title",
+        "content",
+        "content_preview",
+        "created_at",
+        "updated_at",
+    }
+    assert "scope" not in fetched["memory"]
+    assert "level" not in fetched["memory"]
+    assert "always_include" not in fetched["memory"]
+    assert "superseded_by" not in fetched["memory"]
+
+    updated = yaml.safe_load(
+        server.tools["engram_memory_update"](
+            memory_ref=memory_id,
+            title="Compact default updated",
+            content="Updated compact output guidance.",
+        )
+    )
+    assert updated["ok"] is True
+    assert updated["memory"]["id"] == memory_id
+    assert updated["memory"]["title"] == "Compact default updated"
+    assert updated["memory"]["content"] == "Updated compact output guidance."
+
+    deleted = yaml.safe_load(server.tools["engram_memory_delete"](memory_ref=memory_id, force=True))
+    assert deleted == {"ok": True, "id": memory_id, "deleted": True}
 
 
 def test_mcp_memory_search_tool(tmp_db, monkeypatch) -> None:

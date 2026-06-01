@@ -482,6 +482,11 @@ def test_get_memory_returns_project_scoped_memory_dto(tmp_db):
     assert fetched["content"] == "Project scoped retrieval."
     assert "created_at" in fetched
     assert "updated_at" in fetched
+    assert "project_id" not in fetched
+    assert "scope" not in fetched
+    assert "level" not in fetched
+    assert "always_include" not in fetched
+    assert "superseded_by" not in fetched
 
 
 def test_get_memory_rejects_foreign_project_lookup(tmp_db):
