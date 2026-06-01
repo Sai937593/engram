@@ -482,7 +482,7 @@ def test_mcp_resources_are_read_only_and_do_not_mutate_db(tmp_db, monkeypatch):
 
 
 def test_register_tools_registers_expected_fastmcp_tools() -> None:
-    """Verify that register_tools registers all six expected tools."""
+    """Verify that register_tools registers expected memory discovery/lifecycle tools."""
 
     class MockServer:
         def __init__(self) -> None:
@@ -506,6 +506,12 @@ def test_register_tools_registers_expected_fastmcp_tools() -> None:
         "engram_task_get",
         "engram_task_next",
         "engram_memory_search",
+        "engram_memory_get",
+        "engram_memory_update",
+        "engram_memory_supersede",
+        "engram_memory_demote",
+        "engram_memory_archive",
+        "engram_memory_delete",
     }
     for tool_name in expected_tools:
         assert tool_name in server.tools
@@ -570,6 +576,7 @@ def test_mcp_memory_search_tool(tmp_db, monkeypatch) -> None:
     res = yaml.safe_load(tool())
     assert res["ok"] is True
     assert len(res["memories"]) == 2
+    assert "## Memory Search" in res["result"]
 
     # 2. Search with query filter
     res = yaml.safe_load(tool(query="FastMCP"))
@@ -763,6 +770,7 @@ def test_mcp_memory_search_tool_no_memories(tmp_db, monkeypatch):
 
     res = yaml.safe_load(tool())
     assert res["ok"] is True
+    assert "No matching memories found." in res["result"]
     assert "No results. Try broader terms." in res["hint"]
 
 

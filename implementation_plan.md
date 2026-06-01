@@ -1,32 +1,29 @@
-# Implementation Plan - Phase 13.2 (Task 5aff059a)
+# Implementation Plan - Phase 13.3 (Task b7119baf)
 
 ## Scope
-Implement service-layer memory lifecycle mutations for safe supersede, demote, archive, and delete flows, preserving project scoping and deterministic validation/audit behavior.
+Expose finalized memory lifecycle operations through MCP memory tools and refine `engram_memory_search` output to be compact, Markdown-first, and actionable while preserving safe failure guidance.
 
 ## Files in scope
-- src/engram/services/memory_service.py
-- src/engram/models/memory/model.py
-- src/engram/models/memory/helpers.py
-- src/engram/models/memory/queries.py
-- tests/test_services_memory.py
-- tests/test_memory.py
-- tests/test_memory_supersession.py
+- src/engram/mcp/tools/memory_tools.py
+- src/engram/mcp/tools/helpers.py
+- src/engram/services/memory_service.py (only if MCP adapter gaps require service-facing shape tweaks)
+- tests/test_mcp_tools.py
+- tests/test_mcp_server.py
 
 ## Plan
-1. Add explicit service-layer lifecycle APIs in `memory_service` for supersede, demote, archive, and delete that resolve memory by project scope and return JSON-safe DTOs where appropriate.
-2. Implement deterministic validation contracts for each lifecycle action (missing memory, wrong scope/level for demote, invalid supersede target, and protected delete constraints), mapping model errors to service `ValidationError` payloads.
-3. Keep reversible hygiene as first-class behavior: support supersede/archive/demote flows without changing default list/search behavior (superseded/archived excluded unless explicitly requested).
-4. Extend model/helper paths only where needed to support archive and safe supersede semantics with audit logging and predictable state transitions.
-5. Add/extend focused tests covering:
-   - happy paths for supersede/demote/archive/delete,
-   - deterministic failures and error codes,
-   - default filter behavior unchanged,
-   - regression preference for reversible actions over delete.
-6. Run required verification tests:
-   - `uv run pytest tests/test_services_memory.py tests/test_memory.py tests/test_memory_supersession.py -q`
-   - `uv run pytest -q` only if targeted tests indicate broader regression risk.
+1. Audit existing MCP memory tool surface and map acceptance coverage for get, update, supersede, demote, archive, and delete to confirm missing/partial handlers.
+2. Implement or refine thin MCP adapters so lifecycle tools delegate to memory services (no direct DB mutation/filter logic in MCP layer).
+3. Update memory-search response formatting to Markdown-first compact output while preserving miss guidance and deterministic error/help text.
+4. Ensure default discovery behavior still hides superseded/archived entries unless explicitly requested through maintenance/audit paths.
+5. Add/adjust regression tests in MCP test suites for:
+   - lifecycle happy paths,
+   - compact actionable response contracts,
+   - safe failure guidance for misses/invalid operations.
+6. Run required verification commands:
+   - `uv run pytest tests/test_mcp_tools.py tests/test_mcp_server.py -q`
+   - `uv run pytest -q`
 
 ## Non-goals
-- No MCP adapter refactor beyond existing service delegation boundaries.
+- No schema redesign or model-layer rewrite beyond what is strictly needed for MCP delegation compatibility.
 - No edits in `planning/`, `workflow/`, or `.github/`.
 - No additional Engram task work in this session.
