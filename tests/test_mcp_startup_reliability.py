@@ -422,10 +422,13 @@ def test_packaging_metadata_stability():
     assert any(req.startswith("mcp") and 'extra == "mcp"' in req for req in dist_reqs)
 
 
-def test_engram_skill_templates_start_from_workflow_status():
-    """Verify the skill templates reference workflow status first and keep the expected guidance."""
+def test_engram_documentation_entrypoints_and_skill_templates():
+    """Verify the public manuals and skill templates stay aligned with the standardized workflow."""
     repo_root = Path(__file__).resolve().parents[1]
 
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    docs_manual = (repo_root / "docs" / "USER_MANUAL.md").read_text(encoding="utf-8")
+    packaged_manual = (repo_root / "src" / "engram" / "USER_MANUAL.md").read_text(encoding="utf-8")
     task_decomposition = (
         repo_root / "agent-files" / "skills" / "engram-task-decomposition-template.md"
     ).read_text(encoding="utf-8")
@@ -438,6 +441,22 @@ def test_engram_skill_templates_start_from_workflow_status():
 
     for template in (task_decomposition, start_task, phase_review):
         assert "engram_workflow_status" in template
+
+    for manual in (readme, docs_manual, packaged_manual):
+        assert "review_pending" in manual
+        assert "feat/<plan_key>-<phase_key>" in manual
+        assert ".engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md" in manual
+        assert "engram_workflow_finish_and_commit" in manual
+        assert "historical workflow docs are archived" in manual.lower()
+
+    assert "docs/plans/plan-0003-workflow-standardization/implementation-phases.md" in readme
+    assert "docs/adr/0003-workflow-standardization.md" in readme
+    assert "reference material only" in readme.lower()
+
+    assert "open -> in_progress -> blocked -> done | cancelled" in docs_manual
+    assert "open -> in_progress -> blocked -> done | cancelled" in packaged_manual
+    assert "draft -> ready -> in-progress" not in docs_manual
+    assert "draft -> ready -> in-progress" not in packaged_manual
 
     assert ".engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md" in task_decomposition
     assert "deterministic plan, phase, and task keys" in task_decomposition
