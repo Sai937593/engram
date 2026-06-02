@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -25,17 +26,41 @@ L1_GUARDRAIL_RULES: tuple[tuple[str, str], ...] = (
 )
 
 
-def get_staged_python_files(repo_root: Path | None = None) -> list[Path]:
-    """Return added/modified staged .py files from git index."""
+def _collect_git_paths(args: list[str], repo_root: Path | None = None) -> list[Path]:
     completed = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=AM"],
+        args,
         check=True,
         capture_output=True,
         text=True,
         cwd=repo_root,
     )
-    paths = [Path(line.strip()) for line in completed.stdout.splitlines() if line.strip()]
+    return [Path(line.strip()) for line in completed.stdout.splitlines() if line.strip()]
+
+
+def _filter_python_files(paths: list[Path]) -> list[Path]:
     return [path for path in paths if path.suffix == ".py"]
+
+
+def get_staged_python_files(repo_root: Path | None = None) -> list[Path]:
+    """Return added/modified staged .py files from git index."""
+    return _filter_python_files(
+        _collect_git_paths(
+            ["git", "diff", "--cached", "--name-only", "--diff-filter=AM"], repo_root=repo_root
+        )
+    )
+
+
+def get_changed_python_files(repo_root: Path | None = None) -> list[Path]:
+    """Return staged, unstaged modified, and untracked .py files."""
+    seen: dict[Path, None] = {}
+    for args in (
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=AM"],
+        ["git", "diff", "--name-only", "--diff-filter=M"],
+        ["git", "ls-files", "--others", "--exclude-standard"],
+    ):
+        for path in _filter_python_files(_collect_git_paths(args, repo_root=repo_root)):
+            seen.setdefault(path, None)
+    return list(seen.keys())
 
 
 def is_test_file(path: Path) -> bool:
@@ -103,7 +128,7 @@ def check_files(files: list[Path], repo_root: Path | None = None) -> list[str]:
     return violations
 
 
-def run_check(repo_root: Path | None = None) -> int:
+def run_check(repo_root: Path | None = None, changed: bool = False) -> int:
     """Run structure check and return exit code (0=pass, 1=fail)."""
     if hasattr(sys.stdout, "reconfigure"):
         try:
@@ -111,11 +136,16 @@ def run_check(repo_root: Path | None = None) -> int:
         except Exception:
             pass
 
+    inspection_label = "changed files" if changed else "staged files"
     try:
-        files = get_staged_python_files(repo_root=repo_root)
+        files = (
+            get_changed_python_files(repo_root=repo_root)
+            if changed
+            else get_staged_python_files(repo_root=repo_root)
+        )
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.strip() if exc.stderr else str(exc)
-        print(f"py-structure: failed to inspect staged files: {stderr}", file=sys.stderr)  # noqa: T201
+        sys.stderr.write(f"py-structure: failed to inspect {inspection_label}: {stderr}\n")
         return 1
 
     violations = check_files(files, repo_root=repo_root)
@@ -130,7 +160,14 @@ def run_check(repo_root: Path | None = None) -> int:
 
 def main() -> int:
     """Entry point for pre-commit hook."""
-    return run_check(repo_root=Path.cwd())
+    parser = argparse.ArgumentParser(description="Run the py_structure hook.")
+    parser.add_argument(
+        "--changed",
+        action="store_true",
+        help="Check staged, unstaged modified, and untracked Python files.",
+    )
+    args = parser.parse_args()
+    return run_check(repo_root=Path.cwd(), changed=bool(args.changed))
 
 
 if __name__ == "__main__":

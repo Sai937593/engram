@@ -49,6 +49,8 @@ def test_start_workflow_happy_path_branch_exists(tmp_db: Any, mock_startup_conte
     assert "Branch: `feat/proj-1-ph-1`" in res["context"]
     assert "## Required task plan" in res["context"]
     assert ".engram/task-plans/proj-1/ph-1/t-1/task-plan.md" in res["context"]
+    assert "implementation-plan.md" not in res["context"]
+    assert res["context"].count(".engram/task-plans/proj-1/ph-1/t-1/task-plan.md") == 1
 
     # Task status should be updated to in_progress
     refreshed_task = Task.get(task.id)

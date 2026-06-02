@@ -33,3 +33,4 @@ For code changes, run the relevant local checks to verify that your changes have
 ## Engram usage boundary
 
 Do not force the Engram workflow on every interaction. Use Engram workflow only when the user asks to work on an Engram task, run a phase workflow, decompose work, or otherwise explicitly invokes Engram.
+When working within an explicit Engram workflow session, start by checking `engram_workflow_status` before taking workflow actions.

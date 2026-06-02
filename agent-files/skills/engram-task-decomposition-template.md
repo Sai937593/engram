@@ -4,12 +4,13 @@ Use this skill when the user asks to break a phase, plan, document, or feature i
 
 ## Goal
 
-Create executable Engram tasks that the simplified MVP workflow can start.
+Start by calling `engram_workflow_status`, then create executable Engram tasks that the simplified MVP workflow can start.
 
 ## Available Tools
 
-Use phase and task tools such as:
+Use `engram_workflow_status` first, then phase and task tools such as:
 
+- `engram_workflow_status`
 - `engram_phase_list`
 - `engram_phase_create`
 - `engram_phase_start`
@@ -29,6 +30,8 @@ Create tasks that are:
 - Small enough for one focused implementation session.
 - Independently verifiable.
 - Ordered by dependency.
+- Compatible with deterministic plan, phase, and task keys from the source plan.
+- Accept one-task phases when the work is naturally atomic.
 - Explicit about files or search areas.
 - Clear about acceptance criteria.
 - Free of vague objectives like "improve workflow" without concrete behavior.
@@ -63,6 +66,8 @@ Task key:
 
 Task plan path:
 `.engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md`
+
+When a phase only needs one task, still use explicit deterministic `plan_key`, `phase_key`, and `task_key` values and keep the task plan in the standard path above.
 
 ## Task Quality Checklist
 
