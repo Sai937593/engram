@@ -84,14 +84,39 @@ def test_list_phases_filters_by_status(tmp_db):
     _assert_json_safe(payloads)
 
 
+def test_list_phases_filters_by_review_pending_status(tmp_db):
+    project = _create_project("proj-phase-b2", "/tmp/proj-phase-b2")
+    Phase.create(project_id=project.id, id="phb20001", title="Planned", status="planned")
+    Phase.create(
+        project_id=project.id,
+        id="phb20002",
+        title="Review",
+        status="review_pending",
+    )
+    Phase.create(
+        project_id=project.id,
+        id="phb20003",
+        title="Review 2",
+        status="review_pending",
+    )
+
+    payloads = list_phases(project.id, status="review_pending")
+
+    assert [payload["id"] for payload in payloads] == ["phb20002", "phb20003"]
+    assert all(payload["status"] == "review_pending" for payload in payloads)
+    assert all(payload["status_label"] == "To be reviewed" for payload in payloads)
+    _assert_json_safe(payloads)
+
+
 def test_list_phases_supports_status_all(tmp_db):
     project = _create_project("proj-phase-c", "/tmp/proj-phase-c")
     for phase_id, status in [
         ("phc00001", "planned"),
         ("phc00002", "active"),
-        ("phc00003", "done"),
-        ("phc00004", "blocked"),
-        ("phc00005", "cancelled"),
+        ("phc00003", "review_pending"),
+        ("phc00004", "done"),
+        ("phc00005", "blocked"),
+        ("phc00006", "cancelled"),
     ]:
         Phase.create(project_id=project.id, id=phase_id, title=f"{status} phase", status=status)
 
@@ -100,6 +125,7 @@ def test_list_phases_supports_status_all(tmp_db):
     assert {payload["status"] for payload in payloads} == {
         "planned",
         "active",
+        "review_pending",
         "done",
         "blocked",
         "cancelled",
@@ -132,7 +158,15 @@ def test_list_phases_raises_invalid_phase_status(tmp_db):
     assert error.message == "Phase status filter is invalid."
     assert error.details == {
         "status": "queued",
-        "allowed_statuses": ["active", "all", "blocked", "cancelled", "done", "planned"],
+        "allowed_statuses": [
+            "active",
+            "all",
+            "blocked",
+            "cancelled",
+            "done",
+            "planned",
+            "review_pending",
+        ],
     }
 
 
@@ -265,6 +299,17 @@ def test_create_phase_success(tmp_db):
     assert refreshed is not None
     assert refreshed.title == "Phase 1"
     assert refreshed.description == "A great phase"
+
+
+def test_create_phase_accepts_review_pending_status(tmp_db):
+    project = _create_project("proj-create-a2", "/tmp/proj-create-a2")
+    dto = create_phase(project_id=project.id, title="Review Phase", status="review_pending")
+
+    assert dto["status"] == "review_pending"
+    assert dto["status_label"] == "To be reviewed"
+    refreshed = Phase.get(dto["id"])
+    assert refreshed is not None
+    assert refreshed.status == "review_pending"
 
 
 def test_create_phase_raises_if_empty_title(tmp_db):

@@ -25,7 +25,10 @@ def _build_phase_frame(active_phase: Phase | None, options: StartupContextOption
     """Build the current phase frame section."""
     if not active_phase:
         return _render_section("CURRENT PHASE FRAME", ["No active phase selected."])
-    lines = [f"Phase: {active_phase.title} ({active_phase.id})", f"Status: {active_phase.status}"]
+    lines = [
+        f"Phase: {active_phase.title} ({active_phase.id})",
+        f"Status: {active_phase.status_label}",
+    ]
     goal = _compact_with_limit(active_phase.description, options.phase_text_char_limit)
     acceptance = _compact_with_limit(active_phase.acceptance, options.phase_text_char_limit)
     if goal:

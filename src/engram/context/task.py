@@ -39,7 +39,7 @@ def build_task_context(task_id: str, hard_constraints_only: bool = False) -> str
         phase = Phase.get(task.phase_id)
         if phase:
             context.append("\n## PHASE")
-            phase_label = f"Phase: {phase.title} (Status: {phase.status})"
+            phase_label = f"Phase: {phase.title} (Status: {phase.status_label})"
             if getattr(phase, "key", None):
                 phase_label += f" [key: {phase.key}]"
             context.append(phase_label)

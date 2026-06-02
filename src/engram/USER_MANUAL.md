@@ -12,7 +12,7 @@ A project maps to repo-local Engram state rooted in the current repository. When
 ### Phases
 Phases are first-class project milestones that group related tasks.
 - **Planning structure:** `Project -> Phase -> Task`
-- **Lifecycle:** `planned -> active -> done | blocked | cancelled`
+- **Lifecycle:** `planned -> active -> review_pending -> done | blocked | cancelled`
 - Only one phase is active per project. Activating a phase automatically demotes all other phases in the same project back to `planned`.
 
 ### Tasks

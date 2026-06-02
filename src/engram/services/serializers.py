@@ -162,7 +162,7 @@ def compact_memory_to_dict(
 
 def phase_to_dict(phase: Phase) -> dict[str, JsonValue]:
     """Serialize a Phase model into a JSON-safe dictionary."""
-    return {
+    payload: dict[str, JsonValue] = {
         "id": str(phase.id),
         "project_id": str(phase.project_id),
         "key": _none_if_blank(getattr(phase, "key", None) or phase.id),
@@ -173,3 +173,6 @@ def phase_to_dict(phase: Phase) -> dict[str, JsonValue]:
         "acceptance": _none_if_blank(phase.acceptance),
         "evidence": _none_if_blank(phase.evidence),
     }
+    if phase.status_label != phase.status:
+        payload["status_label"] = phase.status_label
+    return payload

@@ -749,6 +749,26 @@ def test_task_context_shows_phase_info(project):
     assert "Goal: Deliver the roadmap features" in ctx
 
 
+def test_task_context_shows_review_pending_phase_label(project):
+    from engram.models.phase import Phase
+
+    phase = Phase.create(
+        project_id=project.id,
+        title="Phase Review",
+        description="Review the deliverable",
+        status="review_pending",
+    )
+    t = Task.create(
+        project_id=project.id,
+        title="Task in review phase",
+        phase_id=phase.id,
+    )
+    ctx = get_task_context(t.id)
+    assert "## PHASE" in ctx
+    assert "Phase: Phase Review (Status: To be reviewed)" in ctx
+    assert "Goal: Review the deliverable" in ctx
+
+
 def test_task_context_shows_legacy_phase_info(project):
     t = Task.create(
         project_id=project.id,

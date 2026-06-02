@@ -30,6 +30,12 @@ def test_create_phase_with_explicit_status_and_order(project):
     assert phase.order_index == 5
 
 
+def test_create_phase_accepts_review_pending_status(project):
+    phase = Phase.create(project_id=project.id, title="Review Stage", status="review_pending")
+    assert phase.status == "review_pending"
+    assert phase.status_label == "To be reviewed"
+
+
 def test_create_phase_rejects_invalid_status(project):
     with pytest.raises(ValueError, match="Invalid phase status"):
         Phase.create(project_id=project.id, title="Bad", status="todo")
@@ -73,6 +79,15 @@ def test_update_phase_fields(project):
     assert refreshed.acceptance == "All done"
     assert refreshed.evidence == "Shipped"
     assert refreshed.order_index == 9
+
+
+def test_update_phase_allows_review_pending_status(project):
+    phase = Phase.create(project_id=project.id, title="Phase")
+    phase.update(status="review_pending")
+    refreshed = Phase.get(phase.id)
+    assert refreshed is not None
+    assert refreshed.status == "review_pending"
+    assert refreshed.status_label == "To be reviewed"
 
 
 def test_update_phase_rejects_invalid_status(project):

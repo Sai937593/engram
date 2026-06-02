@@ -13,7 +13,15 @@ from engram.services.phase_lifecycle_service import (
 )
 from engram.services.serializers import phase_to_dict
 
-VALID_PHASE_STATUSES = {"planned", "active", "done", "blocked", "cancelled", "all"}
+VALID_PHASE_STATUSES = {
+    "planned",
+    "active",
+    "review_pending",
+    "done",
+    "blocked",
+    "cancelled",
+    "all",
+}
 __all__ = [
     "archive_phase",
     "cancel_phase",
@@ -84,7 +92,7 @@ def create_phase(
         raise ValidationError(
             code="INVALID_PHASE_STATUS",
             message=f"Phase status '{status}' is invalid.",
-            details={"status": status, "allowed_statuses": sorted(list(Phase.VALID_STATUSES))},
+            details={"status": status, "allowed_statuses": sorted(Phase.VALID_STATUSES)},
         )
     normalized_candidate = " ".join(title.split()).casefold()
     for project_phase in Phase.list_by_project(project_id):

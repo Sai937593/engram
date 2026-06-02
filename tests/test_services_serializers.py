@@ -168,3 +168,29 @@ def test_phase_to_dict_shape_and_missing_optional_values():
         "evidence": None,
     }
     _assert_json_safe(payload)
+
+
+def test_phase_to_dict_includes_review_pending_status_label():
+    phase = Phase(
+        id="phase124",
+        project_id="proj1234",
+        title="MCP - Phase 2",
+        status="review_pending",
+        order_index=3,
+    )
+
+    payload = phase_to_dict(phase)
+
+    assert payload == {
+        "id": "phase124",
+        "project_id": "proj1234",
+        "key": "phase124",
+        "title": "MCP - Phase 2",
+        "description": None,
+        "status": "review_pending",
+        "order_index": 3,
+        "acceptance": None,
+        "evidence": None,
+        "status_label": "To be reviewed",
+    }
+    _assert_json_safe(payload)

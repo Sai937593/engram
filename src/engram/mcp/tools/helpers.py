@@ -148,9 +148,12 @@ def slim_task_dict(task: dict[str, Any]) -> dict[str, Any]:
 
 def slim_phase_dict(phase: dict[str, Any]) -> dict[str, Any]:
     """Prune a full phase dictionary to essential scan fields only."""
-    return {
+    slimmed = {
         "id": phase["id"],
         "key": phase.get("key"),
         "title": phase["title"],
         "status": phase["status"],
     }
+    if phase.get("status_label"):
+        slimmed["status_label"] = phase["status_label"]
+    return slimmed

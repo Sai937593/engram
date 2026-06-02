@@ -15,7 +15,8 @@ from engram.models.phase_persistence import (
 
 
 class Phase:
-    VALID_STATUSES = {"planned", "active", "done", "blocked", "cancelled"}
+    VALID_STATUSES = {"planned", "active", "review_pending", "done", "blocked", "cancelled"}
+    STATUS_LABELS = {"review_pending": "To be reviewed"}
 
     def __init__(
         self,
@@ -38,6 +39,10 @@ class Phase:
         self.order_index = order_index
         self.acceptance = acceptance
         self.evidence = evidence
+
+    @property
+    def status_label(self) -> str:
+        return self.STATUS_LABELS.get(self.status, self.status)
 
     @classmethod
     def create(
