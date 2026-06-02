@@ -22,6 +22,10 @@ VALID_PHASE_STATUSES = {
     "cancelled",
     "all",
 }
+VALID_PHASE_VIEWS = {
+    "compact",
+    "detail",
+}
 __all__ = [
     "archive_phase",
     "cancel_phase",
@@ -48,9 +52,48 @@ def _normalize_status(status: str | None) -> str:
     )
 
 
-def list_phases(project_id: str, status: str | None = None) -> list[dict[str, JsonValue]]:
+def _normalize_view(view: str | None) -> str:
+    if view is None:
+        return "compact"
+    normalized = view.strip().casefold()
+    if normalized in VALID_PHASE_VIEWS:
+        return normalized
+    raise EngramServiceError(
+        code="INVALID_PHASE_VIEW",
+        message="Phase view is invalid.",
+        details={"view": view, "allowed_views": sorted(VALID_PHASE_VIEWS)},
+    )
+
+
+def _phase_markers(phases: list[Phase]) -> dict[str, str | None]:
+    return {
+        "current": next((phase.id for phase in phases if phase.status == "active"), None),
+        "review_candidate": next(
+            (phase.id for phase in phases if phase.status == "review_pending"), None
+        ),
+        "next_planned": next((phase.id for phase in phases if phase.status == "planned"), None),
+    }
+
+
+def list_phases(
+    project_id: str, status: str | None = None, view: str = "compact"
+) -> list[dict[str, JsonValue]]:
     normalized_status = _normalize_status(status)
-    phase_payloads = [phase_to_dict(phase_item) for phase_item in Phase.list_by_project(project_id)]
+    normalized_view = _normalize_view(view)
+    phases = Phase.list_by_project(project_id)
+    marker_ids = _phase_markers(phases)
+    phase_payloads = [
+        phase_to_dict(
+            phase_item,
+            compact=normalized_view == "compact",
+            markers={
+                "current": phase_item.id == marker_ids["current"],
+                "review_candidate": phase_item.id == marker_ids["review_candidate"],
+                "next_planned": phase_item.id == marker_ids["next_planned"],
+            },
+        )
+        for phase_item in phases
+    ]
     if normalized_status == "all":
         return phase_payloads
     return [

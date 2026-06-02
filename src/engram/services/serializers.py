@@ -172,19 +172,34 @@ def compact_memory_to_dict(
     }
 
 
-def phase_to_dict(phase: Phase) -> dict[str, JsonValue]:
+def phase_to_dict(
+    phase: Phase,
+    *,
+    compact: bool = False,
+    markers: dict[str, bool] | None = None,
+) -> dict[str, JsonValue]:
     """Serialize a Phase model into a JSON-safe dictionary."""
-    payload: dict[str, JsonValue] = {
-        "id": str(phase.id),
-        "project_id": str(phase.project_id),
-        "key": _none_if_blank(getattr(phase, "key", None) or phase.id),
-        "title": str(phase.title),
-        "description": _none_if_blank(phase.description),
-        "status": str(phase.status),
-        "order_index": int(phase.order_index),
-        "acceptance": _none_if_blank(phase.acceptance),
-        "evidence": _none_if_blank(phase.evidence),
-    }
-    if phase.status_label != phase.status:
-        payload["status_label"] = phase.status_label
+    if compact:
+        payload: dict[str, JsonValue] = {
+            "id": str(phase.id),
+            "key": _none_if_blank(getattr(phase, "key", None) or phase.id),
+            "title": str(phase.title),
+            "status": str(phase.status),
+        }
+    else:
+        payload = {
+            "id": str(phase.id),
+            "project_id": str(phase.project_id),
+            "key": _none_if_blank(getattr(phase, "key", None) or phase.id),
+            "title": str(phase.title),
+            "description": _none_if_blank(phase.description),
+            "status": str(phase.status),
+            "order_index": int(phase.order_index),
+            "acceptance": _none_if_blank(phase.acceptance),
+            "evidence": _none_if_blank(phase.evidence),
+        }
+        if phase.status_label != phase.status:
+            payload["status_label"] = phase.status_label
+    if markers:
+        payload.update(markers)
     return payload

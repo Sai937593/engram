@@ -235,3 +235,30 @@ def test_phase_to_dict_includes_review_pending_status_label():
         "status_label": "To be reviewed",
     }
     _assert_json_safe(payload)
+
+
+def test_phase_to_dict_supports_compact_and_marker_fields():
+    phase = Phase(
+        id="phase125",
+        project_id="proj1234",
+        title="MCP - Phase 3",
+        status="active",
+        order_index=4,
+    )
+
+    payload = phase_to_dict(
+        phase,
+        compact=True,
+        markers={"current": True, "review_candidate": False, "next_planned": False},
+    )
+
+    assert payload == {
+        "id": "phase125",
+        "key": "phase125",
+        "title": "MCP - Phase 3",
+        "status": "active",
+        "current": True,
+        "review_candidate": False,
+        "next_planned": False,
+    }
+    _assert_json_safe(payload)

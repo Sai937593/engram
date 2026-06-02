@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engram.mcp.tools.helpers import _respond, _respond_error, slim_phase_dict
+from engram.mcp.tools.helpers import _respond, _respond_error
 from engram.services.errors import EngramServiceError
 from engram.services.phase_service import (
     archive_phase,
@@ -22,15 +22,15 @@ def register_phase_tools(server: Any) -> None:
     """Register phase-related tools on the server."""
 
     @server.tool()
-    def engram_phase_list(status: str | None = None) -> str:
+    def engram_phase_list(status: str | None = None, view: str = "compact") -> str:
         """List phases for the currently bound engram project, optionally filtering by status."""
         try:
             project = resolve_current_project()
-            phases = list_phases(project_id=str(project["id"]), status=status)
+            phases = list_phases(project_id=str(project["id"]), status=status, view=view)
             return _respond(
                 {
                     "ok": True,
-                    "phases": [slim_phase_dict(p) for p in phases],
+                    "phases": phases,
                 },
                 keep_empty_keys={"phases"},
             )

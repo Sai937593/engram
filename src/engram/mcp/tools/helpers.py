@@ -59,6 +59,7 @@ def _respond_error(exc: EngramServiceError) -> str:
         "INVALID_PHASE_REFERENCE": "Provide a non-empty phase ID, key, or exact phase title, then retry the phase lifecycle tool.",
         "PHASE_NOT_FOUND": "Run engram_phase_list to find a valid phase ID, key, or exact title, then retry.",
         "AMBIGUOUS_PHASE": "Use the exact phase ID instead of title to avoid ambiguous matches.",
+        "INVALID_PHASE_VIEW": "Use view=compact or view=detail when calling engram_phase_list.",
         "WORKFLOW_BRANCH_KEYS_MISSING": (
             "Set explicit project.plan_key and phase.key values before starting the task, or "
             "remove the phase assignment if this work is intentionally unphased."
@@ -198,4 +199,7 @@ def slim_phase_dict(phase: dict[str, Any]) -> dict[str, Any]:
     }
     if phase.get("status_label"):
         slimmed["status_label"] = phase["status_label"]
+    for marker in ("current", "review_candidate", "next_planned"):
+        if marker in phase:
+            slimmed[marker] = phase[marker]
     return slimmed

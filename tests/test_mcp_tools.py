@@ -953,6 +953,12 @@ def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
         title="Third Phase",
         status="review_pending",
     )
+    Phase.create(
+        project_id=project.id,
+        id="phase-4",
+        title="Fourth Phase",
+        status="planned",
+    )
 
     server = MockServer()
     from engram.mcp.tools import register_tools
@@ -963,26 +969,49 @@ def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
     # All phases
     res_all = yaml.safe_load(handler(status="all"))
     assert res_all["ok"] is True
-    assert len(res_all["phases"]) == 3
-    assert {p["id"] for p in res_all["phases"]} == {"phase-1", "phase-2", "phase-3"}
+    assert len(res_all["phases"]) == 4
+    assert {p["id"] for p in res_all["phases"]} == {
+        "phase-1",
+        "phase-2",
+        "phase-3",
+        "phase-4",
+    }
     for p in res_all["phases"]:
-        if p["id"] == "phase-3":
-            assert set(p.keys()) == {"id", "key", "title", "status", "status_label"}
-            assert p["status_label"] == "To be reviewed"
-        else:
-            assert set(p.keys()) == {"id", "key", "title", "status"}
+        assert set(p.keys()) == {
+            "id",
+            "key",
+            "title",
+            "status",
+            "current",
+            "review_candidate",
+            "next_planned",
+        }
+    assert next(p for p in res_all["phases"] if p["id"] == "phase-2")["current"] is True
+    assert next(p for p in res_all["phases"] if p["id"] == "phase-3")["review_candidate"] is True
+    assert next(p for p in res_all["phases"] if p["id"] == "phase-4")["next_planned"] is True
+    assert next(p for p in res_all["phases"] if p["id"] == "phase-1")["current"] is False
+    assert next(p for p in res_all["phases"] if p["id"] == "phase-1")["review_candidate"] is False
+    assert next(p for p in res_all["phases"] if p["id"] == "phase-1")["next_planned"] is False
 
     # Filtered by status
-    res_active = yaml.safe_load(handler(status="active"))
+    res_active = yaml.safe_load(handler(status="active", view="detail"))
     assert res_active["ok"] is True
     assert len(res_active["phases"]) == 1
     assert res_active["phases"][0]["id"] == "phase-2"
+    assert res_active["phases"][0]["project_id"] == project.id
+    assert res_active["phases"][0]["current"] is True
 
-    res_review_pending = yaml.safe_load(handler(status="review_pending"))
+    res_review_pending = yaml.safe_load(handler(status="review_pending", view="detail"))
     assert res_review_pending["ok"] is True
     assert len(res_review_pending["phases"]) == 1
     assert res_review_pending["phases"][0]["id"] == "phase-3"
     assert res_review_pending["phases"][0]["status_label"] == "To be reviewed"
+    assert res_review_pending["phases"][0]["review_candidate"] is True
+
+    res_invalid_view = yaml.safe_load(handler(view="summary"))
+    assert res_invalid_view["ok"] is False
+    assert res_invalid_view["error"] == "INVALID_PHASE_VIEW"
+    assert "view=compact or view=detail" in res_invalid_view["fix"]
 
 
 def test_mcp_tool_phase_list_raises_project_not_bound(tmp_db, monkeypatch) -> None:
@@ -2096,6 +2125,7 @@ def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
         "UNFINISHED_TASKS",
         "PROJECT_NOT_BOUND",
         "UNRESOLVED_WORKSPACE",
+        "INVALID_PHASE_VIEW",
     ]
 
     for code in known_codes:

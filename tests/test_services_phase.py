@@ -59,15 +59,34 @@ def _phase_rows(project_id: str) -> list[dict[str, object]]:
     return [dict(row) for row in rows]
 
 
-def test_list_phases_defaults_to_all_project_phases(tmp_db):
+def test_list_phases_defaults_to_compact_project_phases(tmp_db):
     project = _create_project("proj-phase-a", "/tmp/proj-phase-a")
     Phase.create(project_id=project.id, id="pha00001", title="Planned", status="planned")
     Phase.create(project_id=project.id, id="pha00002", title="Active", status="active")
-    Phase.create(project_id=project.id, id="pha00003", title="Done", status="done")
+    Phase.create(
+        project_id=project.id,
+        id="pha00003",
+        title="Review",
+        status="review_pending",
+    )
+    Phase.create(project_id=project.id, id="pha00004", title="Done", status="done")
 
     payloads = list_phases(project.id)
 
-    assert [payload["id"] for payload in payloads] == ["pha00001", "pha00002", "pha00003"]
+    assert [payload["id"] for payload in payloads] == [
+        "pha00001",
+        "pha00002",
+        "pha00003",
+        "pha00004",
+    ]
+    assert payloads[0]["next_planned"] is True
+    assert payloads[1]["current"] is True
+    assert payloads[2]["review_candidate"] is True
+    assert all(
+        set(payload.keys())
+        == {"id", "key", "title", "status", "current", "review_candidate", "next_planned"}
+        for payload in payloads
+    )
     _assert_json_safe(payloads)
 
 
@@ -81,6 +100,9 @@ def test_list_phases_filters_by_status(tmp_db):
 
     assert [payload["id"] for payload in payloads] == ["phb00002", "phb00003"]
     assert all(payload["status"] == "blocked" for payload in payloads)
+    assert all(not payload["current"] for payload in payloads)
+    assert all(not payload["review_candidate"] for payload in payloads)
+    assert all(not payload["next_planned"] for payload in payloads)
     _assert_json_safe(payloads)
 
 
@@ -100,11 +122,14 @@ def test_list_phases_filters_by_review_pending_status(tmp_db):
         status="review_pending",
     )
 
-    payloads = list_phases(project.id, status="review_pending")
+    payloads = list_phases(project.id, status="review_pending", view="detail")
 
     assert [payload["id"] for payload in payloads] == ["phb20002", "phb20003"]
     assert all(payload["status"] == "review_pending" for payload in payloads)
     assert all(payload["status_label"] == "To be reviewed" for payload in payloads)
+    assert payloads[0]["review_candidate"] is True
+    assert payloads[1]["review_candidate"] is False
+    assert all("project_id" in payload for payload in payloads)
     _assert_json_safe(payloads)
 
 
@@ -120,7 +145,7 @@ def test_list_phases_supports_status_all(tmp_db):
     ]:
         Phase.create(project_id=project.id, id=phase_id, title=f"{status} phase", status=status)
 
-    payloads = list_phases(project.id, status="all")
+    payloads = list_phases(project.id, status="all", view="compact")
 
     assert {payload["status"] for payload in payloads} == {
         "planned",
@@ -130,6 +155,11 @@ def test_list_phases_supports_status_all(tmp_db):
         "blocked",
         "cancelled",
     }
+    assert all(
+        set(payload.keys())
+        == {"id", "key", "title", "status", "current", "review_candidate", "next_planned"}
+        for payload in payloads
+    )
     _assert_json_safe(payloads)
 
 
@@ -139,7 +169,7 @@ def test_list_phases_is_project_scoped(tmp_db):
     Phase.create(project_id=target.id, id="phd00001", title="Target", status="planned")
     Phase.create(project_id=foreign.id, id="phe00001", title="Foreign", status="active")
 
-    payloads = list_phases(target.id, status="all")
+    payloads = list_phases(target.id, status="all", view="detail")
 
     assert [payload["id"] for payload in payloads] == ["phd00001"]
     assert all(payload["project_id"] == target.id for payload in payloads)
@@ -168,6 +198,19 @@ def test_list_phases_raises_invalid_phase_status(tmp_db):
             "review_pending",
         ],
     }
+
+
+def test_list_phases_raises_invalid_phase_view(tmp_db):
+    project = _create_project("proj-phase-f2", "/tmp/proj-phase-f2")
+    Phase.create(project_id=project.id, id="phf20001", title="Any", status="planned")
+
+    with pytest.raises(EngramServiceError) as raised:
+        list_phases(project.id, view="summary")
+
+    error = raised.value
+    assert error.code == "INVALID_PHASE_VIEW"
+    assert error.message == "Phase view is invalid."
+    assert error.details == {"view": "summary", "allowed_views": ["compact", "detail"]}
 
 
 def test_get_active_phase_returns_active_phase_payload(tmp_db):
@@ -226,7 +269,7 @@ def test_phase_service_calls_are_read_only_on_phase_rows(tmp_db):
 
     list_phases(project.id)
     list_phases(project.id, status="active")
-    list_phases(project.id, status="all")
+    list_phases(project.id, status="all", view="detail")
     get_active_phase(project.id)
 
     after_rows = _phase_rows(project.id)
