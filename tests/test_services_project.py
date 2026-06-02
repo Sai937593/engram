@@ -52,6 +52,7 @@ def test_resolve_current_project_returns_serialized_project_for_bound_repo(tmp_p
 
     assert payload == {
         "id": "proj1234",
+        "plan_key": "proj1234",
         "name": "Bound Project",
         "summary": "Service test project",
         "status": "active",

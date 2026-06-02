@@ -63,6 +63,7 @@ def test_init_db_creates_parent_directory(tmp_path, monkeypatch):
     monkeypatch.setattr("engram.db.create_memories_fts_and_triggers", MagicMock())
     monkeypatch.setattr("engram.db.apply_task_status_migrations", MagicMock())
     monkeypatch.setattr("engram.db.backfill_legacy_phase_ids", MagicMock())
+    monkeypatch.setattr("engram.db.apply_identity_key_migrations", MagicMock())
     monkeypatch.setattr("engram.db.apply_task_dependency_ref_migrations", MagicMock())
 
     init_db(db_path)
@@ -114,6 +115,7 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     mock_create_memories_fts_and_triggers = MagicMock()
     mock_apply_task_status_migrations = MagicMock()
     mock_backfill_legacy_phase_ids = MagicMock()
+    mock_apply_identity_key_migrations = MagicMock()
     mock_apply_task_dependency_ref_migrations = MagicMock()
 
     monkeypatch.setattr("engram.db.create_projects_table", mock_create_projects_table)
@@ -142,6 +144,9 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     monkeypatch.setattr("engram.db.apply_task_status_migrations", mock_apply_task_status_migrations)
     monkeypatch.setattr("engram.db.backfill_legacy_phase_ids", mock_backfill_legacy_phase_ids)
     monkeypatch.setattr(
+        "engram.db.apply_identity_key_migrations", mock_apply_identity_key_migrations
+    )
+    monkeypatch.setattr(
         "engram.db.apply_task_dependency_ref_migrations", mock_apply_task_dependency_ref_migrations
     )
 
@@ -166,6 +171,7 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     mock_create_memories_fts_and_triggers.assert_called_once_with(mock_cursor)
     mock_apply_task_status_migrations.assert_called_once_with(mock_cursor)
     mock_backfill_legacy_phase_ids.assert_called_once_with(mock_cursor)
+    mock_apply_identity_key_migrations.assert_called_once_with(mock_cursor)
     mock_apply_task_dependency_ref_migrations.assert_called_once_with(mock_cursor)
 
     mock_conn.commit.assert_called_once()
@@ -203,9 +209,13 @@ def test_init_db_handles_fts5_error(monkeypatch):
 
     mock_apply_task_status_migrations = MagicMock()
     mock_backfill_legacy_phase_ids = MagicMock()
+    mock_apply_identity_key_migrations = MagicMock()
     mock_apply_task_dependency_ref_migrations = MagicMock()
     monkeypatch.setattr("engram.db.apply_task_status_migrations", mock_apply_task_status_migrations)
     monkeypatch.setattr("engram.db.backfill_legacy_phase_ids", mock_backfill_legacy_phase_ids)
+    monkeypatch.setattr(
+        "engram.db.apply_identity_key_migrations", mock_apply_identity_key_migrations
+    )
     monkeypatch.setattr(
         "engram.db.apply_task_dependency_ref_migrations", mock_apply_task_dependency_ref_migrations
     )
@@ -216,6 +226,7 @@ def test_init_db_handles_fts5_error(monkeypatch):
     # The functions after the exception should still have been called
     mock_apply_task_status_migrations.assert_called_once_with(mock_cursor)
     mock_backfill_legacy_phase_ids.assert_called_once_with(mock_cursor)
+    mock_apply_identity_key_migrations.assert_called_once_with(mock_cursor)
     mock_apply_task_dependency_ref_migrations.assert_called_once_with(mock_cursor)
 
 

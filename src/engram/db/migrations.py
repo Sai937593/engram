@@ -21,6 +21,8 @@ def apply_tasks_column_migrations(cursor: sqlite3.Cursor) -> None:
         cursor.execute("ALTER TABLE tasks ADD COLUMN depends_on TEXT REFERENCES tasks(id)")
     if not column_exists(cursor, "tasks", "phase_id"):
         cursor.execute("ALTER TABLE tasks ADD COLUMN phase_id TEXT REFERENCES phases(id)")
+    if not column_exists(cursor, "tasks", "key"):
+        cursor.execute("ALTER TABLE tasks ADD COLUMN key TEXT")
     if not column_exists(cursor, "tasks", "relevant_files"):
         cursor.execute("ALTER TABLE tasks ADD COLUMN relevant_files TEXT")
     if not column_exists(cursor, "tasks", "memory_review_outcome"):
@@ -207,3 +209,35 @@ def apply_workflow_verification_migrations(cursor: sqlite3.Cursor) -> None:
         cursor.execute("ALTER TABLE workflow_verifications ADD COLUMN details TEXT")
     if not column_exists(cursor, "workflow_verifications", "verified_at"):
         cursor.execute("ALTER TABLE workflow_verifications ADD COLUMN verified_at TEXT")
+
+
+def apply_identity_key_migrations(cursor: sqlite3.Cursor) -> None:
+    """Ensure project, phase, and task key columns exist and are backfilled."""
+    if not column_exists(cursor, "projects", "plan_key"):
+        cursor.execute("ALTER TABLE projects ADD COLUMN plan_key TEXT")
+    if not column_exists(cursor, "phases", "key"):
+        cursor.execute("ALTER TABLE phases ADD COLUMN key TEXT")
+    if not column_exists(cursor, "tasks", "key"):
+        cursor.execute("ALTER TABLE tasks ADD COLUMN key TEXT")
+
+    cursor.execute(
+        """
+        UPDATE projects
+        SET plan_key = id
+        WHERE plan_key IS NULL OR TRIM(plan_key) = ''
+        """
+    )
+    cursor.execute(
+        """
+        UPDATE phases
+        SET key = id
+        WHERE key IS NULL OR TRIM(key) = ''
+        """
+    )
+    cursor.execute(
+        """
+        UPDATE tasks
+        SET key = id
+        WHERE key IS NULL OR TRIM(key) = ''
+        """
+    )

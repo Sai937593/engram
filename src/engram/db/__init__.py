@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .connection import create_db_connection
 from .migrations import (
+    apply_identity_key_migrations,
     apply_memories_column_migrations,
     apply_task_status_migrations,
     apply_tasks_column_migrations,
@@ -73,7 +74,6 @@ def init_db(db_path=None):
     create_workflow_verifications_table(cursor)
     apply_workflow_verification_migrations(cursor)
     create_audit_log_table(cursor)
-    create_indexes(cursor)
 
     try:
         create_memories_fts_and_triggers(cursor)
@@ -86,7 +86,9 @@ def init_db(db_path=None):
 
     apply_task_status_migrations(cursor)
     backfill_legacy_phase_ids(cursor)
+    apply_identity_key_migrations(cursor)
     apply_task_dependency_ref_migrations(cursor)
+    create_indexes(cursor)
 
     conn.commit()
     conn.close()

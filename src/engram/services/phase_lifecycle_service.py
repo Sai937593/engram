@@ -9,6 +9,23 @@ from engram.services.serializers import phase_to_dict
 PHASE_METADATA_FIELDS = {"title", "description", "acceptance", "evidence"}
 
 
+def _normalize_phase_ref(value: str | None) -> str:
+    """Normalize a phase reference for exact or legacy compatibility matching."""
+    if value is None:
+        return ""
+    return " ".join(value.split()).casefold()
+
+
+def _phase_matches_ref(phase: Phase, candidate: str) -> bool:
+    """Return whether a phase matches a reference by ID, key, or legacy title."""
+    normalized_candidate = _normalize_phase_ref(candidate)
+    return (
+        phase.id == candidate
+        or phase.key == candidate
+        or _normalize_phase_ref(phase.title) == normalized_candidate
+    )
+
+
 def resolve_phase_ref(project_id: str, phase_ref: str) -> Phase:
     candidate = phase_ref.strip()
     if not candidate:
@@ -20,11 +37,10 @@ def resolve_phase_ref(project_id: str, phase_ref: str) -> Phase:
     phase = Phase.get(candidate)
     if phase and phase.project_id == project_id:
         return phase
-    normalized = " ".join(candidate.split()).casefold()
     matches = [
         project_phase
         for project_phase in Phase.list_by_project(project_id)
-        if " ".join(project_phase.title.split()).casefold() == normalized
+        if _phase_matches_ref(project_phase, candidate)
     ]
     if len(matches) == 1:
         return matches[0]
@@ -45,11 +61,13 @@ def _unfinished_phase_tasks(project_id: str, phase: Phase) -> list[str]:
     from engram.models.task import Task
 
     ids: list[str] = []
-    normalized = " ".join(phase.title.split()).casefold()
+    normalized_title = _normalize_phase_ref(phase.title)
+    normalized_key = _normalize_phase_ref(phase.key)
     for task in Task.list_by_project(project_id):
         in_phase = task.phase_id == phase.id
         if not in_phase and not task.phase_id:
-            in_phase = " ".join((task.phase or "").split()).casefold() == normalized
+            task_phase = _normalize_phase_ref(task.phase)
+            in_phase = task_phase in {normalized_title, normalized_key}
         if in_phase and task.status not in ("done", "cancelled"):
             ids.append(task.id)
     return sorted(ids)

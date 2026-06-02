@@ -45,6 +45,7 @@ def resolve_current_project(cwd: str | None = None) -> dict[str, JsonValue]:
                     repo_paths.append(str(repo_root))
                 project = Project(
                     id=row["id"],
+                    plan_key=row["plan_key"] if "plan_key" in row.keys() else row["id"],
                     name=row["name"],
                     summary=row["summary"],
                     status=row["status"],

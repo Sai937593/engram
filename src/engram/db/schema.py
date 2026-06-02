@@ -8,6 +8,7 @@ def create_projects_table(cursor: sqlite3.Cursor) -> None:
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS projects (
         id          TEXT PRIMARY KEY,
+        plan_key    TEXT,
         name        TEXT NOT NULL,
         summary     TEXT,
         status      TEXT DEFAULT 'active',
@@ -25,6 +26,7 @@ def create_tasks_table(cursor: sqlite3.Cursor) -> None:
         id          TEXT PRIMARY KEY,
         project_id  TEXT NOT NULL REFERENCES projects(id),
         phase_id    TEXT REFERENCES phases(id),
+        key         TEXT,
         title       TEXT NOT NULL,
         description TEXT,
         status      TEXT DEFAULT 'open',
@@ -51,6 +53,7 @@ def create_phases_table(cursor: sqlite3.Cursor) -> None:
     CREATE TABLE IF NOT EXISTS phases (
         id          TEXT PRIMARY KEY,
         project_id  TEXT NOT NULL REFERENCES projects(id),
+        key         TEXT,
         title       TEXT NOT NULL,
         description TEXT,
         status      TEXT DEFAULT 'planned',
@@ -157,6 +160,22 @@ def create_memories_fts_and_triggers(cursor: sqlite3.Cursor) -> None:
 
 def create_indexes(cursor: sqlite3.Cursor) -> None:
     """Create secondary indexes for performance."""
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_plan_key ON projects(plan_key) "
+        "WHERE plan_key IS NOT NULL"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_phases_project_key ON phases(project_id, key) "
+        "WHERE key IS NOT NULL"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_project_key ON tasks(project_id, key) "
+        "WHERE phase_id IS NULL AND key IS NOT NULL"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_phase_key ON tasks(phase_id, key) "
+        "WHERE phase_id IS NOT NULL AND key IS NOT NULL"
+    )
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_phases_project_id ON phases(project_id)")

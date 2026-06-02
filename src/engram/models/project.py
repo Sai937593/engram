@@ -5,24 +5,35 @@ from engram.db import get_db_connection
 
 
 class Project:
-    def __init__(self, id, name, summary=None, status="active", repo_paths=None):
+    def __init__(self, id, name, summary=None, status="active", repo_paths=None, plan_key=None):
         self.id = id
         self.name = name
         self.summary = summary
         self.status = status
         self.repo_paths = repo_paths or []
+        self.plan_key = plan_key or id
 
     @classmethod
-    def create(cls, id, name, summary=None, repo_paths=None, db_path=None):
+    def create(cls, id, name, summary=None, repo_paths=None, db_path=None, plan_key=None):
         conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
+        resolved_plan_key = (
+            plan_key.strip() if isinstance(plan_key, str) and plan_key.strip() else id
+        )
+        existing = conn.execute(
+            "SELECT id FROM projects WHERE plan_key = ?",
+            (resolved_plan_key,),
+        ).fetchone()
+        if existing and existing["id"] != id:
+            conn.close()
+            raise ValueError(f"Project plan key '{resolved_plan_key}' already exists.")
         repo_paths_json = json.dumps(repo_paths or [])
         conn.execute(
-            "INSERT INTO projects (id, name, summary, repo_paths) VALUES (?, ?, ?, ?)",
-            (id, name, summary, repo_paths_json),
+            "INSERT INTO projects (id, plan_key, name, summary, repo_paths) VALUES (?, ?, ?, ?, ?)",
+            (id, resolved_plan_key, name, summary, repo_paths_json),
         )
         conn.commit()
         conn.close()
-        return cls(id, name, summary, repo_paths=repo_paths)
+        return cls(id, name, summary, repo_paths=repo_paths, plan_key=resolved_plan_key)
 
     @classmethod
     def get(cls, id, db_path=None):
@@ -31,7 +42,12 @@ class Project:
         conn.close()
         if row:
             return cls(
-                row["id"], row["name"], row["summary"], row["status"], json.loads(row["repo_paths"])
+                row["id"],
+                row["name"],
+                row["summary"],
+                row["status"],
+                json.loads(row["repo_paths"]),
+                row["plan_key"] if "plan_key" in row.keys() else row["id"],
             )
         return None
 
@@ -45,7 +61,14 @@ class Project:
         for row in rows:
             paths = json.loads(row["repo_paths"])
             if path in paths:
-                return cls(row["id"], row["name"], row["summary"], row["status"], paths)
+                return cls(
+                    row["id"],
+                    row["name"],
+                    row["summary"],
+                    row["status"],
+                    paths,
+                    row["plan_key"] if "plan_key" in row.keys() else row["id"],
+                )
         return None
 
     @classmethod
@@ -55,7 +78,12 @@ class Project:
         conn.close()
         return [
             cls(
-                row["id"], row["name"], row["summary"], row["status"], json.loads(row["repo_paths"])
+                row["id"],
+                row["name"],
+                row["summary"],
+                row["status"],
+                json.loads(row["repo_paths"]),
+                row["plan_key"] if "plan_key" in row.keys() else row["id"],
             )
             for row in rows
         ]

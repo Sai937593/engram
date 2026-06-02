@@ -27,7 +27,10 @@ def build_task_context(task_id: str, hard_constraints_only: bool = False) -> str
         return "Task not found."
 
     context: list[str] = []
-    context.append(f"# TASK: {task.title} ({task.id})")
+    task_label = f"# TASK: {task.title} ({task.id})"
+    if getattr(task, "key", None):
+        task_label += f" [key: {task.key}]"
+    context.append(task_label)
     context.append(f"Status: {task.status} | Priority: {task.priority}")
 
     if task.phase_id:
@@ -36,7 +39,10 @@ def build_task_context(task_id: str, hard_constraints_only: bool = False) -> str
         phase = Phase.get(task.phase_id)
         if phase:
             context.append("\n## PHASE")
-            context.append(f"Phase: {phase.title} (Status: {phase.status})")
+            phase_label = f"Phase: {phase.title} (Status: {phase.status})"
+            if getattr(phase, "key", None):
+                phase_label += f" [key: {phase.key}]"
+            context.append(phase_label)
             if phase.description:
                 context.append(f"Goal: {compact_text(phase.description)}")
             if phase.acceptance:

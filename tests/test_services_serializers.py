@@ -36,6 +36,7 @@ def test_project_to_dict_shape_and_missing_optional_values():
 
     assert payload == {
         "id": "proj1234",
+        "plan_key": "proj1234",
         "name": "Engram",
         "summary": None,
         "status": "active",
@@ -71,6 +72,7 @@ def test_task_to_dict_shape_lists_optional_values_and_effective_status(monkeypat
     assert payload == {
         "id": "task1234",
         "project_id": "proj1234",
+        "key": "task1234",
         "title": "Implement serializers",
         "description": None,
         "objective": None,
@@ -79,6 +81,8 @@ def test_task_to_dict_shape_lists_optional_values_and_effective_status(monkeypat
         "priority": "high",
         "phase": None,
         "phase_id": None,
+        "phase_key": None,
+        "phase_title": None,
         "depends_on": "dep12345",
         "acceptance": None,
         "evidence": None,
@@ -155,6 +159,7 @@ def test_phase_to_dict_shape_and_missing_optional_values():
     assert payload == {
         "id": "phase123",
         "project_id": "proj1234",
+        "key": "phase123",
         "title": "MCP - Phase 1",
         "description": None,
         "status": "planned",

@@ -37,6 +37,7 @@ class Task:
         search_hints=None,
         objective=None,
         is_verified=False,
+        key=None,
     ):
         if description is None:
             description = objective
@@ -59,6 +60,7 @@ class Task:
             verification,
             serialize_search_hints(normalize_search_hints(search_hints)),
             1 if is_verified else 0,
+            key.strip() if isinstance(key, str) and key.strip() else id,
         )
 
     def __init__(
@@ -80,6 +82,7 @@ class Task:
         verification=None,
         search_hints=None,
         is_verified=False,
+        key=None,
     ):
         self.id = id
         self.project_id = project_id
@@ -98,6 +101,7 @@ class Task:
         self.verification = verification
         self.search_hints = normalize_search_hints(search_hints)
         self.is_verified = bool(is_verified)
+        self.key = key or id
 
     @property
     def objective(self) -> str | None:
@@ -128,6 +132,7 @@ class Task:
         search_hints=None,
         objective=None,
         is_verified=False,
+        key=None,
     ):
         params = cls._prepare_create_fields(
             project_id=project_id,
@@ -147,12 +152,13 @@ class Task:
             search_hints=search_hints,
             objective=objective,
             is_verified=is_verified,
+            key=key,
         )
         conn = get_db_connection()
         conn.execute(
             "INSERT INTO tasks (id, project_id, title, description, status, priority, "
-            "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome, verification, search_hints, is_verified) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome, verification, search_hints, is_verified, key) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params,
         )
         conn.commit()
@@ -177,6 +183,7 @@ class Task:
             verification,
             search_hints,
             is_verified,
+            params[16],
         ]
         return cls(*args)
 
@@ -185,7 +192,7 @@ class Task:
         insert_sql = (
             "INSERT INTO tasks (id, project_id, title, description, status, priority, "
             "phase, phase_id, depends_on, acceptance, tags, relevant_files, memory_review_outcome, "
-            "verification, search_hints, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "verification, search_hints, is_verified, key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         prepared_rows: list[tuple[object, ...]] = []
         created_tasks: list[Task] = []
@@ -210,6 +217,7 @@ class Task:
                     verification=params[13],
                     search_hints=deserialize_search_hints(params[14]),
                     is_verified=bool(params[15]),
+                    key=params[16],
                 )
             )
         conn = get_db_connection()
@@ -238,6 +246,7 @@ class Task:
         ver = row["verification"] if "verification" in row.keys() else None
         sh = deserialize_search_hints(row["search_hints"]) if "search_hints" in row.keys() else []
         is_verified = bool(row["is_verified"]) if "is_verified" in row.keys() else False
+        key = row["key"] if "key" in row.keys() else row["id"]
         args = [
             row["id"],
             row["project_id"],
@@ -256,6 +265,7 @@ class Task:
             ver,
             sh,
             is_verified,
+            key,
         ]
         return cls(*args)
 

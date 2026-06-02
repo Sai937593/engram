@@ -318,13 +318,18 @@ def test_db_migration_completed_to_done(tmp_db):
 
 def test_init_db_creates_phases_schema(tmp_db) -> None:
     conn = get_db_connection(tmp_db)
+    project_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()
+    }
     phase_columns = {row["name"] for row in conn.execute("PRAGMA table_info(phases)").fetchall()}
     task_columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     conn.close()
 
+    assert "plan_key" in project_columns
     assert {
         "id",
         "project_id",
+        "key",
         "title",
         "description",
         "status",
@@ -334,7 +339,20 @@ def test_init_db_creates_phases_schema(tmp_db) -> None:
         "created_at",
         "updated_at",
     }.issubset(phase_columns)
-    assert "phase_id" in task_columns
+    assert {
+        "id",
+        "project_id",
+        "key",
+        "title",
+        "description",
+        "status",
+        "order_index",
+        "acceptance",
+        "evidence",
+        "created_at",
+        "updated_at",
+    }.issubset(phase_columns)
+    assert {"phase_id", "key"}.issubset(task_columns)
     assert "relevant_files" in task_columns
 
 
@@ -430,6 +448,10 @@ def test_init_db_backfills_legacy_task_phase_strings(tmp_path) -> None:
     task_phase_rows = dict(
         conn.execute("SELECT id, phase_id FROM tasks WHERE id LIKE 'legacy-task-%'").fetchall()
     )
+    task_key_rows = dict(
+        conn.execute("SELECT id, key FROM tasks WHERE id LIKE 'legacy-task-%'").fetchall()
+    )
+    phase_key_rows = dict(conn.execute("SELECT id, key FROM phases").fetchall())
     task_legacy_phase_rows = dict(
         conn.execute(
             "SELECT id, phase FROM tasks WHERE id IN ('legacy-task-1', 'legacy-task-2')"
@@ -452,6 +474,9 @@ def test_init_db_backfills_legacy_task_phase_strings(tmp_path) -> None:
     assert task_phase_rows["legacy-task-4"] is None
     assert task_phase_rows["legacy-task-5"] is not None
     assert task_phase_rows["legacy-task-6"] is not None
+    assert task_key_rows["legacy-task-1"] == "legacy-task-1"
+    assert task_key_rows["legacy-task-5"] == "legacy-task-5"
+    assert all(value == key for key, value in phase_key_rows.items())
     assert task_legacy_phase_rows["legacy-task-1"] == " Phase Alpha "
     assert task_legacy_phase_rows["legacy-task-2"] == "phase   alpha"
     assert all(phase_id for phase_id in phase_ids.keys())

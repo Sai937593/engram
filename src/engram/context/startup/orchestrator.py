@@ -131,9 +131,15 @@ def build_startup_context(
     # Task context (compact phase/task anchors) and sparse-metadata search hints.
     task_context_list: list[str] = []
     if selected_task:
-        task_context_list.append(f"Task: {selected_task.title} ({selected_task.id})")
+        task_key = getattr(selected_task, "key", None)
+        task_label = f"Task: {selected_task.title} ({selected_task.id})"
+        if task_key:
+            task_label += f" [key: {task_key}]"
+        task_context_list.append(task_label)
         if phase_title:
             phase_display = f"{phase_title} ({phase_id})" if phase_id else phase_title
+            if active_phase and getattr(active_phase, "key", None):
+                phase_display += f" [key: {active_phase.key}]"
             task_context_list.append(f"Phase: {phase_display}")
 
     start_hints_list: list[str] = []

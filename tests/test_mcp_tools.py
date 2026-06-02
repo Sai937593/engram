@@ -161,6 +161,7 @@ def test_mcp_tool_resolves_current_project(tmp_path, monkeypatch) -> None:
     assert result["status"] == "ready"
     assert result["project"] == {
         "id": "proj-tool-1",
+        "plan_key": "proj-tool-1",
         "name": "MCP Tool Project",
         "status": "active",
     }
@@ -688,7 +689,16 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
     assert {t["id"] for t in res_all["tasks"]} == {"task-1", "task-2"}
     assert res_all["hint"] == "Use engram_task_get <id> for full task details"
     for t in res_all["tasks"]:
-        assert set(t.keys()) == {"id", "title", "status"}
+        assert set(t.keys()) == {
+            "id",
+            "key",
+            "title",
+            "status",
+            "phase_id",
+            "phase_key",
+            "phase_title",
+            "is_verified",
+        }
 
     # Filtered by status
     res_open = yaml.safe_load(handler(status="open"))
@@ -920,7 +930,7 @@ def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
     assert len(res_all["phases"]) == 2
     assert {p["id"] for p in res_all["phases"]} == {"phase-1", "phase-2"}
     for p in res_all["phases"]:
-        assert set(p.keys()) == {"id", "title", "status"}
+        assert set(p.keys()) == {"id", "key", "title", "status"}
 
     # Filtered by status
     res_active = yaml.safe_load(handler(status="active"))

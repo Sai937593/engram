@@ -43,6 +43,7 @@ def register_phase_tools(server: Any) -> None:
         description: str | None = None,
         status: str = "planned",
         acceptance: str | None = None,
+        key: str | None = None,
     ) -> str:
         """Create a new phase in the currently bound engram project."""
         try:
@@ -53,6 +54,7 @@ def register_phase_tools(server: Any) -> None:
                 description=description,
                 status=status,
                 acceptance=acceptance,
+                key=key,
             )
             return _respond(
                 {

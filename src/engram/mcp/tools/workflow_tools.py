@@ -84,6 +84,7 @@ def register_workflow_tools(server: Any) -> None:
                 project = status["project"]
                 response["project"] = {
                     "id": str(project["id"]),
+                    "plan_key": str(project.get("plan_key", project["id"])),
                     "name": str(project["name"]),
                     "status": str(project["status"]),
                 }
@@ -184,6 +185,7 @@ def register_workflow_tools(server: Any) -> None:
             )
             slim_project = {
                 "id": str(project["id"]),
+                "plan_key": str(project.get("plan_key", project["id"])),
                 "name": str(project["name"]),
                 "status": str(project["status"]),
             }

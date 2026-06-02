@@ -26,16 +26,18 @@ def insert_phase(
     order_index: int,
     acceptance: str | None,
     evidence: str | None,
+    key: str | None = None,
 ) -> None:
     """Insert a phase row."""
     conn.execute(
         """
-        INSERT INTO phases (id, project_id, title, description, status, order_index, acceptance, evidence)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO phases (id, project_id, key, title, description, status, order_index, acceptance, evidence)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             phase_id,
             project_id,
+            key if key is not None else phase_id,
             title,
             description,
             status,

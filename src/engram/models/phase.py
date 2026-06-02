@@ -27,9 +27,11 @@ class Phase:
         order_index: int = 0,
         acceptance: str | None = None,
         evidence: str | None = None,
+        key: str | None = None,
     ) -> None:
         self.id = id
         self.project_id = project_id
+        self.key = key or id
         self.title = title
         self.description = description
         self.status = status
@@ -48,9 +50,19 @@ class Phase:
         acceptance: str | None = None,
         evidence: str | None = None,
         id: str | None = None,
+        key: str | None = None,
     ) -> "Phase":
         cls._validate_status(status)
         phase_id = id or uuid.uuid4().hex[:8]
+        phase_key = key.strip() if isinstance(key, str) and key.strip() else phase_id
+
+        existing_keys = {
+            phase.key
+            for phase in cls.list_by_project(project_id)
+            if phase.key and phase.id != phase_id
+        }
+        if phase_key in existing_keys:
+            raise ValueError(f"Phase key '{phase_key}' already exists in this project.")
 
         conn = get_db_connection()
         resolved_order_index = order_index
@@ -61,6 +73,7 @@ class Phase:
             conn=conn,
             phase_id=phase_id,
             project_id=project_id,
+            key=phase_key,
             title=title,
             description=description,
             status=status,
@@ -82,6 +95,7 @@ class Phase:
             int(resolved_order_index),
             acceptance,
             evidence,
+            phase_key,
         )
 
     @classmethod
@@ -111,6 +125,7 @@ class Phase:
             row["order_index"],
             row["acceptance"],
             row["evidence"],
+            row["key"] if "key" in row.keys() else row["id"],
         )
 
     def update(self, **kwargs: Any) -> None:

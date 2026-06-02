@@ -72,6 +72,7 @@ def create_phase(
     description: str | None = None,
     status: str = "planned",
     acceptance: str | None = None,
+    key: str | None = None,
 ) -> dict[str, JsonValue]:
     if not title or not title.strip():
         raise ValidationError(
@@ -93,11 +94,18 @@ def create_phase(
                 message=f"A phase with the title '{title}' already exists in this project.",
                 details={"project_id": project_id, "title": title},
             )
+        if key and key.strip() and getattr(project_phase, "key", None) == key.strip():
+            raise ValidationError(
+                code="DUPLICATE_PHASE_KEY",
+                message=f"A phase with the key '{key.strip()}' already exists in this project.",
+                details={"project_id": project_id, "key": key.strip()},
+            )
     phase = Phase.create(
         project_id=project_id,
         title=title.strip(),
         description=description.strip() if description else None,
         status=status,
         acceptance=acceptance.strip() if acceptance else None,
+        key=key.strip() if key and key.strip() else None,
     )
     return phase_to_dict(phase)

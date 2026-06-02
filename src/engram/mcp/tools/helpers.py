@@ -56,9 +56,11 @@ def _respond_error(exc: EngramServiceError) -> str:
         "INVALID_TASK_TRANSITION": "Use engram_task_get to inspect current status, then choose a valid lifecycle tool (engram_task_start, engram_task_done, engram_task_block, engram_task_unblock, engram_task_cancel, or engram_task_retire).",
         "INVALID_TASK_TRANSITION_TARGET": "Retry engram_task_unblock with target_status set to one of: draft, ready, or todo.",
         "TASK_ALREADY_IN_PROGRESS": "Complete, block, or cancel the current in-progress task before starting another one.",
-        "INVALID_PHASE_REFERENCE": "Provide a non-empty phase ID or exact phase title, then retry the phase lifecycle tool.",
-        "PHASE_NOT_FOUND": "Run engram_phase_list to find a valid phase ID or exact title, then retry.",
+        "INVALID_PHASE_REFERENCE": "Provide a non-empty phase ID, key, or exact phase title, then retry the phase lifecycle tool.",
+        "PHASE_NOT_FOUND": "Run engram_phase_list to find a valid phase ID, key, or exact title, then retry.",
         "AMBIGUOUS_PHASE": "Use the exact phase ID instead of title to avoid ambiguous matches.",
+        "DUPLICATE_PHASE_KEY": "Choose a different phase key before retrying engram_phase_create.",
+        "DUPLICATE_TASK_KEY": "Choose a different task key before retrying engram_task_create.",
         "INVALID_PHASE_UPDATE": "Retry engram_phase_update using only string values for metadata fields.",
         "INVALID_PHASE_TRANSITION": "Use engram_phase_list to inspect the current phase status, then choose a valid lifecycle transition.",
         "TASK_NOT_VERIFIED": "Run engram_workflow_verify first, then retry engram_workflow_finish_and_commit.",
@@ -134,8 +136,13 @@ def slim_task_dict(task: dict[str, Any]) -> dict[str, Any]:
     """Prune a full task dictionary to essential scan fields only."""
     return {
         "id": task["id"],
+        "key": task.get("key"),
         "title": task["title"],
         "status": task["status"],
+        "phase_id": task.get("phase_id"),
+        "phase_key": task.get("phase_key"),
+        "phase_title": task.get("phase_title"),
+        "is_verified": task.get("is_verified"),
     }
 
 
@@ -143,6 +150,7 @@ def slim_phase_dict(phase: dict[str, Any]) -> dict[str, Any]:
     """Prune a full phase dictionary to essential scan fields only."""
     return {
         "id": phase["id"],
+        "key": phase.get("key"),
         "title": phase["title"],
         "status": phase["status"],
     }

@@ -71,10 +71,12 @@ class _Helpers:
         matching = [
             p
             for p in _Phase.list_by_project(project_id)
-            if _Helpers.normalize_phase_title(p.title) == normalized_candidate
+            if candidate in {p.id, getattr(p, "key", None)}
+            or _Helpers.normalize_phase_title(p.title) == normalized_candidate
         ]
         if len(matching) == 1:
-            return matching[0].id, _Helpers.normalize_phase_title(matching[0].title)
+            selected = matching[0]
+            return selected.id, _Helpers.normalize_phase_title(selected.title)
         return None, normalized_candidate
 
     @staticmethod
@@ -127,7 +129,44 @@ class _Helpers:
         resolved["depends_on"] = _normalize_dependency_ref(
             project_id, payload.get("depends_on"), task_id=payload.get("id")
         )
+        resolved["key"] = payload.get("key") or payload.get("id")
+        _Helpers.ensure_unique_task_key(
+            project_id=project_id,
+            phase_id=resolved.get("phase_id"),
+            task_key=resolved.get("key"),
+            task_id=resolved.get("id"),
+        )
         return resolved
+
+    @staticmethod
+    def ensure_unique_task_key(
+        project_id: str,
+        phase_id: str | None,
+        task_key: str | None,
+        task_id: str | None = None,
+    ) -> None:
+        """Validate that a task key is unique within its phase-scoped contract."""
+        if task_key is None:
+            return
+        normalized_key = task_key.strip()
+        if not normalized_key:
+            return
+
+        for task in _Task.list_by_project(project_id):
+            if task_id and task.id == task_id:
+                continue
+            same_scope = (task.phase_id == phase_id) if phase_id else task.phase_id is None
+            if same_scope and getattr(task, "key", None) == normalized_key:
+                scope = f"phase '{phase_id}'" if phase_id else "the project"
+                raise _ValidationError(
+                    code="DUPLICATE_TASK_KEY",
+                    message=f"A task with key '{normalized_key}' already exists in {scope}.",
+                    details={
+                        "project_id": project_id,
+                        "phase_id": phase_id,
+                        "key": normalized_key,
+                    },
+                )
 
 
 def list_tasks(
@@ -171,6 +210,7 @@ def create_task(
     verification: str | None = None,
     search_hints: list[str] | None = None,
     objective: str | None = None,
+    key: str | None = None,
 ) -> dict[str, object]:
     normalized = _Helpers.normalize_create_inputs(
         {
@@ -188,6 +228,7 @@ def create_task(
             "verification": verification,
             "search_hints": search_hints,
             "objective": objective,
+            "key": key,
         }
     )
     validated = _Helpers.validate_create_inputs(project_id, normalized)
@@ -206,6 +247,7 @@ def create_task(
         id=validated.get("id"),
         verification=validated.get("verification"),
         search_hints=validated.get("search_hints"),
+        key=validated.get("key"),
     )
     return _task_to_dict(t)
 
@@ -238,6 +280,38 @@ def create_many_tasks(
             code="TASK_BATCH_VALIDATION_FAILED",
             message="One or more task payloads failed validation.",
             details={"errors": errors, "count": len(errors)},
+        )
+
+    seen_task_keys: set[tuple[str | None, str]] = set()
+    duplicate_key_errors: list[dict[str, object]] = []
+    for index, payload in enumerate(validated_payloads):
+        normalized_key = str(payload.get("key") or payload.get("id") or "").strip()
+        if not normalized_key:
+            continue
+        scope_key = (payload.get("phase_id") if payload.get("phase_id") else None, normalized_key)
+        if scope_key in seen_task_keys:
+            duplicate_key_errors.append(
+                {
+                    "index": index,
+                    "error": {
+                        "code": "DUPLICATE_TASK_KEY",
+                        "message": f"A task with key '{normalized_key}' already exists in the batch scope.",
+                        "details": {
+                            "project_id": project_id,
+                            "phase_id": payload.get("phase_id"),
+                            "key": normalized_key,
+                        },
+                    },
+                }
+            )
+        else:
+            seen_task_keys.add(scope_key)
+
+    if duplicate_key_errors:
+        raise _ValidationError(
+            code="TASK_BATCH_VALIDATION_FAILED",
+            message="One or more task payloads failed validation.",
+            details={"errors": duplicate_key_errors, "count": len(duplicate_key_errors)},
         )
 
     created = _Task.create_many(project_id=project_id, payloads=validated_payloads)

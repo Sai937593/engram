@@ -7,7 +7,7 @@ from typing import Any
 from engram.models.memory import Memory
 from engram.models.phase import Phase
 from engram.models.project import Project
-from engram.models.task import Task
+from engram.models.task import Task, get_effective_phase_title
 from engram.services.errors import JsonValue
 
 
@@ -88,6 +88,7 @@ def project_to_dict(project: Project) -> dict[str, JsonValue]:
     """Serialize a Project model into a JSON-safe dictionary."""
     return {
         "id": str(project.id),
+        "plan_key": _none_if_blank(getattr(project, "plan_key", None) or project.id),
         "name": str(project.name),
         "summary": _none_if_blank(project.summary),
         "status": str(project.status),
@@ -97,9 +98,13 @@ def project_to_dict(project: Project) -> dict[str, JsonValue]:
 
 def task_to_dict(task: Task) -> dict[str, JsonValue]:
     """Serialize a Task model into a JSON-safe dictionary."""
+    phase = None
+    if task.phase_id:
+        phase = Phase.get(task.phase_id)
     return {
         "id": str(task.id),
         "project_id": str(task.project_id),
+        "key": _none_if_blank(getattr(task, "key", None) or task.id),
         "title": str(task.title),
         "description": _none_if_blank(task.description),
         "objective": _none_if_blank(task.description),
@@ -108,6 +113,8 @@ def task_to_dict(task: Task) -> dict[str, JsonValue]:
         "priority": str(task.priority),
         "phase": _none_if_blank(task.phase),
         "phase_id": _none_if_blank(task.phase_id),
+        "phase_key": _none_if_blank(getattr(phase, "key", None) if phase else None),
+        "phase_title": _none_if_blank(get_effective_phase_title(task)),
         "depends_on": _none_if_blank(task.depends_on),
         "acceptance": _none_if_blank(task.acceptance),
         "evidence": _none_if_blank(task.evidence),
@@ -158,6 +165,7 @@ def phase_to_dict(phase: Phase) -> dict[str, JsonValue]:
     return {
         "id": str(phase.id),
         "project_id": str(phase.project_id),
+        "key": _none_if_blank(getattr(phase, "key", None) or phase.id),
         "title": str(phase.title),
         "description": _none_if_blank(phase.description),
         "status": str(phase.status),
