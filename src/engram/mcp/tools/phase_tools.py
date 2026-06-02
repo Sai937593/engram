@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engram.mcp.tools.helpers import _respond, _respond_error
+from engram.mcp.tools.helpers import _respond, _respond_error, build_list_payload
 from engram.services.errors import EngramServiceError
 from engram.services.phase_service import (
     archive_phase,
@@ -18,6 +18,14 @@ from engram.services.phase_service import (
 from engram.services.project_service import resolve_current_project
 
 
+def _phase_list_filters(status: str | None, view: str) -> dict[str, str]:
+    """Resolve the compact phase-list filter echo."""
+    return {
+        "status": "all" if status is None else status.strip().casefold(),
+        "view": view.strip().casefold(),
+    }
+
+
 def register_phase_tools(server: Any) -> None:
     """Register phase-related tools on the server."""
 
@@ -27,13 +35,13 @@ def register_phase_tools(server: Any) -> None:
         try:
             project = resolve_current_project()
             phases = list_phases(project_id=str(project["id"]), status=status, view=view)
-            return _respond(
-                {
-                    "ok": True,
-                    "phases": phases,
-                },
-                keep_empty_keys={"phases"},
+            payload = build_list_payload(
+                filters=_phase_list_filters(status, view),
+                items=phases,
+                populated_next_action="Use engram_phase_start <id> to activate a phase.",
+                empty_next_action="Create the first phase with engram_phase_create.",
             )
+            return _respond(payload, keep_empty_keys={"items"})
         except EngramServiceError as exc:
             return _respond_error(exc)
 

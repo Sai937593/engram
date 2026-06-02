@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engram.mcp.tools.helpers import _respond, _respond_error
+from engram.mcp.tools.helpers import _respond, _respond_error, build_list_payload
 from engram.services.errors import EngramServiceError
 from engram.services.memory_service import create_memory, list_memories, search_memories
 from engram.services.project_service import resolve_current_project
@@ -31,6 +31,23 @@ def _memory_search_markdown(memories: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _memory_list_filters(
+    query: str | None,
+    type: str | None,
+    limit: int,
+    view: str,
+    include_superseded: bool,
+) -> dict[str, Any]:
+    """Resolve the compact memory-list filter echo."""
+    return {
+        "query": query,
+        "type": type,
+        "limit": limit,
+        "view": view.strip().casefold(),
+        "include_superseded": include_superseded,
+    }
+
+
 def register_memory_tools(server: Any) -> None:
     """Register memory search and creation tools on the server."""
 
@@ -53,14 +70,13 @@ def register_memory_tools(server: Any) -> None:
                 include_superseded=include_superseded,
                 view=view,
             )
-            return _respond(
-                {
-                    "ok": True,
-                    "memories": memories,
-                    "result": f"## Memory List\nCount: {len(memories)}",
-                },
-                keep_empty_keys={"memories"},
+            payload = build_list_payload(
+                filters=_memory_list_filters(query, type, limit, view, include_superseded),
+                items=memories,
+                populated_next_action="Use engram_memory_get <id> for full memory details.",
+                empty_next_action="Try query=<term> or view=detail to broaden the list.",
             )
+            return _respond(payload, keep_empty_keys={"items"})
         except EngramServiceError as exc:
             return _respond_error(exc)
 

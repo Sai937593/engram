@@ -566,8 +566,10 @@ def test_mcp_memory_tools_default_contract_is_compact_and_lifecycle_light(tmp_db
 
     listed = yaml.safe_load(server.tools["engram_memory_list"]())
     assert listed["ok"] is True
-    assert listed["memories"][0]["id"] == memory_id
-    assert set(listed["memories"][0].keys()) == {
+    assert listed["count"] == 1
+    assert listed["filters"]["view"] == "compact"
+    assert listed["items"][0]["id"] == memory_id
+    assert set(listed["items"][0].keys()) == {
         "id",
         "title",
         "content",
@@ -575,10 +577,11 @@ def test_mcp_memory_tools_default_contract_is_compact_and_lifecycle_light(tmp_db
         "created_at",
         "updated_at",
     }
-    assert "scope" not in listed["memories"][0]
-    assert "level" not in listed["memories"][0]
-    assert "always_include" not in listed["memories"][0]
-    assert "superseded_by" not in listed["memories"][0]
+    assert "scope" not in listed["items"][0]
+    assert "level" not in listed["items"][0]
+    assert "always_include" not in listed["items"][0]
+    assert "superseded_by" not in listed["items"][0]
+    assert listed["next_action"] == "Use engram_memory_get <id> for full memory details."
 
     fetched = yaml.safe_load(server.tools["engram_memory_get"](memory_ref=memory_id))
     assert fetched["ok"] is True

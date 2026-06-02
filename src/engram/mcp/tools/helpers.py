@@ -152,6 +152,23 @@ def slim_task_dict(task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_list_payload(
+    *,
+    filters: dict[str, Any],
+    items: list[dict[str, Any]],
+    populated_next_action: str,
+    empty_next_action: str,
+) -> dict[str, Any]:
+    """Build a standard compact list payload for MCP list tools."""
+    return {
+        "ok": True,
+        "filters": filters,
+        "count": len(items),
+        "items": items,
+        "next_action": populated_next_action if items else empty_next_action,
+    }
+
+
 def build_task_list_payload(
     *,
     project_id: str,
@@ -179,15 +196,12 @@ def build_task_list_payload(
         scope=scope,
         view=view,
     )
-    return {
-        "ok": True,
-        "filters": filters,
-        "count": len(items),
-        "items": items,
-        "next_action": "Use engram_task_get <id> for full task details."
-        if items
-        else "Try scope=all to broaden the list.",
-    }
+    return build_list_payload(
+        filters=filters,
+        items=items,
+        populated_next_action="Use engram_task_get <id> for full task details.",
+        empty_next_action="Try scope=all to broaden the list.",
+    )
 
 
 def slim_phase_dict(phase: dict[str, Any]) -> dict[str, Any]:

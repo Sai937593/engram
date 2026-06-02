@@ -94,13 +94,15 @@ Agents can read the following read-only Markdown resources:
 #### Programmatic Tools
 The MCP server exposes 17 tools for full interactive capabilities:
 
+List-style tools use a shared compact envelope with `ok`, `filters`, `count`, `items`, and `next_action`.
+
 *   **Workflow Control:**
     *   `engram_workflow_start`: Starts the session workflow. Claims next actionable task, updates branch, and returns startup context.
     *   `engram_workflow_verify`: Runs local verification checks and stages changes on success.
     *   `engram_workflow_finish_and_commit`: Commits and pushes already-staged verified changes, then marks the task done.
     *   `engram_workflow_finish`: Deprecated transitional alias for `engram_workflow_finish_and_commit`.
 *   **Task Management:**
-    *   `engram_task_list`: Filters and lists project tasks by status or phase.
+    *   `engram_task_list`: Filters and lists project tasks by status or phase using the shared list envelope.
     *   `engram_task_get`: Retrieves full details of a specific task.
     *   `engram_task_next`: Returns the highest-priority actionable `open` task.
     *   `engram_task_create`: Creates a new project task.
@@ -109,7 +111,7 @@ The MCP server exposes 17 tools for full interactive capabilities:
     *   `engram_task_start`: Transition task status to `in_progress`.
     *   `engram_task_done`: Transition task status to `done` with evidence.
 *   **Memory Management:**
-    *   `engram_memory_list`: Lists memories for the active project.
+    *   `engram_memory_list`: Lists memories for the active project using the shared list envelope.
     *   `engram_memory_get`: Retrieves a memory by id.
     *   `engram_memory_create`: Creates a memory from normal user-facing fields (for example `title`, `content`).
     *   `engram_memory_update`: Updates a memory by id.
@@ -118,7 +120,7 @@ The MCP server exposes 17 tools for full interactive capabilities:
     *   `engram_memory_delete_many`: Deletes multiple memories in one batch operation.
     *   `engram_memory_search`: Runs FTS5 + semantic hybrid query search over all project memories.
 *   **Phase Management:**
-    *   `engram_phase_list`: Lists all milestone phases for the project in priority order.
+    *   `engram_phase_list`: Lists all milestone phases for the project in priority order using the shared list envelope.
     *   `engram_phase_create`: Creates a new first-class project phase milestone.
     *   `engram_phase_start`: Activates a specific phase, demoting all other project phases to planned.
     *   `engram_phase_complete`: Marks a `review_pending` milestone phase as complete with evidence.

@@ -320,11 +320,14 @@ def test_mcp_tool_memory_list_returns_compact_project_scoped_memories(tmp_db, mo
     result = yaml.safe_load(handler())
 
     assert result["ok"] is True
-    assert result["memories"][0]["id"] == "mem-list-1"
-    assert result["memories"][0]["title"] == "Listable memory"
-    assert "created_at" in result["memories"][0]
-    assert "updated_at" in result["memories"][0]
-    assert "type" not in result["memories"][0]
+    assert result["count"] == 1
+    assert result["filters"]["view"] == "compact"
+    assert result["items"][0]["id"] == "mem-list-1"
+    assert result["items"][0]["title"] == "Listable memory"
+    assert "created_at" in result["items"][0]
+    assert "updated_at" in result["items"][0]
+    assert "type" not in result["items"][0]
+    assert result["next_action"] == "Use engram_memory_get <id> for full memory details."
 
 
 def test_mcp_tool_memory_list_supports_query_and_detail_view(tmp_db, monkeypatch) -> None:
@@ -364,12 +367,15 @@ def test_mcp_tool_memory_list_supports_query_and_detail_view(tmp_db, monkeypatch
     result = yaml.safe_load(handler(query="SQLite", view="detail"))
 
     assert result["ok"] is True
-    assert [memory["id"] for memory in result["memories"]] == ["mem-list-q-1"]
-    assert result["memories"][0]["type"] == "lesson"
-    assert result["memories"][0]["scope"] == "project"
-    assert result["memories"][0]["tags"] == ["sqlite", "query"]
-    assert "content_preview" not in result["memories"][0]
-    assert "created_at" not in result["memories"][0]
+    assert result["count"] == 1
+    assert result["filters"]["view"] == "detail"
+    assert [memory["id"] for memory in result["items"]] == ["mem-list-q-1"]
+    assert result["items"][0]["type"] == "lesson"
+    assert result["items"][0]["scope"] == "project"
+    assert result["items"][0]["tags"] == ["sqlite", "query"]
+    assert "content_preview" not in result["items"][0]
+    assert "created_at" not in result["items"][0]
+    assert result["next_action"] == "Use engram_memory_get <id> for full memory details."
 
 
 def test_mcp_tool_memory_list_rejects_invalid_view(tmp_db, monkeypatch) -> None:
@@ -1037,14 +1043,15 @@ def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
     # All phases
     res_all = yaml.safe_load(handler(status="all"))
     assert res_all["ok"] is True
-    assert len(res_all["phases"]) == 4
-    assert {p["id"] for p in res_all["phases"]} == {
+    assert res_all["count"] == 4
+    assert res_all["filters"]["status"] == "all"
+    assert {p["id"] for p in res_all["items"]} == {
         "phase-1",
         "phase-2",
         "phase-3",
         "phase-4",
     }
-    for p in res_all["phases"]:
+    for p in res_all["items"]:
         assert set(p.keys()) == {
             "id",
             "key",
@@ -1054,27 +1061,28 @@ def test_mcp_tool_phase_list_lists_phases(tmp_db, monkeypatch) -> None:
             "review_candidate",
             "next_planned",
         }
-    assert next(p for p in res_all["phases"] if p["id"] == "phase-2")["current"] is True
-    assert next(p for p in res_all["phases"] if p["id"] == "phase-3")["review_candidate"] is True
-    assert next(p for p in res_all["phases"] if p["id"] == "phase-4")["next_planned"] is True
-    assert next(p for p in res_all["phases"] if p["id"] == "phase-1")["current"] is False
-    assert next(p for p in res_all["phases"] if p["id"] == "phase-1")["review_candidate"] is False
-    assert next(p for p in res_all["phases"] if p["id"] == "phase-1")["next_planned"] is False
+    assert next(p for p in res_all["items"] if p["id"] == "phase-2")["current"] is True
+    assert next(p for p in res_all["items"] if p["id"] == "phase-3")["review_candidate"] is True
+    assert next(p for p in res_all["items"] if p["id"] == "phase-4")["next_planned"] is True
+    assert next(p for p in res_all["items"] if p["id"] == "phase-1")["current"] is False
+    assert next(p for p in res_all["items"] if p["id"] == "phase-1")["review_candidate"] is False
+    assert next(p for p in res_all["items"] if p["id"] == "phase-1")["next_planned"] is False
+    assert res_all["next_action"] == "Use engram_phase_start <id> to activate a phase."
 
     # Filtered by status
     res_active = yaml.safe_load(handler(status="active", view="detail"))
     assert res_active["ok"] is True
-    assert len(res_active["phases"]) == 1
-    assert res_active["phases"][0]["id"] == "phase-2"
-    assert res_active["phases"][0]["project_id"] == project.id
-    assert res_active["phases"][0]["current"] is True
+    assert res_active["count"] == 1
+    assert res_active["items"][0]["id"] == "phase-2"
+    assert res_active["items"][0]["project_id"] == project.id
+    assert res_active["items"][0]["current"] is True
 
     res_review_pending = yaml.safe_load(handler(status="review_pending", view="detail"))
     assert res_review_pending["ok"] is True
-    assert len(res_review_pending["phases"]) == 1
-    assert res_review_pending["phases"][0]["id"] == "phase-3"
-    assert res_review_pending["phases"][0]["status_label"] == "To be reviewed"
-    assert res_review_pending["phases"][0]["review_candidate"] is True
+    assert res_review_pending["count"] == 1
+    assert res_review_pending["items"][0]["id"] == "phase-3"
+    assert res_review_pending["items"][0]["status_label"] == "To be reviewed"
+    assert res_review_pending["items"][0]["review_candidate"] is True
 
     res_invalid_view = yaml.safe_load(handler(view="summary"))
     assert res_invalid_view["ok"] is False
