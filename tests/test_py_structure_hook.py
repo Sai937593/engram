@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 from engram.hooks.py_structure import (
     check_files,
     count_lines,
     count_public_symbols,
+    get_changed_python_files,
     get_line_limit,
     get_staged_python_files,
     is_test_file,
+    main,
     run_check,
 )
 
@@ -30,6 +33,37 @@ def test_get_staged_python_files(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     files = get_staged_python_files()
     assert files == [Path("src/a.py"), Path("tests/test_x.py")]
+
+
+def test_get_changed_python_files(monkeypatch):
+    """Test git query unions staged, modified, and untracked Python files."""
+
+    class Completed:
+        def __init__(self, stdout: str):
+            self.stdout = stdout
+
+    outputs = {
+        ("git", "diff", "--cached", "--name-only", "--diff-filter=AM"): (
+            "src/staged.py\nsrc/shared.py\nnotes.txt\n"
+        ),
+        ("git", "diff", "--name-only", "--diff-filter=M"): (
+            "src/shared.py\nsrc/modified.py\nREADME.md\n"
+        ),
+        ("git", "ls-files", "--others", "--exclude-standard"): ("src/untracked.py\nignored.txt\n"),
+    }
+
+    def fake_run(args, **kwargs):
+        assert kwargs["cwd"] is None
+        return Completed(outputs[tuple(args)])
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    files = get_changed_python_files()
+    assert files == [
+        Path("src/staged.py"),
+        Path("src/shared.py"),
+        Path("src/modified.py"),
+        Path("src/untracked.py"),
+    ]
 
 
 def test_is_test_file():
@@ -161,6 +195,45 @@ def test_run_check_scenarios(monkeypatch, tmp_path):
         lambda repo_root=None: [Path("src/engram/bad.py")],
     )
     assert run_check(repo_root=tmp_path) == 1
+
+
+def test_run_check_changed_mode_uses_changed_files(monkeypatch, tmp_path):
+    """Test run_check(changed=True) inspects the broader changed-file scope."""
+    staged_file = tmp_path / "src" / "engram" / "staged.py"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("class Staged:\n    pass\n", encoding="utf-8")
+
+    changed_file = tmp_path / "src" / "engram" / "changed.py"
+    changed_file.write_text("\n" * 151, encoding="utf-8")
+
+    monkeypatch.setattr(
+        "engram.hooks.py_structure.get_staged_python_files",
+        lambda repo_root=None: [Path("src/engram/staged.py")],
+    )
+    monkeypatch.setattr(
+        "engram.hooks.py_structure.get_changed_python_files",
+        lambda repo_root=None: [Path("src/engram/changed.py")],
+    )
+
+    assert run_check(repo_root=tmp_path) == 0
+    assert run_check(repo_root=tmp_path, changed=True) == 1
+
+
+def test_main_forwards_changed_flag(monkeypatch):
+    """Test the CLI forwards --changed into run_check."""
+    calls = {}
+
+    def fake_run_check(repo_root=None, changed=False):
+        calls["repo_root"] = repo_root
+        calls["changed"] = changed
+        return 0
+
+    monkeypatch.setattr("engram.hooks.py_structure.run_check", fake_run_check)
+    monkeypatch.setattr(sys, "argv", ["py_structure", "--changed"])
+
+    assert main() == 0
+    assert calls["repo_root"] == Path.cwd()
+    assert calls["changed"] is True
 
 
 def test_run_check_subprocess_error(monkeypatch, capsys):

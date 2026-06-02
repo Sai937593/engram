@@ -23,7 +23,7 @@ def test_resolve_verify_commands_uses_uv_run_when_uv_lock_exists(tmp_path: Any) 
     assert commands == [
         ["uv", "run", "ruff", "format", "."],
         ["uv", "run", "ruff", "check", ".", "--fix"],
-        ["uv", "run", "python", "-m", "engram.hooks.py_structure"],
+        ["uv", "run", "python", "-m", "engram.hooks.py_structure", "--changed"],
         ["uv", "run", "pytest", "tests/", "-m", "not slow", "-x", "--tb=short", "-q"],
     ]
 
@@ -34,7 +34,7 @@ def test_resolve_verify_commands_falls_back_without_uv_lock(tmp_path: Any) -> No
     assert commands == [
         ["python", "-m", "ruff", "format", "."],
         ["python", "-m", "ruff", "check", ".", "--fix"],
-        ["python", "-m", "engram.hooks.py_structure"],
+        ["python", "-m", "engram.hooks.py_structure", "--changed"],
         ["python", "-m", "pytest", "tests/", "-m", "not slow", "-x", "--tb=short", "-q"],
     ]
 
@@ -78,7 +78,7 @@ def test_verify_workflow_records_pass(tmp_db: Any, tmp_path: Any) -> None:
     assert called == [
         ["uv", "run", "ruff", "format", "."],
         ["uv", "run", "ruff", "check", ".", "--fix"],
-        ["uv", "run", "python", "-m", "engram.hooks.py_structure"],
+        ["uv", "run", "python", "-m", "engram.hooks.py_structure", "--changed"],
         ["uv", "run", "pytest", "tests/", "-m", "not slow", "-x", "--tb=short", "-q"],
         ["git", "add", "-A"],
     ]
@@ -95,7 +95,7 @@ def test_verify_workflow_records_pass(tmp_db: Any, tmp_path: Any) -> None:
     details = str(latest["details"])
     assert "uv run ruff format ." in details
     assert "uv run ruff check . --fix" in details
-    assert "uv run python -m engram.hooks.py_structure" in details
+    assert "uv run python -m engram.hooks.py_structure --changed" in details
     assert 'uv run pytest tests/ -m "not slow" -x --tb=short -q' in details
     assert "git add -A" in details
     assert "is_verified = true" in details

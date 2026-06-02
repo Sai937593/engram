@@ -15,7 +15,7 @@ from engram.services.workflow_verification_service import record_workflow_verifi
 VERIFY_COMMANDS: tuple[tuple[str, ...], ...] = (
     ("ruff", "format", "."),
     ("ruff", "check", ".", "--fix"),
-    ("engram.hooks.py_structure",),
+    ("engram.hooks.py_structure", "--changed"),
     ("pytest", "tests/", "-m", "not slow", "-x", "--tb=short", "-q"),
 )
 
@@ -47,7 +47,7 @@ def _resolve_verify_commands(repo_path: str) -> list[list[str]]:
     if os.path.exists(os.path.join(repo_path, "uv.lock")):
         resolved: list[list[str]] = []
         for cmd in VERIFY_COMMANDS:
-            if cmd == ("engram.hooks.py_structure",):
+            if cmd[:1] == ("engram.hooks.py_structure",):
                 resolved.append(["uv", "run", "python", "-m", *cmd])
             else:
                 resolved.append(["uv", "run", *cmd])
@@ -146,7 +146,8 @@ def verify_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
     summary = "All local quality checks passed; staged current worktree and marked task verified."
     details = (
         "Checks: `uv run ruff format .`, `uv run ruff check . --fix`, "
-        '`uv run python -m engram.hooks.py_structure`, `uv run pytest tests/ -m "not slow" -x --tb=short -q`. '
+        "`uv run python -m engram.hooks.py_structure --changed`, "
+        '`uv run pytest tests/ -m "not slow" -x --tb=short -q`. '
         "Post-check action: `git add -A`; persisted active task `is_verified = true`."
     )
     record = record_workflow_verification(
