@@ -19,6 +19,7 @@ from engram.services.project_service import resolve_current_project
 from engram.services.serializers import memory_to_dict, phase_to_dict, project_to_dict, task_to_dict
 from engram.services.task import get_task, list_tasks, resolve_task_ref
 from engram.services.workflow_service import finish_workflow, start_workflow
+from engram.services.workflow_status_service import get_current_workflow_status
 
 __all__ = [
     "EngramServiceError",
@@ -39,6 +40,7 @@ __all__ = [
     "phase_to_dict",
     "start_workflow",
     "finish_workflow",
+    "get_current_workflow_status",
     "task_service",
     "find_repo_root",
     "get_repo_local_engram_dir",

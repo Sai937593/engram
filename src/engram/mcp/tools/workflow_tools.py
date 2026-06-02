@@ -63,6 +63,15 @@ def register_workflow_tools(server: Any) -> None:
     """Register workflow and project tools on the server."""
 
     @server.tool()
+    def engram_workflow_status() -> str:
+        """Get the current workflow state for the active Engram project."""
+        try:
+            status = engram.mcp.tools.get_current_workflow_status()
+            return engram.mcp.tools._respond({"ok": True, **status})
+        except EngramServiceError as exc:
+            return engram.mcp.tools._respond_error(exc)
+
+    @server.tool()
     def engram_project_current() -> str:
         """Get details of the currently bound engram project."""
         try:

@@ -48,6 +48,7 @@ from engram.services.task import (
     update_task,
 )
 from engram.services.workflow_service import finish_workflow, start_workflow, verify_workflow
+from engram.services.workflow_status_service import get_current_workflow_status
 
 __all__ = [
     "register_tools",
@@ -71,6 +72,7 @@ __all__ = [
     "initialize_project",
     "get_current_project_status",
     "get_project_diagnostics",
+    "get_current_workflow_status",
     "resolve_current_project",
     "append_task_note",
     "block_task",

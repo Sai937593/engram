@@ -118,6 +118,8 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_task_retire"].__name__ == "engram_task_retire"
     assert "engram_workflow_start" in server.tools
     assert server.tools["engram_workflow_start"].__name__ == "engram_workflow_start"
+    assert "engram_workflow_status" in server.tools
+    assert server.tools["engram_workflow_status"].__name__ == "engram_workflow_status"
     assert "engram_workflow_finish_and_commit" in server.tools
     assert (
         server.tools["engram_workflow_finish_and_commit"].__name__
@@ -2345,3 +2347,112 @@ def test_mcp_diagnostics_repo_local_states(tmp_path, monkeypatch) -> None:
     assert diag_uninit["status"] == "uninitialized"
     assert diag_uninit["repo_root_detected"] is True
     assert "engram_project_init" in diag_uninit["next_action"]
+
+
+def test_mcp_workflow_status_reports_compact_state_across_phase_states(
+    tmp_db, tmp_path, monkeypatch
+) -> None:
+    """Verify engram_workflow_status reports compact, deterministic workflow state."""
+    import yaml
+
+    from engram.mcp.tools import register_tools
+    from engram.models.phase import Phase
+    from engram.models.project import Project
+    from engram.models.task import Task
+
+    repo_path = tmp_path / "workflow_status_repo"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+    monkeypatch.setattr("os.getcwd", lambda: str(repo_path))
+
+    Project.create(
+        id="proj-status",
+        name="Workflow Status Project",
+        summary="Workflow status summary",
+        repo_paths=[str(repo_path)],
+        plan_key="plan-0003-status",
+    )
+    phase = Phase.create(
+        project_id="proj-status",
+        id="phase-01",
+        key="phase-01",
+        title="Phase One",
+        status="planned",
+    )
+    Task.create(
+        project_id="proj-status",
+        id="task-01",
+        key="task-01",
+        title="Task One",
+        status="open",
+        phase_id=phase.id,
+    )
+    Task.create(
+        project_id="proj-status",
+        id="task-02",
+        key="task-02",
+        title="Task Two",
+        status="open",
+        phase_id=phase.id,
+    )
+
+    server = MockServer()
+    register_tools(server)
+    handler = server.tools["engram_workflow_status"]
+
+    payload = yaml.safe_load(handler())
+    assert payload["ok"] is True
+    assert payload["project"] == {"id": "proj-status", "name": "Workflow Status Project"}
+    assert payload["plan"] == {"key": "plan-0003-status"}
+    assert "active_phase" not in payload
+    assert "review_phase" not in payload
+    assert "active_task" not in payload
+    assert payload["next_task"]["key"] == "task-01"
+    assert payload["counts"]["phases"] == {
+        "planned": 1,
+        "active": 0,
+        "review_pending": 0,
+        "done": 0,
+        "blocked": 0,
+        "cancelled": 0,
+    }
+    assert payload["counts"]["tasks"] == {
+        "open": 2,
+        "in_progress": 0,
+        "blocked": 0,
+        "done": 0,
+        "cancelled": 0,
+    }
+    assert payload["next_action"] == {
+        "tool": "engram_workflow_start",
+        "reason": "Start the next actionable task task-01.",
+    }
+
+    phase.update(status="review_pending")
+    review_payload = yaml.safe_load(handler())
+    assert review_payload["review_phase"]["key"] == "phase-01"
+    assert review_payload["next_action"] == {
+        "tool": "engram_phase_complete",
+        "reason": "Phase phase-01 is awaiting review completion.",
+    }
+
+    phase.update(status="active")
+    Task.get("task-01").update(status="in-progress")
+    active_payload = yaml.safe_load(handler())
+    assert active_payload["active_phase"]["key"] == "phase-01"
+    assert active_payload["active_task"]["key"] == "task-01"
+    assert active_payload["active_task"]["status"] == "in_progress"
+    assert active_payload["active_task"]["is_verified"] is False
+    assert active_payload["next_task"]["key"] == "task-02"
+    assert active_payload["counts"]["tasks"] == {
+        "open": 1,
+        "in_progress": 1,
+        "blocked": 0,
+        "done": 0,
+        "cancelled": 0,
+    }
+    assert active_payload["next_action"] == {
+        "tool": "engram_workflow_verify",
+        "reason": "Active task task-01 is in progress and needs verification.",
+    }
