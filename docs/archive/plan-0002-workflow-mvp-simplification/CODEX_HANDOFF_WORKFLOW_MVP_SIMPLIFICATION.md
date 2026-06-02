@@ -1,6 +1,6 @@
 # Codex Handoff: Workflow MVP Simplification
 
-> Historical handoff document. Superseded by `docs/adr/0002-workflow-mvp-simplification.md`, `README.md`, and `docs/USER_MANUAL.md`. Do not treat this as active agent-facing workflow guidance.
+> Archived historical handoff document. Superseded by `docs/adr/0002-workflow-mvp-simplification.md`, `README.md`, and `docs/USER_MANUAL.md`. Do not treat this as active agent-facing workflow guidance.
 
 ## Purpose
 

@@ -1,6 +1,6 @@
 # Codex Implementation Phases: Workflow MVP Simplification
 
-> Historical implementation planning document. Superseded by `docs/adr/0002-workflow-mvp-simplification.md`, `README.md`, and `docs/USER_MANUAL.md`. Use it only as background context.
+> Archived historical implementation planning document. Superseded by `docs/adr/0002-workflow-mvp-simplification.md`, `README.md`, and `docs/USER_MANUAL.md`. Use it only as background context.
 
 ## Branch
 
@@ -13,7 +13,7 @@ feat/workflow-mvp-simplification
 Read in this order:
 
 1. `docs/adr/0002-workflow-mvp-simplification.md`
-2. `docs/CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md`
+2. `CODEX_HANDOFF_WORKFLOW_MVP_SIMPLIFICATION.md`
 3. this implementation plan
 
 ## Build principle
