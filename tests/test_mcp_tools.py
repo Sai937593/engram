@@ -1914,7 +1914,9 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     mock_finish_res = {
         "id": "t1",
         "commit": "feat: Test Task",
+        "commit_created": True,
         "phase_complete": False,
+        "phase_review_pending": False,
         "memory_review_outcome": "created",
     }
     mock_verify_res = {
@@ -1966,15 +1968,21 @@ def test_mcp_workflow_tools_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     res_finish = asyncio.run(finish_handler(commit_type="feat"))
     assert "# Task Finished" in res_finish
     assert "Task: `t1`" in res_finish
-    assert "Commit: `feat: Test Task`" in res_finish
-    assert "Phase complete: False" in res_finish
+    assert "Commit created: True" in res_finish
+    assert "Commit message: `feat: Test Task`" in res_finish
+    assert "Phase moved to review_pending: False" in res_finish
     assert "Memory review outcome: `created`" in res_finish
     assert "## Next action" in res_finish
-    assert (
-        "Stop here. The active task is finished and committed. Await further instructions."
-        in res_finish
-    )
+    assert "Stop here. The active task is finished. Await further instructions." in res_finish
     assert finish_called_args == [("proj-tool-workflow", cwd, "feat")]
+
+    # 2a. No-op finish remains explicit in the success response
+    mock_finish_res["commit_created"] = False
+    res_finish_noop = asyncio.run(finish_handler(commit_type="feat"))
+    assert "Commit created: False" in res_finish_noop
+    assert "Commit message: `feat: Test Task`" in res_finish_noop
+    assert "Phase moved to review_pending: False" in res_finish_noop
+    mock_finish_res["commit_created"] = True
 
     # 2b. Backward compatibility: deprecated alias still works
     finish_called_args.clear()

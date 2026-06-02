@@ -47,6 +47,8 @@ def test_finish_workflow_happy_path(tmp_db: Any) -> None:
 
     assert res["id"] == "t-1"
     assert res["commit"] == "feat(phase-one): Refactor auth [t-1]"
+    assert res["commit_created"] is True
+    assert res["phase_review_pending"] is True
     assert res["memory_review_outcome"] == "created"
 
     # Task should be marked done
@@ -268,6 +270,7 @@ def test_finish_workflow_nothing_to_commit(tmp_db: Any) -> None:
         res = finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
 
     assert res["id"] == "t-1"
+    assert res["commit_created"] is False
     # Task should be marked done
     refreshed = Task.get(task.id)
     assert refreshed is not None
@@ -392,20 +395,39 @@ def test_format_finish_success() -> None:
         task_id="t-123",
         commit_msg="feat(scope): add feature [t-123]",
         phase_complete=False,
-        next_guidance="Stop here. The active task is finished and committed. Await further instructions.",
+        next_guidance="Stop here. The active task is finished. Await further instructions.",
         task_title="Add Feature",
         memory_review_outcome="created",
+        commit_created=True,
+        phase_review_pending=False,
     )
 
     assert res.startswith("# Task Finished")
     assert "Task: `t-123` - Add Feature" in res
-    assert "Commit: `feat(scope): add feature [t-123]`" in res
-    assert "Phase complete: False" in res
+    assert "Commit created: True" in res
+    assert "Commit message: `feat(scope): add feature [t-123]`" in res
+    assert "Phase moved to review_pending: False" in res
     assert "Memory review outcome: `created`" in res
     assert "## Next action" in res
-    assert (
-        "Stop here. The active task is finished and committed. Await further instructions." in res
+    assert "Stop here. The active task is finished. Await further instructions." in res
+
+
+def test_format_finish_success_noop_commit() -> None:
+    """Verify format_finish_success reports a no-op finish explicitly."""
+    from engram.services.workflow_formatter import format_finish_success
+
+    res = format_finish_success(
+        task_id="t-124",
+        commit_msg="feat(scope): add feature [t-124]",
+        phase_complete=False,
+        next_guidance="Stop here. The active task is finished. Await further instructions.",
+        task_title="Add Feature",
+        commit_created=False,
     )
+
+    assert "Commit created: False" in res
+    assert "Commit message: `feat(scope): add feature [t-124]`" in res
+    assert "Phase moved to review_pending: False" in res
 
 
 def test_format_finish_blocked() -> None:

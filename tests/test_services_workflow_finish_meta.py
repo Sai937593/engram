@@ -39,6 +39,7 @@ def test_finish_workflow_commit_type_resolution(tmp_db: Any) -> None:
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res_a = finish_workflow("proj-1", "/tmp/proj-1", commit_type="chore")
     assert res_a["commit"].startswith("chore(phase-one):")
+    assert res_a["commit_created"] is True
 
     # Case B: Resolution from tags (bug tag -> fix)
     git_mock.calls.clear()
@@ -112,6 +113,7 @@ def test_finish_workflow_phase_complete_detection(tmp_db: Any) -> None:
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res_1 = finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
     assert res_1["phase_complete"] is False
+    assert res_1["phase_review_pending"] is False
 
     # Case B: Only done/cancelled tasks in the phase -> phase_complete = True
     task_2 = Task.get("t-2")
@@ -124,3 +126,4 @@ def test_finish_workflow_phase_complete_detection(tmp_db: Any) -> None:
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res_2 = finish_workflow("proj-1", "/tmp/proj-1", commit_type="feat")
     assert res_2["phase_complete"] is True
+    assert res_2["phase_review_pending"] is True

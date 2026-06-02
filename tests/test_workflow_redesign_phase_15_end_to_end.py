@@ -282,7 +282,8 @@ def test_e2e_workflow_finish_success(disposable_git_repo):
         mock_server.tools["engram_workflow_finish_and_commit"](commit_type="feat")
     )
     assert "finished" in finish_res_str.lower()
-    assert "phase complete" in finish_res_str.lower()
+    assert "commit created: true" in finish_res_str.lower()
+    assert "phase moved to review_pending: true" in finish_res_str.lower()
 
     # Verify task state is now 'done'
     t1_get_str = mock_server.tools["engram_task_get"](task_ref=t1_id)
@@ -765,10 +766,11 @@ def test_e2e_finish_closeout_guidance_and_no_autostart(disposable_git_repo):
     # Finish Task 1
     finish_res_str = asyncio.run(mock_server.tools["engram_workflow_finish"](commit_type="feat"))
     assert "# Task Finished" in finish_res_str
-    assert "Phase complete: True" in finish_res_str
-    # Guidance should tell the user to request permission for phase transition skill
+    assert "Commit created: True" in finish_res_str
+    assert "Phase moved to review_pending: True" in finish_res_str
+    # Guidance should tell the user to use the phase review skill
     assert (
-        "Phase complete. Ask the user for permission to run the engram-phase-transition skill."
+        "Phase moved to review_pending. Use the engram-phase-review skill next to curate phase memory and prepare the handoff. If a branch transition is needed, ask the user which branch should be merged or transitioned into."
         in finish_res_str
     )
 

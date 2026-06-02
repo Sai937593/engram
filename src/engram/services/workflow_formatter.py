@@ -163,15 +163,21 @@ def format_finish_success(
     next_guidance: str,
     task_title: str | None = None,
     memory_review_outcome: str | None = None,
+    commit_created: bool = True,
+    phase_review_pending: bool | None = None,
 ) -> str:
     """Format a successful finish response as a Markdown-first string."""
+    if phase_review_pending is None:
+        phase_review_pending = phase_complete
+
     lines = ["# Task Finished", ""]
     if task_title:
         lines.append(f"Task: `{task_id}` - {task_title}")
     else:
         lines.append(f"Task: `{task_id}`")
-    lines.append(f"Commit: `{commit_msg}`")
-    lines.append(f"Phase complete: {phase_complete}")
+    lines.append(f"Commit created: {commit_created}")
+    lines.append(f"Commit message: `{commit_msg}`")
+    lines.append(f"Phase moved to review_pending: {phase_review_pending}")
     if memory_review_outcome:
         lines.append(f"Memory review outcome: `{memory_review_outcome}`")
     lines.append("")

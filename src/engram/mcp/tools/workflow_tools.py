@@ -35,21 +35,23 @@ async def _run_finish_and_commit(commit_type: str | None = None) -> str:
                 commit_type=commit_type,
             )
         )
-        phase_complete = res["phase_complete"]
+        phase_review_pending = bool(res.get("phase_review_pending", res["phase_complete"]))
         next_guidance = (
-            "Phase complete. Ask the user for permission to run the engram-phase-transition skill."
-            if phase_complete
-            else "Stop here. The active task is finished and committed. Await further instructions."
+            "Phase moved to review_pending. Use the engram-phase-review skill next to curate phase memory and prepare the handoff. If a branch transition is needed, ask the user which branch should be merged or transitioned into."
+            if phase_review_pending
+            else "Stop here. The active task is finished. Await further instructions."
         )
         from engram.services.workflow_formatter import format_finish_success
 
         return format_finish_success(
             task_id=res["id"],
             commit_msg=res["commit"],
-            phase_complete=phase_complete,
+            phase_complete=bool(res["phase_complete"]),
             next_guidance=next_guidance,
             task_title=res.get("task_title"),
             memory_review_outcome=res.get("memory_review_outcome"),
+            commit_created=bool(res.get("commit_created", True)),
+            phase_review_pending=phase_review_pending,
         )
     except EngramServiceError as exc:
         if exc.code in FINISH_GATE_ERROR_CODES and project_id:

@@ -177,6 +177,7 @@ def finish_workflow(
         cwd=repo_path,
         stdin=subprocess.DEVNULL,
     )
+    commit_created = commit_res.returncode == 0
     if commit_res.returncode != 0:
         out = (commit_res.stdout + commit_res.stderr).lower()
         if "nothing to commit" not in out:
@@ -196,7 +197,9 @@ def finish_workflow(
     return {
         "id": task.id,
         "commit": commit_msg,
+        "commit_created": commit_created,
         "phase_complete": phase_complete,
+        "phase_review_pending": phase_complete,
         "task_title": task.title,
         "memory_review_outcome": task.memory_review_outcome,
     }
