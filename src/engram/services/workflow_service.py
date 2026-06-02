@@ -25,6 +25,7 @@ from engram.services.workflow_helpers import (
     select_task_to_start,
     slugify,
 )
+from engram.services.workflow_start_formatter import build_start_work_order
 from engram.services.workflow_verification_service import evaluate_verification_eligibility
 from engram.services.workflow_verify_service import verify_workflow as run_workflow_verify
 
@@ -94,17 +95,7 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
     )
     _run(cmd, repo_path)
     active_phase = activate_phase_for_task(project_id, task) or active_phase
-    startup_res = orchestrate_startup_task_memory_retrieval(
-        project=project, active_phase=active_phase, selected_task=task
-    )
-    context_str = build_startup_context(
-        project=project,
-        active_phase=active_phase,
-        selected_task=task,
-        startup_task_memory_result=startup_res,
-        branch=target_branch,
-        is_resuming=is_resuming,
-    )
+    context_str = build_start_work_order(project, active_phase, task, target_branch, is_resuming)
 
     return {
         "task": task_to_dict(task),

@@ -45,7 +45,10 @@ def test_start_workflow_happy_path_branch_exists(tmp_db: Any, mock_startup_conte
     assert res["task"]["id"] == "t-1"
     assert res["branch"] == "feat/proj-1-ph-1"
     assert res["is_resuming"] is False
-    assert res["context"] == "mock startup context string"
+    assert res["context"].startswith("# Work Order")
+    assert "Branch: `feat/proj-1-ph-1`" in res["context"]
+    assert "## Required task plan" in res["context"]
+    assert ".engram/task-plans/proj-1/ph-1/t-1/task-plan.md" in res["context"]
 
     # Task status should be updated to in_progress
     refreshed_task = Task.get(task.id)

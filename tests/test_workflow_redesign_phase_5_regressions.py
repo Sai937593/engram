@@ -121,24 +121,34 @@ def test_successful_start_contract(tmp_db: Any, monkeypatch: Any) -> None:
     context = res["context"]
     assert context.startswith("# Work Order")
     assert "Branch: `feat/proj-start-ok-ph-1`" in context
+    assert "## Task context" in context
+    assert "- Task: `Fix startup bugs` (`t-1`)" in context
+    assert "- Phase: `Phase One` (`ph-1`)" in context
+    assert "- Plan: `proj-start-ok`" in context
     assert "## Objective" in context
     assert "Fix the bugs in start logic" in context
     assert "## Acceptance" in context
     assert "It works" in context
     assert "## Start here" in context
     assert "- src/start.py" in context
+    assert "## Verification" in context
+    assert "## Required task plan" in context
+    assert ".engram/task-plans/proj-start-ok/ph-1/t-1/task-plan.md" in context
     assert "## Next action" in context
-    assert "Before coding: run engram_memory_search" in context
+    assert "engram_workflow_verify" in context
 
     # Check non-duplication
     assert context.count("## Next action") == 1
-    assert "status:" not in context.lower()
-    assert "task_id:" not in context.lower()
+    assert "implementation_plan.md" not in context
+    assert "Before coding:" not in context
 
     # engram_workflow_start should return the context string directly
     assert res_mcp.startswith("# Work Order")
+    assert "## Task context" in res_mcp
+    assert "## Required task plan" in res_mcp
+    assert ".engram/task-plans/proj-start-ok/ph-1/t-1/task-plan.md" in res_mcp
     assert res_mcp.count("## Next action") == 1
-    assert "status:" not in res_mcp.lower()
+    assert "implementation_plan.md" not in res_mcp
 
 
 def test_blocked_start_contract(tmp_db: Any, monkeypatch: Any) -> None:
@@ -230,18 +240,26 @@ def test_start_contract_sparse_metadata_in_service_and_mcp(tmp_db: Any, monkeypa
     context = res["context"]
     assert context.startswith("# Work Order")
     assert context.count("## Next action") == 1
+    assert "## Task context" in context
     assert "## Start here" in context
-    assert "Search the codebase using engram_memory_search" in context
+    assert (
+        "Search the codebase using the task title and phase title if you need more context."
+        in context
+    )
     assert "- Search hint: Sparse task title" in context
     assert "- Search hint: Phase Sparse" in context
-    assert "task_id:" not in context.lower()
-    assert "status:" not in context.lower()
+    assert "- Search hint: sparse, startup, guidance" in context
+    assert "## Verification" in context
+    assert "## Required task plan" in context
+    assert ".engram/task-plans/proj-start-sparse/ph-sparse/t-sparse/task-plan.md" in context
+    assert "implementation_plan.md" not in context
 
     assert res_mcp.startswith("# Work Order")
     assert res_mcp.count("## Next action") == 1
+    assert "## Required task plan" in res_mcp
     assert "- Search hint: Sparse task title" in res_mcp
-    assert "task_id:" not in res_mcp.lower()
-    assert "status:" not in res_mcp.lower()
+    assert ".engram/task-plans/proj-start-sparse/ph-sparse/t-sparse/task-plan.md" in res_mcp
+    assert "implementation_plan.md" not in res_mcp
 
 
 def test_successful_finish_contract(tmp_db: Any, monkeypatch: Any) -> None:
