@@ -523,7 +523,7 @@ def test_memory_service_get_and_list_support_full_shape_for_internal_callers(tmp
     )
 
     full_get = get_memory(project.id, "full0001", compact=False)
-    full_list = list_memories(project.id, compact=False)
+    full_list = list_memories(project.id, view="detail")
 
     assert full_get["project_id"] == project.id
     assert full_get["type"] == "decision"
@@ -531,6 +531,58 @@ def test_memory_service_get_and_list_support_full_shape_for_internal_callers(tmp
     assert full_get["level"] == "L1"
     assert full_list[0]["id"] == "full0001"
     assert "project_id" in full_list[0]
+
+
+def test_list_memories_supports_query_and_detail_view(tmp_db):
+    project = _create_project("proj-list-query", "/tmp/proj-list-query")
+    create_memory(
+        project_id=project.id,
+        type="lesson",
+        title="SQLite memory",
+        content="Queryable SQLite memory content.",
+        scope="project",
+        level="L2",
+        tags=["sqlite", "query"],
+        id="lstq0001",
+    )
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="Other memory",
+        content="Unrelated content.",
+        scope="project",
+        level="L3",
+        id="lstq0002",
+    )
+
+    payloads = list_memories(project.id, query="SQLite", view="detail")
+
+    assert [payload["id"] for payload in payloads] == ["lstq0001"]
+    assert payloads[0]["type"] == "lesson"
+    assert payloads[0]["scope"] == "project"
+    assert payloads[0]["level"] == "L2"
+    assert payloads[0]["tags"] == ["sqlite", "query"]
+    assert "content_preview" not in payloads[0]
+    assert "created_at" not in payloads[0]
+
+
+def test_list_memories_rejects_invalid_view(tmp_db):
+    project = _create_project("proj-list-view", "/tmp/proj-list-view")
+    create_memory(
+        project_id=project.id,
+        type="note",
+        title="View check",
+        content="View validation content.",
+        level="L3",
+        id="lstv0001",
+    )
+
+    with pytest.raises(EngramServiceError) as raised:
+        list_memories(project.id, view="summary")
+
+    error = raised.value
+    assert error.code == "INVALID_MEMORY_VIEW"
+    assert error.details["allowed_views"] == ["compact", "detail"]
 
 
 def test_update_memory_updates_writable_fields_and_returns_dto(tmp_db):

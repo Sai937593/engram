@@ -327,6 +327,74 @@ def test_mcp_tool_memory_list_returns_compact_project_scoped_memories(tmp_db, mo
     assert "type" not in result["memories"][0]
 
 
+def test_mcp_tool_memory_list_supports_query_and_detail_view(tmp_db, monkeypatch) -> None:
+    cwd = os.path.abspath("repo/bound-mcp-tool-list-query")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    project = Project.create(
+        id="proj-tool-memory-list-query",
+        name="MCP Memory List Query Project",
+        summary="List query coverage",
+        repo_paths=[cwd],
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-list-q-1",
+        type="lesson",
+        title="Searchable memory",
+        content="Memory content mentioning SQLite and query behavior.",
+        tags=["sqlite", "query"],
+        level="L2",
+    )
+    Memory.create(
+        project_id=project.id,
+        id="mem-list-q-2",
+        type="note",
+        title="Other memory",
+        content="No matching signal here.",
+        tags=["misc"],
+        level="L3",
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_memory_list"]
+    result = yaml.safe_load(handler(query="SQLite", view="detail"))
+
+    assert result["ok"] is True
+    assert [memory["id"] for memory in result["memories"]] == ["mem-list-q-1"]
+    assert result["memories"][0]["type"] == "lesson"
+    assert result["memories"][0]["scope"] == "project"
+    assert result["memories"][0]["tags"] == ["sqlite", "query"]
+    assert "content_preview" not in result["memories"][0]
+    assert "created_at" not in result["memories"][0]
+
+
+def test_mcp_tool_memory_list_rejects_invalid_view(tmp_db, monkeypatch) -> None:
+    cwd = os.path.abspath("repo/bound-mcp-tool-list-invalid-view")
+    monkeypatch.setattr("os.getcwd", lambda: cwd)
+
+    Project.create(
+        id="proj-tool-memory-list-invalid-view",
+        name="MCP Memory List Invalid View Project",
+        summary="List invalid view coverage",
+        repo_paths=[cwd],
+    )
+
+    server = MockServer()
+    from engram.mcp.tools import register_tools
+
+    register_tools(server)
+    handler = server.tools["engram_memory_list"]
+    result = yaml.safe_load(handler(view="summary"))
+
+    assert result["ok"] is False
+    assert result["error"] == "INVALID_MEMORY_VIEW"
+    assert "view=compact or view=detail" in result["fix"]
+
+
 def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) -> None:
     """Verify memory lifecycle MCP tools delegate to service APIs with safe guidance."""
     cwd = os.path.abspath("repo/bound-mcp-memory-lifecycle")

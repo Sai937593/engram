@@ -17,6 +17,8 @@ from engram.services.memory_update_support import (
 )
 from engram.services.serializers import compact_memory_to_dict, memory_to_dict
 
+VALID_MEMORY_VIEWS = {"compact", "detail"}
+
 
 def _validate_limit(limit: int) -> int:
     """Validate memory query limits for service-layer read APIs."""
@@ -107,21 +109,27 @@ def list_memories(
     limit: int | None = None,
     include_superseded: bool = False,
     compact: bool = True,
+    query: str | None = None,
+    view: str | None = None,
 ) -> list[dict[str, JsonValue]]:
-    """Return project-scoped JSON-safe memory DTOs using list model behavior."""
-    if type_filter:
-        memories = Memory.list_by_type(
-            project_id, type_filter, include_superseded=include_superseded
-        )
-    else:
-        memories = Memory.list_by_project(project_id, include_superseded=include_superseded)
+    """Return project-scoped JSON-safe memory DTOs using list or query behavior."""
+    normalized_view = _normalize_view(view, compact=compact)
+    memories = _resolve_memory_items(
+        project_id=project_id,
+        query=query,
+        type_filter=type_filter,
+        include_superseded=include_superseded,
+    )
 
     if limit is None:
-        return [_serialize_memory(memory_item, compact=compact) for memory_item in memories]
+        return [
+            _serialize_memory(memory_item, compact=normalized_view == "compact")
+            for memory_item in memories
+        ]
 
     validated_limit = _validate_limit(limit)
     return [
-        _serialize_memory(memory_item, compact=compact)
+        _serialize_memory(memory_item, compact=normalized_view == "compact")
         for memory_item in memories[:validated_limit]
     ]
 
@@ -249,6 +257,43 @@ def delete_memories(project_id: str, memory_refs: list[str]) -> dict[str, JsonVa
         conn.close()
     deleted_ids = [memory_item.id for memory_item in resolved_memories]
     return {"deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
+
+
+def _normalize_view(view: str | None, *, compact: bool) -> str:
+    """Normalize memory list view selection while preserving the legacy compact flag."""
+    if view is None:
+        return "compact" if compact else "detail"
+    normalized = view.strip().casefold()
+    if normalized in VALID_MEMORY_VIEWS:
+        return normalized
+    raise EngramServiceError(
+        code="INVALID_MEMORY_VIEW",
+        message="Memory view is invalid.",
+        details={"view": view, "allowed_views": sorted(VALID_MEMORY_VIEWS)},
+    )
+
+
+def _resolve_memory_items(
+    *,
+    project_id: str,
+    query: str | None,
+    type_filter: str | None,
+    include_superseded: bool,
+) -> list[Memory]:
+    """Resolve either a query-backed or list-backed set of project memories."""
+    if query is not None:
+        from engram.memory_retrieval.fts_query import _extract_search_terms
+
+        if _extract_search_terms(query):
+            return Memory.search(
+                query,
+                type_filter=type_filter,
+                project_id=project_id,
+                include_superseded=include_superseded,
+            )
+    if type_filter:
+        return Memory.list_by_type(project_id, type_filter, include_superseded=include_superseded)
+    return Memory.list_by_project(project_id, include_superseded=include_superseded)
 
 
 def _serialize_memory(memory_item: Memory, *, compact: bool) -> dict[str, JsonValue]:

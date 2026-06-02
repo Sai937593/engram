@@ -36,18 +36,22 @@ def register_memory_tools(server: Any) -> None:
 
     @server.tool()
     def engram_memory_list(
-        type: str | None = None,
+        query: str | None = None,
         limit: int = 50,
+        view: str = "compact",
         include_superseded: bool = False,
+        type: str | None = None,
     ) -> str:
-        """List project-scoped memories in compact, agent-facing shape."""
+        """List project-scoped memories with compact default output and optional query filtering."""
         try:
             project = resolve_current_project()
             memories = list_memories(
                 project_id=str(project["id"]),
                 type_filter=type,
+                query=query,
                 limit=limit,
                 include_superseded=include_superseded,
+                view=view,
             )
             return _respond(
                 {
