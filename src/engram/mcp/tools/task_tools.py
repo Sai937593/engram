@@ -12,30 +12,25 @@ def register_task_tools(server: Any) -> None:
     """Register task CRUD and lifecycle tools on the server."""
 
     @server.tool()
-    def engram_task_list(status: str | None = None, phase: str | None = None) -> str:
+    def engram_task_list(
+        status: str | None = None,
+        phase_ref: str | None = None,
+        phase: str | None = None,
+        scope: str | None = "current",
+        view: str | None = "compact",
+    ) -> str:
         """List tasks for the currently bound engram project, optionally filtering by status or phase."""
         try:
             project = engram.mcp.tools.resolve_current_project()
-            tasks = engram.mcp.tools.list_tasks(
-                project_id=str(project["id"]), status=status, phase=phase
+            payload = engram.mcp.tools.build_task_list_payload(
+                project_id=str(project["id"]),
+                status=status,
+                phase_ref=phase_ref,
+                phase=phase,
+                scope=scope,
+                view=view,
             )
-            if not tasks:
-                return engram.mcp.tools._respond(
-                    {
-                        "ok": True,
-                        "tasks": [],
-                        "hint": f"No {status or 'todo'} tasks. Try status=all to see all tasks.",
-                    },
-                    keep_empty_keys={"tasks"},
-                )
-            return engram.mcp.tools._respond(
-                {
-                    "ok": True,
-                    "tasks": [engram.mcp.tools.slim_task_dict(t) for t in tasks],
-                    "hint": "Use engram_task_get <id> for full task details",
-                },
-                keep_empty_keys={"tasks"},
-            )
+            return engram.mcp.tools._respond(payload, keep_empty_keys={"items"})
         except EngramServiceError as exc:
             return engram.mcp.tools._respond_error(exc)
 

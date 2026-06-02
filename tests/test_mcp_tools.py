@@ -663,6 +663,7 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
         project_id=project.id,
         id="task-1",
         title="First Task",
+        description="Current task details",
         phase=phase.title,
         phase_id=phase.id,
         status="open",
@@ -675,6 +676,20 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
         phase_id=phase.id,
         status="in_progress",
     )
+    review_phase = Phase.create(
+        project_id=project.id,
+        id="phase-task-review",
+        title="Review Phase",
+        status="review_pending",
+    )
+    Task.create(
+        project_id=project.id,
+        id="task-3",
+        title="Review Task",
+        phase=review_phase.title,
+        phase_id=review_phase.id,
+        status="done",
+    )
 
     server = MockServer()
     from engram.mcp.tools import register_tools
@@ -682,40 +697,53 @@ def test_mcp_tool_task_list_lists_tasks(tmp_db, monkeypatch) -> None:
     register_tools(server)
     handler = server.tools["engram_task_list"]
 
-    # All tasks
-    res_all = yaml.safe_load(handler(status="all"))
-    assert res_all["ok"] is True
-    assert len(res_all["tasks"]) == 2
-    assert {t["id"] for t in res_all["tasks"]} == {"task-1", "task-2"}
-    assert res_all["hint"] == "Use engram_task_get <id> for full task details"
-    for t in res_all["tasks"]:
-        assert set(t.keys()) == {
-            "id",
-            "key",
-            "title",
-            "status",
-            "phase_id",
-            "phase_key",
-            "phase_title",
-            "is_verified",
-        }
+    # Current scope defaults to compact output for the active phase.
+    res_current = yaml.safe_load(handler())
+    assert res_current["ok"] is True
+    assert res_current["filters"]["scope"] == "current"
+    assert res_current["filters"]["status"] == "open"
+    assert res_current["filters"]["view"] == "compact"
+    assert res_current["count"] == 1
+    assert [item["id"] for item in res_current["items"]] == ["task-1"]
+    assert "description" not in res_current["items"][0]
+    assert set(res_current["items"][0].keys()) == {
+        "id",
+        "key",
+        "title",
+        "status",
+        "phase_id",
+        "phase_key",
+        "phase_title",
+        "is_verified",
+    }
+    assert res_current["next_action"] == "Use engram_task_get <id> for full task details."
 
-    # Filtered by status
-    res_open = yaml.safe_load(handler(status="open"))
-    assert res_open["ok"] is True
-    assert len(res_open["tasks"]) == 1
-    assert res_open["tasks"][0]["id"] == "task-1"
-
-    # Filtered by phase
-    res_phase = yaml.safe_load(handler(phase="Task Phase"))
+    res_phase = yaml.safe_load(handler(phase_ref="Task Phase", status="all"))
     assert res_phase["ok"] is True
-    # By default, status is None, which filters by "open"
-    assert len(res_phase["tasks"]) == 1
-    assert res_phase["tasks"][0]["id"] == "task-1"
+    assert res_phase["filters"]["phase_id"] == "phase-task-list"
+    assert {item["id"] for item in res_phase["items"]} == {"task-1", "task-2"}
+
+    # Review-pending scope resolves to the review phase.
+    res_review = yaml.safe_load(handler(scope="review_pending", status="all"))
+    assert res_review["ok"] is True
+    assert res_review["filters"]["scope"] == "review_pending"
+    assert res_review["filters"]["status"] == "all"
+    assert res_review["count"] == 1
+    assert [item["id"] for item in res_review["items"]] == ["task-3"]
+
+    # All scope can return detail output when requested.
+    res_all = yaml.safe_load(handler(scope="all", status="all", view="detail"))
+    assert res_all["ok"] is True
+    assert res_all["filters"]["scope"] == "all"
+    assert res_all["filters"]["view"] == "detail"
+    assert res_all["count"] == 3
+    assert {item["id"] for item in res_all["items"]} == {"task-1", "task-2", "task-3"}
+    assert "description" in next(item for item in res_all["items"] if item["id"] == "task-1")
+    assert res_all["next_action"] == "Use engram_task_get <id> for full task details."
 
 
 def test_mcp_tool_task_list_empty(tmp_db, monkeypatch) -> None:
-    """Verify task list empty behavior and status filter hint."""
+    """Verify task list empty behavior and resolved filters."""
     cwd = os.path.abspath("repo/bound-mcp-tool-empty")
     monkeypatch.setattr("os.getcwd", lambda: cwd)
 
@@ -733,11 +761,13 @@ def test_mcp_tool_task_list_empty(tmp_db, monkeypatch) -> None:
     handler = server.tools["engram_task_list"]
 
     res = yaml.safe_load(handler(status="todo"))
-    assert res == {
-        "ok": True,
-        "tasks": [],
-        "hint": "No todo tasks. Try status=all to see all tasks.",
-    }
+    assert res["ok"] is True
+    assert res["count"] == 0
+    assert res["items"] == []
+    assert res["filters"]["status"] == "open"
+    assert res["filters"]["scope"] == "current"
+    assert res["filters"]["view"] == "compact"
+    assert res["next_action"] == "Try scope=all to broaden the list."
 
 
 def test_mcp_tool_task_list_raises_project_not_bound(tmp_db, monkeypatch) -> None:

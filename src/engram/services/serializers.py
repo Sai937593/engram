@@ -96,12 +96,12 @@ def project_to_dict(project: Project) -> dict[str, JsonValue]:
     }
 
 
-def task_to_dict(task: Task) -> dict[str, JsonValue]:
+def task_to_dict(task: Task, *, compact: bool = False) -> dict[str, JsonValue]:
     """Serialize a Task model into a JSON-safe dictionary."""
     phase = None
     if task.phase_id:
         phase = Phase.get(task.phase_id)
-    return {
+    payload: dict[str, JsonValue] = {
         "id": str(task.id),
         "project_id": str(task.project_id),
         "key": _none_if_blank(getattr(task, "key", None) or task.id),
@@ -124,6 +124,18 @@ def task_to_dict(task: Task) -> dict[str, JsonValue]:
         "search_hints": _string_list(task.search_hints),
         "memory_review_outcome": _none_if_blank(task.memory_review_outcome),
         "is_verified": bool(task.is_verified),
+    }
+    if not compact:
+        return payload
+    return {
+        "id": payload["id"],
+        "key": payload["key"],
+        "title": payload["title"],
+        "status": payload["status"],
+        "phase_id": payload["phase_id"],
+        "phase_key": payload["phase_key"],
+        "phase_title": payload["phase_title"],
+        "is_verified": payload["is_verified"],
     }
 
 

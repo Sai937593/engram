@@ -183,6 +183,71 @@ def test_list_tasks_supports_status_all(tmp_db):
     _assert_json_safe(payloads)
 
 
+def test_list_tasks_supports_current_review_pending_and_all_scopes_in_compact_view(tmp_db):
+    project = _create_project("proj-h-scope", "/tmp/proj-h-scope")
+    current_phase = Phase.create(
+        project_id=project.id, id="phase-current", title="Current Phase", status="active"
+    )
+    review_phase = Phase.create(
+        project_id=project.id,
+        id="phase-review",
+        title="Review Phase",
+        status="review_pending",
+    )
+    Task.create(
+        project_id=project.id,
+        id="cur00001",
+        title="Current open task",
+        phase_id=current_phase.id,
+        phase=current_phase.title,
+        status="open",
+    )
+    Task.create(
+        project_id=project.id,
+        id="cur00002",
+        title="Current done task",
+        phase_id=current_phase.id,
+        phase=current_phase.title,
+        status="done",
+    )
+    Task.create(
+        project_id=project.id,
+        id="rev00001",
+        title="Review done task",
+        phase_id=review_phase.id,
+        phase=review_phase.title,
+        status="done",
+    )
+    Task.create(project_id=project.id, id="all00006", title="Unphased open task", status="open")
+
+    current_payloads = list_tasks(project.id, scope="current", view="compact")
+    review_payloads = list_tasks(project.id, scope="review_pending", view="compact")
+    all_payloads = list_tasks(project.id, status="all", scope="all", view="compact")
+
+    assert [payload["id"] for payload in current_payloads] == ["cur00001"]
+    assert {payload["id"] for payload in review_payloads} == {"rev00001"}
+    assert {payload["id"] for payload in all_payloads} == {
+        "cur00001",
+        "cur00002",
+        "rev00001",
+        "all00006",
+    }
+    for payload in current_payloads + review_payloads + all_payloads:
+        assert set(payload.keys()) == {
+            "id",
+            "key",
+            "title",
+            "status",
+            "phase_id",
+            "phase_key",
+            "phase_title",
+            "is_verified",
+        }
+    _assert_json_safe(current_payloads)
+    _assert_json_safe(review_payloads)
+    _assert_json_safe(all_payloads)
+
+
 def test_list_tasks_filters_by_effective_status(tmp_db):
     project = _create_project("proj-i", "/tmp/proj-i")
     dependency = Task.create(project_id=project.id, id="depd1001", title="Dependency")

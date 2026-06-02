@@ -150,6 +150,44 @@ def slim_task_dict(task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_task_list_payload(
+    *,
+    project_id: str,
+    status: str | None = None,
+    phase_ref: str | None = None,
+    phase: str | None = None,
+    scope: str | None = None,
+    view: str | None = None,
+) -> dict[str, Any]:
+    """Build the standard task list response payload."""
+    from engram.services.task import list_tasks, resolve_task_list_filters
+
+    effective_phase_ref = phase_ref if phase_ref is not None else phase
+    filters = resolve_task_list_filters(
+        project_id=project_id,
+        status=status,
+        phase_ref=effective_phase_ref,
+        scope=scope,
+        view=view,
+    )
+    items = list_tasks(
+        project_id=project_id,
+        status=status,
+        phase_ref=effective_phase_ref,
+        scope=scope,
+        view=view,
+    )
+    return {
+        "ok": True,
+        "filters": filters,
+        "count": len(items),
+        "items": items,
+        "next_action": "Use engram_task_get <id> for full task details."
+        if items
+        else "Try scope=all to broaden the list.",
+    }
+
+
 def slim_phase_dict(phase: dict[str, Any]) -> dict[str, Any]:
     """Prune a full phase dictionary to essential scan fields only."""
     slimmed = {

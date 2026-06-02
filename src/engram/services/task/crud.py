@@ -31,6 +31,7 @@ from engram.services.task.validation import (
 from engram.services.task.validation import (
     validate_status_field as _validate_status_field,
 )
+from engram.services.workflow_helpers import task_matches_phase as _task_matches_phase
 
 
 class _Helpers:
@@ -57,6 +58,39 @@ class _Helpers:
             message="Task status filter is invalid.",
             details={"status": status, "allowed_statuses": sorted(_VALID_TASK_STATUSES)},
         )
+
+    @staticmethod
+    def normalize_scope(scope: str | None) -> str:
+        """Normalize and validate task list scope values."""
+        if scope is None:
+            return "current"
+        normalized = scope.strip().casefold().replace("-", "_")
+        if normalized in {"current", "review_pending", "all"}:
+            return normalized
+        raise _ValidationError(
+            code="INVALID_TASK_SCOPE",
+            message="Task scope filter is invalid.",
+            details={"scope": scope, "allowed_scopes": ["current", "review_pending", "all"]},
+        )
+
+    @staticmethod
+    def normalize_view(view: str | None, *, default: str = "detail") -> str:
+        """Normalize and validate task list view values."""
+        if view is None or not str(view).strip():
+            return default
+        normalized = view.strip().casefold()
+        if normalized in {"compact", "detail"}:
+            return normalized
+        raise _ValidationError(
+            code="INVALID_TASK_VIEW",
+            message="Task view filter is invalid.",
+            details={"view": view, "allowed_views": ["compact", "detail"]},
+        )
+
+    @staticmethod
+    def default_status_for_scope(scope: str) -> str:
+        """Return the default status filter for a task list scope."""
+        return "open" if scope == "current" else "all"
 
     @staticmethod
     def resolve_phase_filter(project_id: str, phase: str | None) -> tuple[str | None, str]:
@@ -93,6 +127,17 @@ class _Helpers:
                 ):
                     filtered.append(t)
             elif not t.phase_id and _Helpers.normalize_phase_title(t.phase) == normalized_phase:
+                filtered.append(t)
+        return filtered
+
+    @staticmethod
+    def filter_by_phases(tasks: list[_Task], phases: list[_Phase]) -> list[_Task]:
+        """Filter tasks by multiple resolved phases."""
+        if not phases:
+            return tasks
+        filtered: list[_Task] = []
+        for t in tasks:
+            if any(_task_matches_phase(t, phase) for phase in phases):
                 filtered.append(t)
         return filtered
 
@@ -169,16 +214,131 @@ class _Helpers:
                 )
 
 
+def _resolve_task_list_context(
+    project_id: str,
+    status: str | None = None,
+    phase_ref: str | None = None,
+    scope: str | None = None,
+    view: str | None = None,
+) -> tuple[dict[str, object], list[_Phase], str]:
+    """Resolve list filters and the phase slice used to filter tasks."""
+    normalized_scope = _Helpers.normalize_scope(scope)
+    normalized_view = _Helpers.normalize_view(view, default="detail")
+    default_status = _Helpers.default_status_for_scope(normalized_scope)
+    normalized_status = _Helpers.normalize_status(status or default_status)
+
+    phases: list[_Phase] = []
+    resolved_phase_ref: str | None = None
+    resolved_phase_title: str | None = None
+    normalized_phase_title: str | None = None
+
+    if phase_ref is not None and phase_ref.strip():
+        candidate = phase_ref.strip()
+        phase_id, normalized_phase_title = _Helpers.resolve_phase_filter(project_id, candidate)
+        if phase_id:
+            phase = _Phase.get(phase_id)
+            if phase and phase.project_id == project_id:
+                phases = [phase]
+                resolved_phase_ref = phase.id
+                resolved_phase_title = phase.title
+        if resolved_phase_ref is None:
+            resolved_phase_ref = candidate
+    elif normalized_scope == "current":
+        phases = [phase for phase in _Phase.list_by_project(project_id) if phase.status == "active"]
+        if phases:
+            resolved_phase_ref = phases[0].id
+            resolved_phase_title = phases[0].title
+            normalized_phase_title = _Helpers.normalize_phase_title(phases[0].title)
+    elif normalized_scope == "review_pending":
+        phases = [
+            phase
+            for phase in _Phase.list_by_project(project_id)
+            if phase.status == "review_pending"
+        ]
+        if phases:
+            resolved_phase_ref = phases[0].id
+            resolved_phase_title = phases[0].title
+            normalized_phase_title = _Helpers.normalize_phase_title(phases[0].title)
+
+    filters: dict[str, object] = {
+        "status": normalized_status,
+        "phase_ref": resolved_phase_ref,
+        "phase_id": phases[0].id if phases else None,
+        "phase_key": phases[0].key if phases and getattr(phases[0], "key", None) else None,
+        "phase_title": resolved_phase_title,
+        "scope": normalized_scope,
+        "view": normalized_view,
+    }
+    if not phases and phase_ref is not None and phase_ref.strip() and normalized_phase_title:
+        filters["phase_title"] = None
+    return filters, phases, normalized_phase_title or ""
+
+
+def resolve_task_list_filters(
+    project_id: str,
+    status: str | None = None,
+    phase_ref: str | None = None,
+    scope: str | None = None,
+    view: str | None = None,
+) -> dict[str, object]:
+    """Return resolved task list filters without fetching task rows."""
+    filters, _, _ = _resolve_task_list_context(
+        project_id=project_id, status=status, phase_ref=phase_ref, scope=scope, view=view
+    )
+    return filters
+
+
 def list_tasks(
-    project_id: str, status: str | None = None, phase: str | None = None
+    project_id: str,
+    status: str | None = None,
+    phase_ref: str | None = None,
+    phase: str | None = None,
+    scope: str | None = None,
+    view: str | None = None,
 ) -> list[dict[str, object]]:
-    """Return JSON-safe task DTOs filtered by effective status and optional phase."""
-    normalized_status = _Helpers.normalize_status(status)
-    filtered_tasks = _Helpers.filter_by_phase(_Task.list_by_project(project_id), project_id, phase)
-    task_payloads = [_task_to_dict(t) for t in filtered_tasks]
-    if normalized_status == "all":
-        return task_payloads
-    return [t for t in task_payloads if t["effective_status"] == normalized_status]
+    """Return JSON-safe task DTOs filtered by resolved scope, phase, and status."""
+    effective_phase_ref = phase_ref if phase_ref is not None else phase
+    filters, phase_matches, normalized_phase_title = _resolve_task_list_context(
+        project_id=project_id,
+        status=status,
+        phase_ref=effective_phase_ref,
+        scope=scope,
+        view=view,
+    )
+    normalized_status = str(filters["status"])
+    tasks = _Task.list_by_project(project_id)
+    if phase_matches:
+        tasks = _Helpers.filter_by_phases(tasks, phase_matches)
+    elif effective_phase_ref and str(effective_phase_ref).strip() and normalized_phase_title:
+        tasks = [
+            task
+            for task in tasks
+            if not task.phase_id
+            and _Helpers.normalize_phase_title(task.phase) == normalized_phase_title
+        ]
+    elif effective_phase_ref and str(effective_phase_ref).strip():
+        tasks = []
+    elif filters["scope"] == "review_pending":
+        return []
+
+    task_payloads = [_task_to_dict(t) for t in tasks]
+    if normalized_status != "all":
+        task_payloads = [t for t in task_payloads if t["effective_status"] == normalized_status]
+    if filters["view"] == "compact":
+        task_payloads = [
+            {
+                "id": t["id"],
+                "key": t["key"],
+                "title": t["title"],
+                "status": t["status"],
+                "phase_id": t["phase_id"],
+                "phase_key": t["phase_key"],
+                "phase_title": t["phase_title"],
+                "is_verified": t["is_verified"],
+            }
+            for t in task_payloads
+        ]
+    return task_payloads
 
 
 def get_task(project_id: str, task_ref: str) -> dict[str, object]:

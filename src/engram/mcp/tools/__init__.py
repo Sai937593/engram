@@ -7,6 +7,7 @@ from typing import Any
 from engram.mcp.tools.helpers import (
     _respond,
     _respond_error,
+    build_task_list_payload,
     slim_phase_dict,
     slim_task_dict,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "register_tools",
     "_respond",
     "_respond_error",
+    "build_task_list_payload",
     "slim_phase_dict",
     "slim_task_dict",
     "register_memory_tools",

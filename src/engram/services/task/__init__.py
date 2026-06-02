@@ -9,6 +9,7 @@ from engram.services.task.crud import (
     get_task,
     list_tasks,
     record_memory_review_outcome,
+    resolve_task_list_filters,
     update_task,
 )
 from engram.services.task.lifecycle import complete_task, get_next_task, start_task
@@ -27,6 +28,7 @@ __all__ = [
     "append_task_note",
     "get_task",
     "list_tasks",
+    "resolve_task_list_filters",
     "start_task",
     "complete_task",
     "block_task",

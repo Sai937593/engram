@@ -96,6 +96,47 @@ def test_task_to_dict_shape_lists_optional_values_and_effective_status(monkeypat
     _assert_json_safe(payload)
 
 
+def test_task_to_dict_compact_shape_omits_descriptions(monkeypatch):
+    phase = Phase(
+        id="phase1234",
+        project_id="proj1234",
+        title="Phase Title",
+        status="active",
+        order_index=1,
+        key="phase-key",
+    )
+    monkeypatch.setattr(
+        serializers.Phase,
+        "get",
+        classmethod(lambda cls, phase_id: phase if phase_id == "phase1234" else None),
+    )
+    task = Task(
+        id="task1234",
+        project_id="proj1234",
+        title="Implement serializers",
+        description="Task details",
+        status="in_progress",
+        priority="high",
+        phase="Phase Title",
+        phase_id="phase1234",
+        is_verified=True,
+    )
+
+    payload = task_to_dict(task, compact=True)
+
+    assert payload == {
+        "id": "task1234",
+        "key": "task1234",
+        "title": "Implement serializers",
+        "status": "in_progress",
+        "phase_id": "phase1234",
+        "phase_key": "phase-key",
+        "phase_title": "Phase Title",
+        "is_verified": True,
+    }
+    _assert_json_safe(payload)
+
+
 def test_task_to_dict_with_memory_review_outcome(monkeypatch):
     task = Task(
         id="task1234",
