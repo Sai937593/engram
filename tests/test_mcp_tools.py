@@ -162,6 +162,15 @@ def test_mcp_tool_resolves_current_project(tmp_path, monkeypatch) -> None:
         "name": "MCP Tool Project",
         "status": "active",
     }
+    assert set(result.keys()) == {
+        "ok",
+        "initialized",
+        "status",
+        "repo_root",
+        "db_path",
+        "db_exists",
+        "project",
+    }
 
 
 def test_mcp_tool_returns_actionable_uninitialized_for_unbound_repo(tmp_path, monkeypatch) -> None:
@@ -182,6 +191,15 @@ def test_mcp_tool_returns_actionable_uninitialized_for_unbound_repo(tmp_path, mo
     assert result["initialized"] is False
     assert result["status"] in {"uninitialized", "unresolved-workspace"}
     assert "next" in result
+    assert set(result.keys()) == {
+        "ok",
+        "initialized",
+        "status",
+        "repo_root",
+        "db_path",
+        "db_exists",
+        "next",
+    }
 
 
 def test_mcp_project_diagnostics_reports_misconfigured_missing_gitignore_entry(
@@ -2426,6 +2444,15 @@ def test_mcp_project_init_and_diagnostics_work_across_fresh_workspaces_with_same
         assert before["initialized"] is False
         assert before["status"] in {"uninitialized", "unresolved-workspace"}
         assert "next" in before
+        assert set(before.keys()) == {
+            "ok",
+            "initialized",
+            "status",
+            "repo_root",
+            "db_path",
+            "db_exists",
+            "next",
+        }
 
         initialized = yaml.safe_load(
             init_handler(
