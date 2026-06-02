@@ -32,7 +32,7 @@ def _require_arg(name: str, value: Any) -> None:
 
 
 def register_memory_lifecycle_tools(server: Any) -> None:
-    """Register memory lifecycle MCP tools on the server."""
+    """Register normal memory lifecycle MCP tools on the server."""
 
     @server.tool()
     def engram_memory_get(memory_ref: str | None = None) -> str:
@@ -68,6 +68,52 @@ def register_memory_lifecycle_tools(server: Any) -> None:
             return _respond({"ok": True, "memory": memory_item})
         except EngramServiceError as exc:
             return _respond_error(exc)
+
+    @server.tool()
+    def engram_memory_update_many(entries: list[dict[str, Any]] | None = None) -> str:
+        try:
+            project = resolve_current_project()
+            if entries is None or not entries:
+                raise ValidationError(
+                    code="VALIDATION_ERROR",
+                    message="Missing required argument: entries.",
+                    details={"field": "entries"},
+                )
+            summary = update_memories(project_id=str(project["id"]), entries=entries)
+            return _respond({"ok": True, **summary})
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+    @server.tool()
+    def engram_memory_delete_many(memory_refs: list[str] | None = None) -> str:
+        try:
+            project = resolve_current_project()
+            if memory_refs is None or not memory_refs:
+                raise ValidationError(
+                    code="VALIDATION_ERROR",
+                    message="Missing required argument: memory_refs.",
+                    details={"field": "memory_refs"},
+                )
+            summary = delete_memories(project_id=str(project["id"]), memory_refs=memory_refs)
+            return _respond({"ok": True, **summary})
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+    @server.tool()
+    def engram_memory_delete(memory_ref: str | None = None, force: bool = False) -> str:
+        try:
+            project = resolve_current_project()
+            _require_arg("memory_ref", memory_ref)
+            deletion = delete_memory(
+                project_id=str(project["id"]), memory_ref=memory_ref, force=force
+            )
+            return _respond({"ok": True, **deletion})
+        except EngramServiceError as exc:
+            return _respond_error(exc)
+
+
+def register_memory_advanced_lifecycle_tools(server: Any) -> None:
+    """Register advanced memory lifecycle MCP tools on the server."""
 
     @server.tool()
     def engram_memory_supersede(
@@ -124,47 +170,5 @@ def register_memory_lifecycle_tools(server: Any) -> None:
             _require_arg("memory_ref", memory_ref)
             memory_item = archive_memory(project_id=str(project["id"]), memory_ref=memory_ref)
             return _respond({"ok": True, "memory": memory_item})
-        except EngramServiceError as exc:
-            return _respond_error(exc)
-
-    @server.tool()
-    def engram_memory_delete(memory_ref: str | None = None, force: bool = False) -> str:
-        try:
-            project = resolve_current_project()
-            _require_arg("memory_ref", memory_ref)
-            deletion = delete_memory(
-                project_id=str(project["id"]), memory_ref=memory_ref, force=force
-            )
-            return _respond({"ok": True, **deletion})
-        except EngramServiceError as exc:
-            return _respond_error(exc)
-
-    @server.tool()
-    def engram_memory_update_many(entries: list[dict[str, Any]] | None = None) -> str:
-        try:
-            project = resolve_current_project()
-            if entries is None or not entries:
-                raise ValidationError(
-                    code="VALIDATION_ERROR",
-                    message="Missing required argument: entries.",
-                    details={"field": "entries"},
-                )
-            summary = update_memories(project_id=str(project["id"]), entries=entries)
-            return _respond({"ok": True, **summary})
-        except EngramServiceError as exc:
-            return _respond_error(exc)
-
-    @server.tool()
-    def engram_memory_delete_many(memory_refs: list[str] | None = None) -> str:
-        try:
-            project = resolve_current_project()
-            if memory_refs is None or not memory_refs:
-                raise ValidationError(
-                    code="VALIDATION_ERROR",
-                    message="Missing required argument: memory_refs.",
-                    details={"field": "memory_refs"},
-                )
-            summary = delete_memories(project_id=str(project["id"]), memory_refs=memory_refs)
-            return _respond({"ok": True, **summary})
         except EngramServiceError as exc:
             return _respond_error(exc)

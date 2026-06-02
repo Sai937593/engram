@@ -512,9 +512,6 @@ def test_register_tools_registers_expected_fastmcp_tools() -> None:
         "engram_memory_create",
         "engram_memory_get",
         "engram_memory_update",
-        "engram_memory_supersede",
-        "engram_memory_demote",
-        "engram_memory_archive",
         "engram_memory_delete",
         "engram_memory_update_many",
         "engram_memory_delete_many",
@@ -610,6 +607,7 @@ def test_mcp_memory_tools_default_contract_is_compact_and_lifecycle_light(tmp_db
     assert updated["memory"]["id"] == memory_id
     assert updated["memory"]["title"] == "Compact default updated"
     assert updated["memory"]["content"] == "Updated compact output guidance."
+    assert "superseded_by" not in updated["memory"]
 
     deleted = yaml.safe_load(server.tools["engram_memory_delete"](memory_ref=memory_id, force=True))
     assert deleted == {"ok": True, "id": memory_id, "deleted": True}

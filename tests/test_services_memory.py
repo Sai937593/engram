@@ -79,6 +79,7 @@ def test_search_memories_returns_project_scoped_json_safe_payloads(tmp_db):
     assert payloads[0]["type"] == "lesson"
     assert isinstance(payloads[0]["always_include"], bool)
     assert isinstance(payloads[0]["tags"], list)
+    assert "superseded_by" not in payloads[0]
 
 
 def test_list_memories_returns_project_scoped_json_safe_payloads(tmp_db):
@@ -119,6 +120,7 @@ def test_list_memories_returns_project_scoped_json_safe_payloads(tmp_db):
     assert "content_preview" in payloads[0]
     assert "created_at" in payloads[0]
     assert "updated_at" in payloads[0]
+    assert "superseded_by" not in payloads[0]
 
 
 def test_list_memories_applies_type_filter(tmp_db):
@@ -529,8 +531,10 @@ def test_memory_service_get_and_list_support_full_shape_for_internal_callers(tmp
     assert full_get["type"] == "decision"
     assert full_get["scope"] == "project"
     assert full_get["level"] == "L1"
+    assert full_get["superseded_by"] is None
     assert full_list[0]["id"] == "full0001"
     assert "project_id" in full_list[0]
+    assert full_list[0]["superseded_by"] is None
 
 
 def test_list_memories_supports_query_and_detail_view(tmp_db):
@@ -564,6 +568,7 @@ def test_list_memories_supports_query_and_detail_view(tmp_db):
     assert payloads[0]["tags"] == ["sqlite", "query"]
     assert "content_preview" not in payloads[0]
     assert "created_at" not in payloads[0]
+    assert payloads[0]["superseded_by"] is None
 
 
 def test_list_memories_rejects_invalid_view(tmp_db):

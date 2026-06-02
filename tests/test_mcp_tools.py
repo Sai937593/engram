@@ -82,18 +82,15 @@ def test_register_tools_registers_engram_project_current() -> None:
     assert server.tools["engram_memory_get"].__name__ == "engram_memory_get"
     assert "engram_memory_update" in server.tools
     assert server.tools["engram_memory_update"].__name__ == "engram_memory_update"
-    assert "engram_memory_supersede" in server.tools
-    assert server.tools["engram_memory_supersede"].__name__ == "engram_memory_supersede"
-    assert "engram_memory_demote" in server.tools
-    assert server.tools["engram_memory_demote"].__name__ == "engram_memory_demote"
-    assert "engram_memory_archive" in server.tools
-    assert server.tools["engram_memory_archive"].__name__ == "engram_memory_archive"
     assert "engram_memory_delete" in server.tools
     assert server.tools["engram_memory_delete"].__name__ == "engram_memory_delete"
     assert "engram_memory_update_many" in server.tools
     assert server.tools["engram_memory_update_many"].__name__ == "engram_memory_update_many"
     assert "engram_memory_delete_many" in server.tools
     assert server.tools["engram_memory_delete_many"].__name__ == "engram_memory_delete_many"
+    assert "engram_memory_supersede" not in server.tools
+    assert "engram_memory_demote" not in server.tools
+    assert "engram_memory_archive" not in server.tools
     assert "engram_phase_start" in server.tools
     assert server.tools["engram_phase_start"].__name__ == "engram_phase_start"
     assert "engram_phase_complete" in server.tools
@@ -421,9 +418,13 @@ def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) 
         level="L1",
     )
     server = MockServer()
-    from engram.mcp.tools import register_tools
+    from engram.mcp.tools import (
+        register_memory_advanced_lifecycle_tools,
+        register_memory_lifecycle_tools,
+    )
 
-    register_tools(server)
+    register_memory_lifecycle_tools(server)
+    register_memory_advanced_lifecycle_tools(server)
     get_tool = server.tools["engram_memory_get"]
     update_tool = server.tools["engram_memory_update"]
     supersede_tool = server.tools["engram_memory_supersede"]
@@ -436,18 +437,21 @@ def test_mcp_memory_lifecycle_tools_happy_and_safe_failure(tmp_db, monkeypatch) 
     assert got["memory"]["id"] == "mem-lifecycle-source"
     assert "content_preview" in got["memory"]
     assert "type" not in got["memory"]
+    assert "superseded_by" not in got["memory"]
 
     updated = yaml.safe_load(
         update_tool(memory_ref="mem-lifecycle-source", updates={"title": "Updated decision"})
     )
     assert updated["ok"] is True
     assert updated["memory"]["title"] == "Updated decision"
+    assert "superseded_by" not in updated["memory"]
 
     updated_direct = yaml.safe_load(
         update_tool(memory_ref="mem-lifecycle-source", content="Updated content directly")
     )
     assert updated_direct["ok"] is True
     assert updated_direct["memory"]["content"] == "Updated content directly"
+    assert "superseded_by" not in updated_direct["memory"]
 
     superseded = yaml.safe_load(
         supersede_tool(

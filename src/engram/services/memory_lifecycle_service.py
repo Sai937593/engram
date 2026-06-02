@@ -56,7 +56,7 @@ def demote_memory(project_id: str, memory_ref: str, *, reason: str) -> dict[str,
             message="Memory demotion failed validation.",
             details={"reason": str(exc), "memory_ref": memory_item.id},
         ) from exc
-    return memory_to_dict(memory_item)
+    return memory_to_dict(memory_item, include_lifecycle=True)
 
 
 def archive_memory(project_id: str, memory_ref: str) -> dict[str, JsonValue]:
@@ -69,7 +69,7 @@ def archive_memory(project_id: str, memory_ref: str) -> dict[str, JsonValue]:
             details={"memory_ref": memory_item.id, "superseded_by": memory_item.superseded_by},
         )
     memory_item.update(superseded_by=memory_item.id)
-    return memory_to_dict(memory_item)
+    return memory_to_dict(memory_item, include_lifecycle=True)
 
 
 def delete_memory(project_id: str, memory_ref: str, *, force: bool = False) -> dict[str, JsonValue]:

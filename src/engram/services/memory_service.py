@@ -73,23 +73,22 @@ def search_memories(
     terms = _extract_search_terms(query)
 
     if not terms:
-        # Fallback to listing memories
-        memories = list_memories(
-            project_id,
+        memories = _resolve_memory_items(
+            project_id=project_id,
+            query=None,
             type_filter=type_filter,
             include_superseded=include_superseded,
-            compact=False,
         )
         if tags:
-            # Filter by tags manually in Python
             filtered = []
-            for m in memories:
-                # tags DTO is a list
-                m_tags = m.get("tags") or []
-                if all(any(tag.lower() in mt.lower() for mt in m_tags) for tag in tags):
-                    filtered.append(m)
+            for memory_item in memories:
+                if all(
+                    any(tag.lower() in memory_tag.lower() for memory_tag in memory_item.tags)
+                    for tag in tags
+                ):
+                    filtered.append(memory_item)
             memories = filtered
-        return memories[:validated_limit]
+        return [memory_to_dict(memory_item) for memory_item in memories[:validated_limit]]
 
     # Optimization: Filter by project_id in the database instead of in-memory.
     matches = Memory.search(
@@ -192,7 +191,7 @@ def create_memory(
             message="Memory creation failed validation.",
             details={"reason": str(exc)},
         ) from exc
-    return memory_to_dict(memory_item)
+    return memory_to_dict(memory_item, include_lifecycle=True)
 
 
 def get_memory(project_id: str, memory_ref: str, compact: bool = True) -> dict[str, JsonValue]:
@@ -298,7 +297,7 @@ def _resolve_memory_items(
 
 def _serialize_memory(memory_item: Memory, *, compact: bool) -> dict[str, JsonValue]:
     if not compact:
-        return memory_to_dict(memory_item)
+        return memory_to_dict(memory_item, include_lifecycle=True)
     conn = get_db_connection()
     row = conn.execute(
         "SELECT created_at, updated_at FROM memories WHERE id = ?",

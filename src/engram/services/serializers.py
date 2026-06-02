@@ -139,9 +139,9 @@ def task_to_dict(task: Task, *, compact: bool = False) -> dict[str, JsonValue]:
     }
 
 
-def memory_to_dict(memory: Memory) -> dict[str, JsonValue]:
+def memory_to_dict(memory: Memory, *, include_lifecycle: bool = False) -> dict[str, JsonValue]:
     """Serialize a Memory model into a JSON-safe dictionary."""
-    return {
+    payload: dict[str, JsonValue] = {
         "id": str(memory.id),
         "project_id": str(memory.project_id),
         "type": str(memory.type),
@@ -152,8 +152,10 @@ def memory_to_dict(memory: Memory) -> dict[str, JsonValue]:
         "tags": _string_list(memory.tags),
         "always_include": bool(memory.always_include),
         "level": _none_if_blank(memory.level),
-        "superseded_by": _none_if_blank(getattr(memory, "superseded_by", None)),
     }
+    if include_lifecycle:
+        payload["superseded_by"] = _none_if_blank(getattr(memory, "superseded_by", None))
+    return payload
 
 
 def compact_memory_to_dict(

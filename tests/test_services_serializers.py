@@ -178,8 +178,23 @@ def test_memory_to_dict_shape_and_optional_values():
         "tags": ["mcp"],
         "always_include": True,
         "level": None,
-        "superseded_by": None,
     }
+    _assert_json_safe(payload)
+
+
+def test_memory_to_dict_can_include_lifecycle_metadata_when_requested():
+    memory = Memory(
+        id="mem12345",
+        project_id="proj1234",
+        type="note",
+        title="Temp note",
+        content="Body",
+        superseded_by="mem99999",
+    )
+
+    payload = memory_to_dict(memory, include_lifecycle=True)
+
+    assert payload["superseded_by"] == "mem99999"
     _assert_json_safe(payload)
 
 

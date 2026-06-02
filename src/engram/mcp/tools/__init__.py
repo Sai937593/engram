@@ -11,7 +11,10 @@ from engram.mcp.tools.helpers import (
     slim_phase_dict,
     slim_task_dict,
 )
-from engram.mcp.tools.memory_lifecycle_tools import register_memory_lifecycle_tools
+from engram.mcp.tools.memory_lifecycle_tools import (
+    register_memory_advanced_lifecycle_tools,
+    register_memory_lifecycle_tools,
+)
 from engram.mcp.tools.memory_tools import register_memory_tools
 from engram.mcp.tools.phase_tools import register_phase_tools
 from engram.mcp.tools.task_batch_tools import register_task_batch_tools
@@ -59,6 +62,7 @@ __all__ = [
     "slim_task_dict",
     "register_memory_tools",
     "register_memory_lifecycle_tools",
+    "register_memory_advanced_lifecycle_tools",
     "register_phase_tools",
     "register_task_batch_tools",
     "register_task_maintenance_tools",
