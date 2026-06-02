@@ -6,6 +6,8 @@ Use this skill when the user says a phase is complete, asks to review a phase, o
 
 Review completed phase work, clean up durable memory using simple CRUD memory tools, and prepare a concise handoff without assuming a merge target.
 
+This is phase-level memory curation guidance only. It is not part of the active task finish gate.
+
 ## Available Tools
 
 Use simplified phase and memory tools:

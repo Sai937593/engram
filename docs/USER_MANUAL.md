@@ -2,6 +2,8 @@
 
 Engram is a local-first, agent-agnostic persistent memory system for AI coding assistants and developers. It stores durable project context in a repo-local SQLite database (`.engram/memory.db`) and exposes it programmatically through a custom Model Context Protocol (MCP) server, alongside a trimmed companion CLI for optional human setup and diagnostics.
 
+The authoritative agent workflow source is [ADR 0002](adr/0002-workflow-mvp-simplification.md). The current MVP loop is start -> implement -> verify -> finish_and_commit.
+
 ---
 
 ## 1. Core Concepts
@@ -17,9 +19,10 @@ Phases are first-class project milestones that group related tasks.
 
 ### Tasks
 Tasks are specific actionable units of work.
-- **Lifecycle:** `draft -> ready -> in-progress -> done | blocked | cancelled`
+- **Lifecycle:** `open -> in_progress -> blocked -> done | cancelled`
 - **Priority levels:** `low | medium | high | critical`
 - **Metadata:** `title`, `description`, `acceptance`, `evidence`, `phase_id`, `tags`, `depends_on`, `relevant_files`.
+- **Verification:** Tasks carry `is_verified` to track whether the current workflow verification gate has passed.
 - Agents automatically resolve task context and associated dependencies programmatically.
 
 ### Memories
@@ -99,11 +102,11 @@ The MCP server exposes 17 tools for full interactive capabilities:
 *   **Task Management:**
     *   `engram_task_list`: Filters and lists project tasks by status or phase.
     *   `engram_task_get`: Retrieves full details of a specific task.
-    *   `engram_task_next`: Returns the highest-priority actionable `ready` task.
+    *   `engram_task_next`: Returns the highest-priority actionable `open` task.
     *   `engram_task_create`: Creates a new project task.
     *   `engram_task_update`: Modifies properties of a task.
     *   `engram_task_note_append`: Appends a timestamped log note to a task's evidence.
-    *   `engram_task_start`: Transition task status to `in-progress`.
+    *   `engram_task_start`: Transition task status to `in_progress`.
     *   `engram_task_done`: Transition task status to `done` with evidence.
 *   **Memory Management:**
     *   `engram_memory_list`: Lists memories for the active project.
@@ -136,8 +139,8 @@ engram init --name "my-app"
 
 ### Step 2: Session Startup & Claiming Work
 At the beginning of each session, the agent calls the `engram_workflow_start` tool.
-*   If a task is already `in-progress`, the agent resumes it.
-*   If no task is active, the agent claims the highest priority `todo` task, checks out its target branch, and retrieves the packed context.
+*   If a task is already `in_progress`, the agent resumes it.
+*   If no task is active, the agent claims the highest priority `open` task, checks out its target branch, and retrieves the packed context.
 *   If no tasks exist, the agent prompts the developer or uses `engram_task_create` to define the first task.
 
 When creating tasks from implementation phase documents, use the Task
@@ -154,10 +157,10 @@ During the coding phase, the agent implements the scoped task and records diagno
 
 ### Step 5: Verification & Session Completion
 When the implementation is complete and verified:
-*   The agent calls `engram_workflow_finish_and_commit` to commit and push already-staged verified changes.
+*   The agent calls `engram_workflow_finish_and_commit` to commit and push already-staged verified changes. `engram_workflow_finish` remains transitional only.
 
 ### Step 6: Phase-Level Memory Review
-During phase completion, review durable lessons and decisions using memory CRUD plus batch helpers (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`, `engram_memory_update_many`, `engram_memory_delete_many`) before running `engram_phase_complete`.
+During phase completion, review durable lessons and decisions using memory CRUD plus batch helpers (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`, `engram_memory_update_many`, `engram_memory_delete_many`) before running `engram_phase_complete`. This is phase-level curation, not a task-finish gate.
 
 ---
 

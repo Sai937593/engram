@@ -9,6 +9,14 @@
 
 Engram is a local-first, agent-agnostic persistent memory system for AI coding assistants and developers. It is built primarily around a **Model Context Protocol (MCP)** server that exposes project-level memory, tasks, phases, and workflows directly to AI agents, with a trimmed companion CLI (`init`, `guide`, `db`) kept for optional human setup and diagnostics.
 
+## Workflow Source
+
+The authoritative agent workflow contract is [ADR 0002](docs/adr/0002-workflow-mvp-simplification.md). The simplified MVP loop is:
+
+```text
+engram_workflow_start -> implement -> engram_workflow_verify -> engram_workflow_finish_and_commit
+```
+
 ## The Problem
 
 LLM coding agents are highly capable, but they usually lose critical context between sessions:
@@ -40,7 +48,7 @@ graph TD
 ## Features
 
 - **MCP-First Architecture:** Exposes a robust Model Context Protocol (MCP) server providing 17 specialized tools and 4 local resources directly to AI agents.
-- **Project-aware task tracking:** Programmatic task states (`todo`, `in-progress`, `done`, `blocked`, and `cancelled`) mapped automatically to the current workspace.
+- **Project-aware task tracking:** Programmatic task states (`open`, `in_progress`, `blocked`, `done`, and `cancelled`) mapped automatically to the current workspace.
 - **Task-scoped relevant file path hints:** Faster startup navigation for agents without code parsing overhead.
 - **Persistent memories:** Categorized memories for notes, decisions, lessons, constraints, and reusable snippets.
 - **Full-text search:** In-memory and SQLite FTS5 search index over all captured memories.
@@ -86,7 +94,7 @@ Once connected, your agent will programmatically invoke MCP tools and resources 
 The agent automatically reads the `engram://startup` resource to load the active project summary, active tasks, guardrails, and memory candidates.
 
 **Claim and Start a Task:**
-The agent calls `engram_workflow_start` to claim the next task and establish the working branch.
+The agent calls `engram_workflow_start` to claim the next task and establish the working branch. The workflow contract is defined in ADR 0002.
 Or they can create a task programmatically via the `engram_task_create` tool:
 ```json
 {
@@ -107,7 +115,7 @@ During development, the agent captures critical decisions or constraints via `en
 ```
 
 **Finish the Task:**
-Once verification passes, the agent calls `engram_workflow_finish_and_commit` (or transitional alias `engram_workflow_finish`) to commit and push already-staged verified changes and mark the task as done.
+Once verification passes, the agent calls `engram_workflow_finish_and_commit` to commit and push already-staged verified changes and mark the task as done. `engram_workflow_finish` remains a transitional alias only.
 
 ---
 
@@ -128,18 +136,18 @@ engram db                # Inspect repo-local database path, size, and integrity
 Engram exposes the following interface to connected AI agents:
 
 ### Resources
-- `engram://startup` — Active project status, active tasks, guardrails, and memory candidates.
-- `engram://task/{task_id}/context` — Detailed task context including requirements, acceptance criteria, and relevant memories.
-- `engram://snapshot` — A full Markdown snapshot of all tasks, phases, and memories in the project.
-- `engram://handoff` — A focused Markdown summary of recent achievements, active blockers, and planned next steps.
+- `engram://startup` â€” Active project status, active tasks, guardrails, and memory candidates.
+- `engram://task/{task_id}/context` â€” Detailed task context including requirements, acceptance criteria, and relevant memories.
+- `engram://snapshot` â€” A full Markdown snapshot of all tasks, phases, and memories in the project.
+- `engram://handoff` â€” A focused Markdown summary of recent achievements, active blockers, and planned next steps.
 
 ### Primary Tools
-- `engram_workflow_start` — Begin the next task, resolve context, and verify the worktree branch.
-- `engram_workflow_verify` � Run verification checks and stage changes on success.
-- `engram_workflow_finish_and_commit` (alias `engram_workflow_finish`) � Commit and push staged verified changes, then complete the active task.
-- `engram_task_create` / `engram_task_update` / `engram_task_note_append` — Programmatic task and evidence management.
-- `engram_memory_create` / `engram_memory_update` / `engram_memory_delete` / `engram_memory_update_many` / `engram_memory_delete_many` / `engram_memory_search` � Add, curate, and query persistent project memory.
-- `engram_phase_list` / `engram_phase_create` / `engram_phase_start` / `engram_phase_complete` — Multi-task milestone grouping and transition gates.
+- `engram_workflow_start` - Begin the next task, resolve context, and verify the worktree branch.
+- `engram_workflow_verify` - Run verification checks and stage changes on success.
+- `engram_workflow_finish_and_commit` (deprecated transitional alias: `engram_workflow_finish`) - Commit and push staged verified changes, then complete the active task.
+- `engram_task_create` / `engram_task_update` / `engram_task_note_append` â€” Programmatic task and evidence management.
+- `engram_memory_create` / `engram_memory_update` / `engram_memory_delete` / `engram_memory_update_many` / `engram_memory_delete_many` / `engram_memory_search` - Add, curate, and query persistent project memory.
+- `engram_phase_list` / `engram_phase_create` / `engram_phase_start` / `engram_phase_complete` â€” Multi-task milestone grouping and transition gates.
 
 ## Design Choices
 

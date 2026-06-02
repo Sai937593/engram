@@ -2,6 +2,8 @@
 
 The Memory Review skill defines phase-level durable memory curation during phase completion. Its goal is to maintain high-signal project memory so future agent context stays accurate, compact, and current.
 
+This is phase-level curation guidance only. It is not part of the active task finish gate, and it should not be used to block `engram_workflow_finish_and_commit`.
+
 ---
 
 ## 1. Why Memory Review Matters

@@ -6,6 +6,8 @@ Use this skill when the user asks to start or implement a specific Engram-manage
 
 Execute one scoped Engram task using the simplified MVP task loop.
 
+The authoritative workflow source is `docs/adr/0002-workflow-mvp-simplification.md`.
+
 ## The Simplified MVP Loop
 
 The core task execution loop consists of four sequential steps:
@@ -15,14 +17,14 @@ The core task execution loop consists of four sequential steps:
 4. **Finish and Commit**: Commit staged changes and push.
 
 ```text
-start ➔ implement ➔ verify ➔ finish_and_commit
+start -> implement -> verify -> finish_and_commit
 ```
 
 ## Available Workflow Tools
 
 - `engram_workflow_start`: Selects, resumes, or starts the next actionable task, returning a clear work order and context.
 - `engram_workflow_verify`: Runs all required repo-local verification checks. If all checks pass, it automatically stages the changes via `git add -A` and marks the task as verified (`is_verified = true`).
-- `engram_workflow_finish_and_commit` (or alias `engram_workflow_finish`): Finalizes the task by committing the staged changes and pushing, then marks the task as done. It blocks if there are unstaged or untracked changes.
+- `engram_workflow_finish_and_commit` (deprecated transitional alias: `engram_workflow_finish`): Finalizes the task by committing the staged changes and pushing, then marks the task as done. It blocks if there are unstaged or untracked changes.
 
 ## Required Execution Steps
 
@@ -45,7 +47,7 @@ start ➔ implement ➔ verify ➔ finish_and_commit
 
 5. **Finish and Commit**
    - Ensure the working tree is clean except for the staged files (verify command handles staging).
-   - Call `engram_workflow_finish_and_commit` (or `engram_workflow_finish` if the alias is required) to commit and push the changes.
+   - Call `engram_workflow_finish_and_commit` to commit and push the changes. Use `engram_workflow_finish` only if the alias is required by a transitional integration.
    - Stop. Do not automatically start the next task.
 
 ## Implementation Discipline

@@ -1,6 +1,6 @@
 # Codex Implementation Phases: Workflow MVP Simplification
 
-> Historical implementation planning document. Active agent-facing workflow guidance should be taken from `docs/USER_MANUAL.md` and skill instructions.
+> Historical implementation planning document. Superseded by `docs/adr/0002-workflow-mvp-simplification.md`, `README.md`, and `docs/USER_MANUAL.md`. Use it only as background context.
 
 ## Branch
 

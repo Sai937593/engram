@@ -1,6 +1,6 @@
 # Task Decomposition Skill
 
-Use this skill to convert an implementation phase document into executable Engram tasks using the current `engram_task_create` schema only.
+Use this skill to convert an implementation phase document into executable Engram tasks using the current `engram_task_create` schema only. For the simplified MVP workflow, the authoritative contract is `docs/adr/0002-workflow-mvp-simplification.md`.
 
 ## Goal
 
@@ -155,10 +155,10 @@ Potential false stale detections if timestamp parsing is inconsistent across hel
 ### Example B: Integration Task (Depends On Foundation)
 
 `title`
-- Enforce verification gate in workflow finish MCP tool
+- Enforce verification gate in workflow finish_and_commit MCP tool
 
 `acceptance`
-- `engram_workflow_finish` blocks when verification is missing, failed, or stale.
+- `engram_workflow_finish_and_commit` blocks when verification is missing, failed, or stale.
 - Blocked response provides one next action: rerun `engram_workflow_verify`.
 - Existing non-verification error handling remains unchanged.
 
@@ -173,7 +173,7 @@ Potential false stale detections if timestamp parsing is inconsistent across hel
 `description` shape
 ```text
 Objective:
-Wire finish-time verification eligibility into the workflow_finish MCP path.
+Wire finish-time verification eligibility into the workflow_finish_and_commit MCP path.
 
 Dependencies:
 Depends on <foundation_task_ref> because finish enforcement requires the verification
@@ -184,7 +184,7 @@ Run: uv run pytest tests/mcp/test_workflow_finish.py -q
 Run: uv run pytest tests/services/workflow -q
 
 Search hints:
-engram_workflow_finish, format_finish_blocked, verification gate, next action
+engram_workflow_finish_and_commit, format_finish_blocked, verification gate, next action
 
 Out of scope:
 Do not add memory-review checks in this task if phase scope is verification-only.
