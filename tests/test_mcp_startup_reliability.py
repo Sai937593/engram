@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from importlib.metadata import distribution, entry_points
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -419,3 +420,32 @@ def test_packaging_metadata_stability():
     # mcp extra dependency checks
     dist_reqs = distribution("engram").requires or []
     assert any(req.startswith("mcp") and 'extra == "mcp"' in req for req in dist_reqs)
+
+
+def test_engram_skill_templates_start_from_workflow_status():
+    """Verify the skill templates reference workflow status first and keep the expected guidance."""
+    repo_root = Path(__file__).resolve().parents[1]
+
+    task_decomposition = (
+        repo_root / "agent-files" / "skills" / "engram-task-decomposition-template.md"
+    ).read_text(encoding="utf-8")
+    start_task = (repo_root / "agent-files" / "skills" / "engram-start-task-template.md").read_text(
+        encoding="utf-8"
+    )
+    phase_review = (
+        repo_root / "agent-files" / "skills" / "engram-phase-review-template.md"
+    ).read_text(encoding="utf-8")
+
+    for template in (task_decomposition, start_task, phase_review):
+        assert "engram_workflow_status" in template
+
+    assert ".engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md" in task_decomposition
+    assert "deterministic plan, phase, and task keys" in task_decomposition
+    assert "one-task phases" in task_decomposition
+
+    assert ".engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md" in start_task
+    assert "using the deterministic plan, phase, and task keys from the work order" in start_task
+
+    assert "review_pending" in phase_review
+    assert "Which branch should this be merged or transitioned into?" in phase_review
+    assert "Do not default to `main` or any other branch name." in phase_review

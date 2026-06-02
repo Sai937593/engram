@@ -4,7 +4,7 @@ Use this skill when the user says a phase is complete, asks to review a phase, o
 
 ## Goal
 
-Review completed phase work, clean up durable memory using simple CRUD memory tools, and prepare a concise handoff without assuming a merge target.
+Inspect current workflow state with `engram_workflow_status`, then review completed phase work, clean up durable memory using simple CRUD memory tools, and prepare a concise handoff without assuming a merge target.
 
 This is phase-level memory curation guidance only. It is not part of the active task finish gate.
 
@@ -12,6 +12,7 @@ This is phase-level memory curation guidance only. It is not part of the active 
 
 Use simplified phase and memory tools:
 
+- `engram_workflow_status`
 - `engram_phase_list`
 - `engram_phase_update`
 - `engram_phase_complete`
@@ -30,19 +31,20 @@ Do not use any special phase memory review start tool; use only the normal tools
 
 ## Review Steps
 
-1. **Identify the Phase**: Locate the completed or target phase.
-2. **Review Task Outcomes**: Verify that all tasks in the phase are completed and meet their acceptance criteria.
-3. **Audit Project Memory**:
+1. **Check Workflow State**: Call `engram_workflow_status` to confirm the phase is `review_pending` and gather the current workflow state.
+2. **Identify the Phase**: Locate the completed or target phase.
+3. **Review Task Outcomes**: Verify that all tasks in the phase are completed and meet their acceptance criteria.
+4. **Audit Project Memory**:
    - Search or list existing memories to find relevant project knowledge.
    - Determine what durable project lessons or rules should be persisted, updated, or removed.
    - Keep memory review as phase-level curation; do not treat it as a per-task finish gate.
-4. **Curate Memories**:
+5. **Curate Memories**:
    - Create new memories for core lessons, architecture decisions, or stable constraints.
    - Update or delete stale or duplicate memories using simple CRUD tools.
    - Keep memory changes minimal and focused.
-5. **Update Agent Instructions**:
+6. **Update Agent Instructions**:
    - Update the root `AGENTS.md` ONLY when a stable, repository-wide project rule, guardrail, or convention has changed.
-6. **Handoff & Next Steps**:
+7. **Handoff & Next Steps**:
    - Prepare a brief phase summary.
    - If future work is needed, point agents to the task plan path `.engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md` instead of creating a separate implementation-plan file.
    - Ask the user which branch or target to merge into if a branch transition is needed.
@@ -80,6 +82,8 @@ Memory review is done at the phase level. The active task loop does not enforce 
 Do not assume the target branch is `main`. Always ask the user to clarify the target:
 
 "Which branch should this be merged or transitioned into?"
+
+Do not default to `main` or any other branch name.
 
 ## Output Style
 
