@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from engram.models.phase import Phase
+from engram.models.task import Task
 from engram.services.errors import JsonValue, ValidationError
 from engram.services.serializers import phase_to_dict
+from engram.services.workflow_helpers import is_same_phase, resolve_task_phase
 
 PHASE_METADATA_FIELDS = {"title", "description", "acceptance", "evidence"}
 
@@ -98,6 +100,36 @@ def complete_phase(project_id: str, phase_ref: str) -> dict[str, JsonValue]:
         )
     phase.update(status="done")
     return phase_to_dict(phase)
+
+
+def activate_phase_for_task(project_id: str, task: Task) -> Phase | None:
+    """Activate the phase linked to a task when it is still planned."""
+    phase = resolve_task_phase(project_id, task)
+    if not phase:
+        return None
+    if phase.status == "planned":
+        refreshed, _ = Phase.start(phase.id)
+        return refreshed
+    if phase.status == "active":
+        return phase
+    return None
+
+
+def mark_phase_review_pending_for_task(project_id: str, task: Task) -> Phase | None:
+    """Move the linked active phase to review_pending when the task is the final unfinished one."""
+    phase = resolve_task_phase(project_id, task)
+    if not phase or phase.status != "active":
+        return None
+    phase_tasks = [
+        candidate
+        for candidate in Task.list_by_project(project_id)
+        if is_same_phase(candidate, task)
+    ]
+    if any(candidate.status not in ("done", "cancelled") for candidate in phase_tasks):
+        return None
+    phase.update(status="review_pending")
+    refreshed = Phase.get(phase.id)
+    return refreshed or phase
 
 
 def update_phase(project_id: str, phase_ref: str, **updates: JsonValue) -> dict[str, JsonValue]:

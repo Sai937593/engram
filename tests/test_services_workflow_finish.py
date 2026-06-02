@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task
 from engram.services.errors import EngramServiceError
@@ -58,6 +59,86 @@ def test_finish_workflow_happy_path(tmp_db: Any) -> None:
     assert ["git", "ls-files", "--others", "--exclude-standard"] in git_mock.calls
     assert ["git", "commit", "-m", "feat(phase-one): Refactor auth [t-1]"] in git_mock.calls
     assert ["git", "push", "-u", "origin", "HEAD"] in git_mock.calls
+
+
+def test_finish_workflow_marks_phase_review_pending_when_last_task_finishes(tmp_db: Any) -> None:
+    """Verify finishing the last unfinished task in an active phase moves it to review_pending."""
+    project = Project.create(
+        id="proj-2",
+        name="Project 2",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-2"],
+    )
+    phase = Phase.create(project_id=project.id, id="ph-2", title="Phase Two", status="active")
+    task = Task.create(
+        project_id=project.id,
+        id="t-2",
+        title="Wrap up",
+        phase="Phase Two",
+        phase_id=phase.id,
+        status="in-progress",
+        memory_review_outcome="created",
+        is_verified=True,
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
+
+    git_mock = GitMock()
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        res = finish_workflow("proj-2", "/tmp/proj-2", commit_type="feat")
+
+    assert res["phase_complete"] is True
+    refreshed_phase = Phase.get(phase.id)
+    assert refreshed_phase is not None
+    assert refreshed_phase.status == "review_pending"
+
+
+def test_finish_workflow_keeps_phase_active_when_other_tasks_remain(tmp_db: Any) -> None:
+    """Verify finishing a non-final task does not move the phase to review_pending."""
+    project = Project.create(
+        id="proj-3",
+        name="Project 3",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-3"],
+    )
+    phase = Phase.create(project_id=project.id, id="ph-3", title="Phase Three", status="active")
+    task = Task.create(
+        project_id=project.id,
+        id="t-3",
+        title="First task",
+        phase="Phase Three",
+        phase_id=phase.id,
+        status="in-progress",
+        memory_review_outcome="created",
+        is_verified=True,
+    )
+    Task.create(
+        project_id=project.id,
+        id="t-3b",
+        title="Still open",
+        phase="Phase Three",
+        phase_id=phase.id,
+        status="open",
+    )
+    record_workflow_verification(
+        project_id=project.id,
+        task_id=task.id,
+        passed=True,
+        summary="all checks passed",
+    )
+
+    git_mock = GitMock()
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        res = finish_workflow("proj-3", "/tmp/proj-3", commit_type="feat")
+
+    assert res["phase_complete"] is False
+    refreshed_phase = Phase.get(phase.id)
+    assert refreshed_phase is not None
+    assert refreshed_phase.status == "active"
 
 
 def test_finish_workflow_no_in_progress_task(tmp_db: Any) -> None:

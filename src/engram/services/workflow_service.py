@@ -11,6 +11,10 @@ from engram.models.phase import Phase
 from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title
 from engram.services.errors import EngramServiceError
+from engram.services.phase_lifecycle_service import (
+    activate_phase_for_task,
+    mark_phase_review_pending_for_task,
+)
 from engram.services.serializers import task_to_dict
 from engram.services.workflow_constants import CONVENTIONAL_COMMIT_TYPES
 from engram.services.workflow_helpers import (
@@ -45,7 +49,6 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
     phases = Phase.list_by_project(project_id)
     active_phase = next((p for p in phases if p.status == "active"), None)
     task, is_resuming = select_task_to_start(project_id)
-
     if not task:
         if is_draft_only_pending(project_id):
             raise EngramServiceError(
@@ -67,11 +70,9 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
             is_resuming=False,
         )
         return {"task": None, "branch": None, "is_resuming": False, "context": context_str}
-
     target_branch = get_target_branch(task)
     current_branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
     is_dirty = bool(_run(["git", "status", "--porcelain"], repo_path))
-
     if current_branch != target_branch and is_dirty:
         raise EngramServiceError(
             code="DIRTY_WORKING_TREE",
@@ -92,7 +93,7 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
         else ["git", "checkout", "-b", target_branch]
     )
     _run(cmd, repo_path)
-
+    active_phase = activate_phase_for_task(project_id, task) or active_phase
     startup_res = orchestrate_startup_task_memory_retrieval(
         project=project, active_phase=active_phase, selected_task=task
     )
@@ -129,7 +130,6 @@ def finish_workflow(
             code="NO_TASK_IN_PROGRESS",
             message="No task is currently in-progress.",
         )
-
     task = in_progress[0]
     if not task.is_verified:
         raise EngramServiceError(
@@ -177,10 +177,8 @@ def finish_workflow(
             code="VALIDATION_ERROR",
             message=f"Invalid commit type '{commit_type}'. Must be one of: {', '.join(sorted(CONVENTIONAL_COMMIT_TYPES))}",
         ) from e
-
     phase_title = get_effective_phase_title(task)
     commit_msg = f"{resolved}({slugify(phase_title) or 'misc'}): {task.title} [{task.id}]"
-
     commit_res = subprocess.run(
         ["git", "commit", "-m", commit_msg],
         capture_output=True,
@@ -195,17 +193,15 @@ def finish_workflow(
                 code="GIT_OPERATION_FAILED",
                 message=f"Git commit failed: {commit_res.stderr.strip() or commit_res.stdout.strip()}",
             )
-
     _run(["git", "push", "-u", "origin", "HEAD"], repo_path)
     task.update(status="done")
-
     next_task = Task.get_next(project_id)
     phase_complete = False
     if not next_task or not is_same_phase(next_task, task):
         phase_tasks = [pt for pt in tasks if is_same_phase(pt, task)]
         if all(pt.status in ("done", "cancelled") for pt in phase_tasks):
             phase_complete = True
-
+            mark_phase_review_pending_for_task(project_id, task)
     return {
         "id": task.id,
         "commit": commit_msg,

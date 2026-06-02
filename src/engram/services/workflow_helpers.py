@@ -39,6 +39,27 @@ def task_matches_phase(task: Task, phase: Phase) -> bool:
     return _normalize_phase_title(task.phase) == _normalize_phase_title(phase.title)
 
 
+def resolve_task_phase(project_id: str, task: Task) -> Phase | None:
+    """Resolve the phase linked to a task using first-class or legacy identifiers."""
+    if task.phase_id:
+        phase = Phase.get(task.phase_id)
+        if phase and phase.project_id == project_id:
+            return phase
+        return None
+
+    phase_title = get_effective_phase_title(task)
+    if not phase_title:
+        return None
+
+    normalized_title = _normalize_phase_title(phase_title)
+    matches = [
+        phase
+        for phase in Phase.list_by_project(project_id)
+        if _normalize_phase_title(phase.title) == normalized_title
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def is_same_phase(task_1: Task, task_2: Task) -> bool:
     """Return whether two tasks belong to the same effective phase."""
     if task_1.phase_id and task_2.phase_id:

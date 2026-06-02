@@ -88,6 +88,45 @@ def test_start_workflow_happy_path_new_branch(tmp_db: Any, mock_startup_context:
     assert ["git", "checkout", "-b", "feat/phase-phase-one"] in git_mock.calls
 
 
+def test_start_workflow_activates_planned_phase_when_starting_first_task(
+    tmp_db: Any, mock_startup_context: None
+) -> None:
+    """Verify starting a task in a planned phase activates that phase."""
+    project = Project.create(
+        id="proj-phase-start",
+        name="Project Phase Start",
+        summary="Service testing",
+        repo_paths=["/tmp/proj-phase-start"],
+    )
+    phase = Phase.create(
+        project_id=project.id, id="ph-plan-1", title="Planned Phase", status="planned"
+    )
+    task = Task.create(
+        project_id=project.id,
+        id="t-plan-1",
+        title="Start this phase",
+        phase="Planned Phase",
+        phase_id=phase.id,
+        status="open",
+    )
+
+    git_mock = GitMock()
+    git_mock.branch = "main"
+    git_mock.status = ""
+    git_mock.show_ref_returncode = 0
+
+    with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
+        res = start_workflow(project.id, "/tmp/proj-phase-start")
+
+    assert res["task"]["id"] == task.id
+    refreshed_phase = Phase.get(phase.id)
+    assert refreshed_phase is not None
+    assert refreshed_phase.status == "active"
+    refreshed_task = Task.get(task.id)
+    assert refreshed_task is not None
+    assert refreshed_task.status == "in_progress"
+
+
 def test_start_workflow_no_task(tmp_db: Any, mock_startup_context: None) -> None:
     """Verify start_workflow handles no actionable tasks cleanly."""
     Project.create(
