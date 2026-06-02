@@ -44,6 +44,7 @@ Do not use any special phase memory review start tool; use only the normal tools
    - Update the root `AGENTS.md` ONLY when a stable, repository-wide project rule, guardrail, or convention has changed.
 6. **Handoff & Next Steps**:
    - Prepare a brief phase summary.
+   - If future work is needed, point agents to the task plan path `.engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md` instead of creating a separate implementation-plan file.
    - Ask the user which branch or target to merge into if a branch transition is needed.
    - Stop and await further instructions.
 

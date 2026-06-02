@@ -33,7 +33,7 @@ start -> implement -> verify -> finish_and_commit
 
 2. **Understand and Plan**
    - Inspect only the files related to the active task.
-   - For non-trivial tasks, produce a brief implementation plan and await user approval before writing code.
+   - For non-trivial tasks, create a brief task plan at `.engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md` and await user approval before writing code.
 
 3. **Implement Changes**
    - Keep code modifications highly localized and scoped tightly to the task's acceptance criteria.

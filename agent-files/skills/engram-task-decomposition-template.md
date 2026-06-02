@@ -48,6 +48,22 @@ Newly created tasks start in the `open` status with `is_verified = false`.
 
 Do not create weak placeholder tasks. If information is missing, either infer from the phase document or stop and ask the user.
 
+## Naming convention
+
+Use deterministic keys.
+
+Plan key:
+`plan-0003-workflow-standardization`
+
+Phase key:
+`ph01-planning-docs-and-naming`
+
+Task key:
+`t01-update-doc-structure`
+
+Task plan path:
+`.engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md`
+
 ## Task Quality Checklist
 
 Each task should answer:

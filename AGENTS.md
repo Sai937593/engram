@@ -14,6 +14,7 @@ Engram is a local-first project/workflow memory system for coding agents. Keep t
 - Keep agent-facing outputs compact and readable.
 - Do not make agents write raw SQLite or inspect `.engram/memory.db` directly.
 - Use Engram MCP tools or repository service code for task, phase, and memory operations.
+- For non-trivial tasks, keep per-task planning in `.engram/task-plans/<plan_key>/<phase_key>/<task_key>/task-plan.md` rather than ad hoc implementation-plan files.
 - Do not hardcode `main` as a merge or transition target. Ask the user when a target branch is needed.
 - Do not auto-start the next task after finishing a task.
 
