@@ -255,18 +255,41 @@ def test_start_phase_raises_if_not_found(tmp_db):
     assert exc.value.code == "PHASE_NOT_FOUND"
 
 
-def test_complete_phase_success(tmp_db):
+def test_complete_phase_success_from_review_pending(tmp_db):
     project = _create_project("proj-comp-p", "/tmp/proj-comp-p")
-    p = Phase.create(project_id=project.id, id="phc10001", title="Phase 1", status="active")
+    p = Phase.create(
+        project_id=project.id,
+        id="phc10001",
+        title="Phase 1",
+        status="review_pending",
+    )
 
     dto = complete_phase(project.id, p.id)
     assert dto["id"] == p.id
     assert dto["status"] == "done"
 
 
+def test_complete_phase_rejects_if_phase_is_not_review_pending(tmp_db):
+    project = _create_project("proj-comp-p1", "/tmp/proj-comp-p1")
+    p = Phase.create(project_id=project.id, id="phc10011", title="Phase 1", status="active")
+
+    with pytest.raises(ValidationError) as exc:
+        complete_phase(project.id, p.id)
+
+    assert exc.value.code == "PHASE_COMPLETION_BLOCKED"
+    assert exc.value.details["phase_id"] == p.id
+    assert exc.value.details["phase_status"] == "active"
+    assert exc.value.details["required_status"] == "review_pending"
+
+
 def test_complete_phase_fails_if_unfinished_tasks_exist(tmp_db):
     project = _create_project("proj-comp-p2", "/tmp/proj-comp-p2")
-    p = Phase.create(project_id=project.id, id="phc20001", title="Phase 1", status="active")
+    p = Phase.create(
+        project_id=project.id,
+        id="phc20001",
+        title="Phase 1",
+        status="review_pending",
+    )
 
     from engram.models.task import Task
 
@@ -277,6 +300,7 @@ def test_complete_phase_fails_if_unfinished_tasks_exist(tmp_db):
 
     assert exc.value.code == "UNFINISHED_TASKS"
     assert p.id in exc.value.details["phase_id"]
+    assert exc.value.details["unfinished_tasks"] == [Task.list_by_project(project.id)[0].id]
 
 
 def test_create_phase_success(tmp_db):

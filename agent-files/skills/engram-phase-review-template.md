@@ -48,6 +48,16 @@ Do not use any special phase memory review start tool; use only the normal tools
    - Ask the user which branch or target to merge into if a branch transition is needed.
    - Stop and await further instructions.
 
+## Phase Completion
+
+Use `engram_phase_complete` only after the phase has reached `review_pending` and the remaining tasks in that phase are finished, cancelled, or retired.
+
+If `engram_phase_complete` reports blockers:
+
+- Finish or cancel the listed unfinished tasks first.
+- Wait until the phase is `review_pending` before retrying completion.
+- Do not treat phase completion as a task-finish gate; it is the review gate after the tasks are done.
+
 ## Memory Curation Rules
 
 Create or update memory only for durable knowledge, such as:

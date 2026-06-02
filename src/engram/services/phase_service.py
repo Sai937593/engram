@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from engram.models.phase import Phase
 from engram.services.errors import EngramServiceError, JsonValue, ValidationError
+from engram.services.phase_completion_service import complete_phase
 from engram.services.phase_lifecycle_service import (
     archive_phase,
     cancel_phase,
-    complete_phase,
     resolve_phase_ref,
     update_phase,
 )

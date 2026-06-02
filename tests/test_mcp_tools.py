@@ -1445,11 +1445,15 @@ def test_mcp_phase_complete_happy_and_error_paths(tmp_db, monkeypatch) -> None:
     # 1. Error path (unfinished tasks exist)
     res_err = yaml.safe_load(handler(phase_ref="Phase 1"))
     assert res_err["ok"] is False
-    assert res_err["error"] == "UNFINISHED_TASKS"
+    assert res_err["error"] == "PHASE_COMPLETION_BLOCKED"
+    assert res_err["details"]["phase_status"] == "active"
+    assert res_err["details"]["required_status"] == "review_pending"
+    assert res_err["details"]["unfinished_tasks"] == ["task-unfinished"]
 
     # Complete the task first
     task = Task.get("task-unfinished")
     task.update(status="done")
+    phase.update(status="review_pending")
 
     # 2. Happy path
     res = yaml.safe_load(handler(phase_ref="Phase 1"))
@@ -1472,7 +1476,7 @@ def test_mcp_phase_complete_allows_normal_memory_crud_review_flow(tmp_db, monkey
         project_id=project.id,
         id="ph-memory-1",
         title="Phase Memory Review",
-        status="active",
+        status="review_pending",
     )
     Task.create(
         project_id=project.id,
@@ -2073,6 +2077,10 @@ def test_mcp_error_responses_contain_correct_fixes(tmp_db, monkeypatch) -> None:
         assert "fix" in res
         if code != "UNRESOLVED_WORKSPACE":
             assert "engram_" in res["fix"]  # references MCP tool names
+        if code == "PHASE_COMPLETION_BLOCKED":
+            assert "review_pending" in res["fix"]
+        if code == "UNFINISHED_TASKS":
+            assert "review_pending" in res["fix"]
 
     # Unknown/unexpected error should not have fix field
     exc_unknown = EngramServiceError(code="SOME_UNKNOWN_ERROR", message="An unknown error")

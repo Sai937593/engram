@@ -118,7 +118,7 @@ The MCP server exposes 17 tools for full interactive capabilities:
     *   `engram_phase_list`: Lists all milestone phases for the project in priority order.
     *   `engram_phase_create`: Creates a new first-class project phase milestone.
     *   `engram_phase_start`: Activates a specific phase, demoting all other project phases to planned.
-    *   `engram_phase_complete`: Marks a milestone phase as complete with evidence.
+    *   `engram_phase_complete`: Marks a `review_pending` milestone phase as complete with evidence.
 *   **System Utilities:**
     *   `engram_project_current`: Returns the active project metadata resolved from the working directory.
 
@@ -157,7 +157,7 @@ When the implementation is complete and verified:
 *   The agent calls `engram_workflow_finish_and_commit` to commit and push already-staged verified changes.
 
 ### Step 6: Phase-Level Memory Review
-During phase completion, review durable lessons and decisions using memory CRUD plus batch helpers (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`, `engram_memory_update_many`, `engram_memory_delete_many`) before running `engram_phase_complete`.
+During phase completion, review durable lessons and decisions using memory CRUD plus batch helpers (`engram_memory_list`, `engram_memory_get`, `engram_memory_create`, `engram_memory_update`, `engram_memory_delete`, `engram_memory_update_many`, `engram_memory_delete_many`) before running `engram_phase_complete`. Only complete a phase after it has reached `review_pending`.
 
 ---
 

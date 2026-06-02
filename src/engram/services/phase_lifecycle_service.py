@@ -60,16 +60,13 @@ def resolve_phase_ref(project_id: str, phase_ref: str) -> Phase:
 
 
 def _unfinished_phase_tasks(project_id: str, phase: Phase) -> list[str]:
-    from engram.models.task import Task
-
     ids: list[str] = []
     normalized_title = _normalize_phase_ref(phase.title)
     normalized_key = _normalize_phase_ref(phase.key)
     for task in Task.list_by_project(project_id):
         in_phase = task.phase_id == phase.id
         if not in_phase and not task.phase_id:
-            task_phase = _normalize_phase_ref(task.phase)
-            in_phase = task_phase in {normalized_title, normalized_key}
+            in_phase = _normalize_phase_ref(task.phase) in {normalized_title, normalized_key}
         if in_phase and task.status not in ("done", "cancelled"):
             ids.append(task.id)
     return sorted(ids)
@@ -87,19 +84,6 @@ def _ensure_unique_phase_title(project_id: str, phase_id: str, title: str) -> No
                 message=f"A phase with the title '{title}' already exists in this project.",
                 details={"project_id": project_id, "title": title},
             )
-
-
-def complete_phase(project_id: str, phase_ref: str) -> dict[str, JsonValue]:
-    phase = resolve_phase_ref(project_id, phase_ref)
-    unfinished = _unfinished_phase_tasks(project_id, phase)
-    if unfinished:
-        raise ValidationError(
-            code="UNFINISHED_TASKS",
-            message=f"Cannot complete phase '{phase.title}' because it has unfinished tasks.",
-            details={"phase_id": phase.id, "unfinished_tasks": unfinished},
-        )
-    phase.update(status="done")
-    return phase_to_dict(phase)
 
 
 def activate_phase_for_task(project_id: str, task: Task) -> Phase | None:
