@@ -70,7 +70,7 @@ def start_workflow(project_id: str, repo_path: str) -> dict[str, Any]:
             is_resuming=False,
         )
         return {"task": None, "branch": None, "is_resuming": False, "context": context_str}
-    target_branch = get_target_branch(task)
+    target_branch = get_target_branch(task, project)
     current_branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
     is_dirty = bool(_run(["git", "status", "--porcelain"], repo_path))
     if current_branch != target_branch and is_dirty:

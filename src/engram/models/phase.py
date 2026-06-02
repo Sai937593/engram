@@ -32,7 +32,7 @@ class Phase:
     ) -> None:
         self.id = id
         self.project_id = project_id
-        self.key = key or id
+        self.key = id if key is None else key
         self.title = title
         self.description = description
         self.status = status

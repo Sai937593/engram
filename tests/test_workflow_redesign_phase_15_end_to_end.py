@@ -170,7 +170,7 @@ def test_e2e_workflow_start_branch_aware(disposable_git_repo):
     t1_id = t1_res["id"]
 
     start_res = asyncio.run(mock_server.tools["engram_workflow_start"]())
-    assert "Branch: `feat/phase-phase-one`" in start_res
+    assert f"Branch: `feat/e2e-flow-{p1_id}`" in start_res
 
     current_branch = subprocess.run(
         ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -179,7 +179,7 @@ def test_e2e_workflow_start_branch_aware(disposable_git_repo):
         text=True,
         check=True,
     ).stdout.strip()
-    assert current_branch == "feat/phase-phase-one"
+    assert current_branch == f"feat/e2e-flow-{p1_id}"
 
     t1_get_str = mock_server.tools["engram_task_get"](task_ref=t1_id)
     t1_get = yaml.safe_load(t1_get_str)
@@ -476,7 +476,7 @@ def test_e2e_full_journey_uninitialized_to_started(disposable_git_repo, monkeypa
 
     # 7. Start workflow successfully
     start_ok_str = asyncio.run(mock_server.tools["engram_workflow_start"]())
-    assert "Branch: `feat/phase-active-phase-one`" in start_ok_str
+    assert f"Branch: `feat/e2e-journey-{p1_id}`" in start_ok_str
     assert "Next action" in start_ok_str
 
     current_branch = subprocess.run(
@@ -486,7 +486,7 @@ def test_e2e_full_journey_uninitialized_to_started(disposable_git_repo, monkeypa
         text=True,
         check=True,
     ).stdout.strip()
-    assert current_branch == "feat/phase-active-phase-one"
+    assert current_branch == f"feat/e2e-journey-{p1_id}"
 
     t1_get_str = mock_server.tools["engram_task_get"](task_ref=t1_id)
     t1_get = yaml.safe_load(t1_get_str)
@@ -744,7 +744,7 @@ def test_e2e_finish_closeout_guidance_and_no_autostart(disposable_git_repo):
         text=True,
         check=True,
     ).stdout.strip()
-    assert current_branch == "feat/phase-phase-one"
+    assert current_branch == f"feat/e2e-closeout-{p1_id}"
 
     # Setup dummy codebase for verification after switching branch
     code_file = disposable_git_repo / "code.py"
@@ -781,7 +781,7 @@ def test_e2e_finish_closeout_guidance_and_no_autostart(disposable_git_repo):
         check=True,
     ).stdout.strip()
     # It should still be on Phase One's branch because workflow_finish does not switch branches or autostart
-    assert post_finish_branch == "feat/phase-phase-one"
+    assert post_finish_branch == f"feat/e2e-closeout-{p1_id}"
 
     # Next task in database remains 'open', not 'in_progress'
     t2_get = yaml.safe_load(mock_server.tools["engram_task_get"](task_ref=t2_id))

@@ -115,12 +115,12 @@ def test_successful_start_contract(tmp_db: Any, monkeypatch: Any) -> None:
         res_mcp = asyncio.run(start_handler())
 
     assert res["task"]["id"] == "t-1"
-    assert res["branch"] == "feat/phase-phase-one"
+    assert res["branch"] == "feat/proj-start-ok-ph-1"
     assert res["is_resuming"] is False
 
     context = res["context"]
     assert context.startswith("# Work Order")
-    assert "Branch: `feat/phase-phase-one`" in context
+    assert "Branch: `feat/proj-start-ok-ph-1`" in context
     assert "## Objective" in context
     assert "Fix the bugs in start logic" in context
     assert "## Acceptance" in context

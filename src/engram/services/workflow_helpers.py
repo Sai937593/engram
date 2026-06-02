@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 
 from engram.models.phase import Phase
+from engram.models.project import Project
 from engram.models.task import Task, get_effective_phase_title
+from engram.services.errors import EngramServiceError
 
 
 def slugify(text: str) -> str:
@@ -17,10 +19,59 @@ def slugify(text: str) -> str:
     return text.strip("-")
 
 
-def get_target_branch(task: Task) -> str:
+def get_target_branch(task: Task, project: Project, phase: Phase | None = None) -> str:
     """Return the phase branch name for the provided task."""
-    phase_title = get_effective_phase_title(task)
-    return f"feat/phase-{slugify(phase_title)}" if phase_title else "feat/misc"
+    has_phase_reference = bool(task.phase_id or _normalize_phase_title(task.phase))
+    if not has_phase_reference:
+        return "feat/misc"
+
+    resolved_phase = phase or resolve_task_phase(project.id, task)
+    if resolved_phase is None:
+        raise EngramServiceError(
+            code="PHASE_NOT_FOUND",
+            message=(
+                f"Cannot derive a phase branch for task '{task.id}' because its phase could "
+                "not be resolved."
+            ),
+            details={
+                "task_id": task.id,
+                "project_id": project.id,
+                "phase_id": task.phase_id,
+                "phase": task.phase,
+            },
+            fix=(
+                "Provide a valid phase ID or exact phase title for the task, then retry "
+                "engram_workflow_start."
+            ),
+        )
+
+    plan_key = str(getattr(project, "plan_key", "") or "").strip()
+    phase_key = str(getattr(resolved_phase, "key", "") or "").strip()
+    missing_fields = []
+    if not plan_key:
+        missing_fields.append("plan_key")
+    if not phase_key:
+        missing_fields.append("phase_key")
+    if missing_fields:
+        raise EngramServiceError(
+            code="WORKFLOW_BRANCH_KEYS_MISSING",
+            message=(
+                f"Cannot derive a phase branch for task '{task.id}' because "
+                f"{', '.join(missing_fields)} is missing."
+            ),
+            details={
+                "task_id": task.id,
+                "project_id": project.id,
+                "phase_id": resolved_phase.id,
+                "missing_fields": missing_fields,
+            },
+            fix=(
+                "Set explicit project.plan_key and phase.key values, or remove the task's "
+                "phase assignment if this work is intentionally unphased."
+            ),
+        )
+
+    return f"feat/{slugify(plan_key)}-{slugify(phase_key)}"
 
 
 def _normalize_phase_title(title: str | None) -> str:

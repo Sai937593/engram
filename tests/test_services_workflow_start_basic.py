@@ -43,7 +43,7 @@ def test_start_workflow_happy_path_branch_exists(tmp_db: Any, mock_startup_conte
         res = start_workflow("proj-1", "/tmp/proj-1")
 
     assert res["task"]["id"] == "t-1"
-    assert res["branch"] == "feat/phase-phase-one"
+    assert res["branch"] == "feat/proj-1-ph-1"
     assert res["is_resuming"] is False
     assert res["context"] == "mock startup context string"
 
@@ -53,8 +53,8 @@ def test_start_workflow_happy_path_branch_exists(tmp_db: Any, mock_startup_conte
     assert refreshed_task.status == "in_progress"
 
     # Checkout target branch should be called
-    assert ["git", "checkout", "feat/phase-phase-one"] in git_mock.calls
-    assert ["git", "checkout", "-b", "feat/phase-phase-one"] not in git_mock.calls
+    assert ["git", "checkout", "feat/proj-1-ph-1"] in git_mock.calls
+    assert ["git", "checkout", "-b", "feat/proj-1-ph-1"] not in git_mock.calls
 
 
 def test_start_workflow_happy_path_new_branch(tmp_db: Any, mock_startup_context: None) -> None:
@@ -84,8 +84,8 @@ def test_start_workflow_happy_path_new_branch(tmp_db: Any, mock_startup_context:
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res = start_workflow("proj-1", "/tmp/proj-1")
 
-    assert res["branch"] == "feat/phase-phase-one"
-    assert ["git", "checkout", "-b", "feat/phase-phase-one"] in git_mock.calls
+    assert res["branch"] == "feat/proj-1-ph-1"
+    assert ["git", "checkout", "-b", "feat/proj-1-ph-1"] in git_mock.calls
 
 
 def test_start_workflow_activates_planned_phase_when_starting_first_task(
@@ -119,6 +119,7 @@ def test_start_workflow_activates_planned_phase_when_starting_first_task(
         res = start_workflow(project.id, "/tmp/proj-phase-start")
 
     assert res["task"]["id"] == task.id
+    assert res["branch"] == "feat/proj-phase-start-ph-plan-1"
     refreshed_phase = Phase.get(phase.id)
     assert refreshed_phase is not None
     assert refreshed_phase.status == "active"

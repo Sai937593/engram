@@ -59,6 +59,10 @@ def _respond_error(exc: EngramServiceError) -> str:
         "INVALID_PHASE_REFERENCE": "Provide a non-empty phase ID, key, or exact phase title, then retry the phase lifecycle tool.",
         "PHASE_NOT_FOUND": "Run engram_phase_list to find a valid phase ID, key, or exact title, then retry.",
         "AMBIGUOUS_PHASE": "Use the exact phase ID instead of title to avoid ambiguous matches.",
+        "WORKFLOW_BRANCH_KEYS_MISSING": (
+            "Set explicit project.plan_key and phase.key values before starting the task, or "
+            "remove the phase assignment if this work is intentionally unphased."
+        ),
         "DUPLICATE_PHASE_KEY": "Choose a different phase key before retrying engram_phase_create.",
         "DUPLICATE_TASK_KEY": "Choose a different task key before retrying engram_task_create.",
         "INVALID_PHASE_UPDATE": "Retry engram_phase_update using only string values for metadata fields.",

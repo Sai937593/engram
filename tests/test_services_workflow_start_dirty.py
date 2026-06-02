@@ -69,14 +69,14 @@ def test_start_workflow_dirty_tree_same_branch(tmp_db: Any, mock_startup_context
     )
 
     git_mock = GitMock()
-    git_mock.branch = "feat/phase-phase-one"
+    git_mock.branch = "feat/proj-1-ph-1"
     git_mock.status = " M modified_file.py"
 
     with patch("engram.services.workflow_service.subprocess.run", side_effect=git_mock):
         res = start_workflow("proj-1", "/tmp/proj-1")
 
     assert res["task"]["id"] == "t-1"
-    assert res["branch"] == "feat/phase-phase-one"
+    assert res["branch"] == "feat/proj-1-ph-1"
 
 
 def test_start_workflow_clean_tree_different_branch(
@@ -107,4 +107,4 @@ def test_start_workflow_clean_tree_different_branch(
         res = start_workflow("proj-1", "/tmp/proj-1")
 
     assert res["task"]["id"] == "t-1"
-    assert res["branch"] == "feat/phase-phase-one"
+    assert res["branch"] == "feat/proj-1-ph-1"

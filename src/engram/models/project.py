@@ -11,7 +11,7 @@ class Project:
         self.summary = summary
         self.status = status
         self.repo_paths = repo_paths or []
-        self.plan_key = plan_key or id
+        self.plan_key = id if plan_key is None else plan_key
 
     @classmethod
     def create(cls, id, name, summary=None, repo_paths=None, db_path=None, plan_key=None):
