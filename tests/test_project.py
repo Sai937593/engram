@@ -10,6 +10,7 @@ def test_create_project(tmp_db):
     assert p.summary == "A summary"
     assert p.status == "active"
     assert "/tmp/repo" in p.repo_paths
+    assert p.active_plan_id is None
 
 
 def test_get_project(tmp_db):
@@ -61,3 +62,25 @@ def test_add_repo_path(project):
     project.add_repo_path(new_path)
     refreshed = Project.get(project.id)
     assert new_path in refreshed.repo_paths
+
+
+def test_project_active_plan_round_trip(tmp_db):
+    from engram.models.plan import Plan
+
+    project = Project.create("active-plan-proj", "Active Plan Project", repo_paths=["/tmp/repo"])
+    plan = Plan.create(
+        project_id=project.id,
+        title="Active implementation plan",
+        key="p0004",
+        status="active",
+    )
+
+    project.update(active_plan_id=plan.id)
+    refreshed = Project.get(project.id)
+
+    assert refreshed is not None
+    assert refreshed.active_plan_id == plan.id
+    active_plan = refreshed.get_active_plan()
+    assert active_plan is not None
+    assert active_plan.id == plan.id
+    assert active_plan.project_id == project.id

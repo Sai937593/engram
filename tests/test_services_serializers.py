@@ -44,11 +44,40 @@ def test_project_to_dict_shape_and_missing_optional_values():
     assert payload == {
         "id": "proj1234",
         "plan_key": "proj1234",
+        "active_plan_id": None,
         "name": "Engram",
         "summary": None,
         "status": "active",
         "repo_paths": ["D:/repo/engram"],
+        "active_plan": None,
     }
+    _assert_json_safe(payload)
+
+
+def test_project_to_dict_includes_active_plan_payload_when_available():
+    plan = Plan(
+        id="plan1234",
+        project_id="proj1234",
+        title="Implementation Plan",
+        slug="first-plan",
+        status="active",
+        source_doc_path="docs/plans/p0004/adr.md",
+        key="p0004",
+    )
+    project = Project(
+        "proj1234",
+        "Engram",
+        summary="Project with active plan",
+        status="active",
+        repo_paths=["D:/repo/engram"],
+        active_plan_id=plan.id,
+    )
+    project.active_plan = plan
+
+    payload = project_to_dict(project)
+
+    assert payload["active_plan_id"] == "plan1234"
+    assert payload["active_plan"] == plan_to_dict(plan)
     _assert_json_safe(payload)
 
 

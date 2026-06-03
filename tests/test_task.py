@@ -325,7 +325,7 @@ def test_init_db_creates_phases_schema(tmp_db) -> None:
     task_columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     conn.close()
 
-    assert "plan_key" in project_columns
+    assert {"plan_key", "active_plan_id"}.issubset(project_columns)
     assert {
         "id",
         "project_id",

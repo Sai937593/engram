@@ -12,6 +12,7 @@ from .migrations import (
 )
 from .plan_migrations import apply_plans_column_migrations
 from .plan_schema import create_plans_table
+from .project_migrations import apply_projects_column_migrations
 from .schema import (
     create_audit_log_table,
     create_indexes,
@@ -69,6 +70,7 @@ def init_db(db_path=None):
 
     create_projects_table(cursor)
     create_plans_table(cursor)
+    apply_projects_column_migrations(cursor)
     create_tasks_table(cursor)
     create_phases_table(cursor)
     apply_plans_column_migrations(cursor)

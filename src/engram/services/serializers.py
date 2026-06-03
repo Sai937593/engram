@@ -13,13 +13,16 @@ from engram.services.serializer_helpers import get_effective_status, none_if_bla
 
 def project_to_dict(project: Project) -> dict[str, JsonValue]:
     """Serialize a Project model into a JSON-safe dictionary."""
+    active_plan = getattr(project, "active_plan", None)
     return {
         "id": str(project.id),
         "plan_key": none_if_blank(getattr(project, "plan_key", None) or project.id),
+        "active_plan_id": none_if_blank(getattr(project, "active_plan_id", None)),
         "name": str(project.name),
         "summary": none_if_blank(project.summary),
         "status": str(project.status),
         "repo_paths": string_list(project.repo_paths),
+        "active_plan": plan_to_dict(active_plan) if isinstance(active_plan, Plan) else None,
     }
 
 
