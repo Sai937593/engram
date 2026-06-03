@@ -10,7 +10,7 @@ from .migrations import (
     apply_tasks_column_migrations,
     backfill_legacy_phase_ids,
 )
-from .plan_migrations import apply_plans_column_migrations
+from .plan_migrations import apply_plans_column_migrations, backfill_legacy_project_plans
 from .plan_schema import create_plans_table
 from .project_migrations import apply_projects_column_migrations
 from .schema import (
@@ -93,6 +93,7 @@ def init_db(db_path=None):
     apply_task_status_migrations(cursor)
     backfill_legacy_phase_ids(cursor)
     apply_identity_key_migrations(cursor)
+    backfill_legacy_project_plans(cursor)
     apply_task_dependency_ref_migrations(cursor)
     create_indexes(cursor)
 

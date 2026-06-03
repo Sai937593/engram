@@ -175,6 +175,10 @@ class Project:
 
         return Plan.get(self.active_plan_id, db_path=db_path)
 
+    def has_explicit_plan_key(self) -> bool:
+        """Return whether the stored plan key is distinct from the fallback project ID."""
+        return bool(self.plan_key and self.plan_key.strip() and self.plan_key != self.id)
+
     def add_repo_path(self, path, db_path=None):
         path = os.path.abspath(path)
         if path not in self.repo_paths:
