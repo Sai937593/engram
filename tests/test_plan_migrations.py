@@ -17,6 +17,7 @@ def _create_legacy_repo_db(
     name: str,
     plan_key: str | None = None,
     include_plan_key_column: bool = True,
+    include_legacy_work_items: bool = False,
 ) -> Path:
     """Create a legacy repo-local database shape for migration testing."""
     repo_path.mkdir(parents=True, exist_ok=True)
@@ -68,9 +69,80 @@ def _create_legacy_repo_db(
             """,
             (project_id, name, None),
         )
+
+    if include_legacy_work_items:
+        conn.execute(
+            """
+            CREATE TABLE phases (
+                id          TEXT PRIMARY KEY,
+                project_id  TEXT NOT NULL REFERENCES projects(id),
+                title       TEXT NOT NULL,
+                description TEXT,
+                status      TEXT DEFAULT 'planned',
+                order_index INTEGER DEFAULT 0,
+                acceptance  TEXT,
+                evidence    TEXT,
+                created_at  TEXT DEFAULT (datetime('now')),
+                updated_at  TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE tasks (
+                id          TEXT PRIMARY KEY,
+                project_id  TEXT NOT NULL REFERENCES projects(id),
+                title       TEXT NOT NULL,
+                description TEXT,
+                status      TEXT DEFAULT 'todo',
+                priority    TEXT DEFAULT 'medium',
+                phase       TEXT,
+                acceptance  TEXT,
+                evidence    TEXT,
+                tags        TEXT,
+                created_at  TEXT DEFAULT (datetime('now')),
+                updated_at  TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO phases (id, project_id, title, status, order_index)
+            VALUES (?, ?, ?, 'planned', 0)
+            """,
+            ("legacy-phase-1", project_id, "Phase Alpha"),
+        )
+        conn.execute(
+            """
+            INSERT INTO tasks (id, project_id, title, status, phase)
+            VALUES (?, ?, ?, 'todo', ?)
+            """,
+            ("legacy-task-1", project_id, "Legacy Task 1", "Phase Alpha"),
+        )
     conn.commit()
     conn.close()
     return db_path
+
+
+def test_init_db_creates_empty_schema_without_plans(tmp_path):
+    db_path = tmp_path / "empty.db"
+
+    init_db(db_path)
+    init_db(db_path)
+
+    conn = get_db_connection(db_path)
+    try:
+        project_count = conn.execute("SELECT COUNT(*) AS count FROM projects").fetchone()["count"]
+        plan_count = conn.execute("SELECT COUNT(*) AS count FROM plans").fetchone()["count"]
+        phase_count = conn.execute("SELECT COUNT(*) AS count FROM phases").fetchone()["count"]
+        task_count = conn.execute("SELECT COUNT(*) AS count FROM tasks").fetchone()["count"]
+    finally:
+        conn.close()
+
+    assert project_count == 0
+    assert plan_count == 0
+    assert phase_count == 0
+    assert task_count == 0
 
 
 def test_init_db_backfills_explicit_project_plan_key_to_active_plan(tmp_path):
@@ -129,6 +201,7 @@ def test_init_db_leaves_fallback_project_key_unbound(tmp_path):
     )
 
     init_db(db_path)
+    init_db(db_path)
 
     conn = get_db_connection(db_path)
     try:
@@ -154,3 +227,60 @@ def test_init_db_leaves_fallback_project_key_unbound(tmp_path):
     assert payload["id"] == "legacy-proj-fallback"
     assert payload["active_plan_id"] is None
     assert payload["active_plan"] is None
+
+
+def test_init_db_backfills_legacy_phase_and_task_rows_into_active_plan(tmp_path):
+    repo_path = tmp_path / "legacy-work-items"
+    db_path = _create_legacy_repo_db(
+        repo_path,
+        project_id="legacy-proj-work-items",
+        name="Legacy Work Item Project",
+        plan_key="p0005",
+        include_legacy_work_items=True,
+    )
+
+    init_db(db_path)
+    init_db(db_path)
+
+    conn = get_db_connection(db_path)
+    try:
+        project_row = conn.execute(
+            "SELECT id, plan_key, active_plan_id FROM projects WHERE id = ?",
+            ("legacy-proj-work-items",),
+        ).fetchone()
+        plan_row = conn.execute(
+            "SELECT id, project_id, key, title, status FROM plans WHERE project_id = ?",
+            ("legacy-proj-work-items",),
+        ).fetchone()
+        phase_row = conn.execute(
+            "SELECT id, project_id, title, key FROM phases WHERE id = ?",
+            ("legacy-phase-1",),
+        ).fetchone()
+        task_row = conn.execute(
+            "SELECT id, project_id, title, phase, phase_id, key FROM tasks WHERE id = ?",
+            ("legacy-task-1",),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert project_row is not None
+    assert plan_row is not None
+    assert phase_row is not None
+    assert task_row is not None
+    assert project_row["plan_key"] == "p0005"
+    assert project_row["active_plan_id"] == plan_row["id"]
+    assert plan_row["key"] == "p0005"
+    assert plan_row["title"] == "Legacy Work Item Project"
+    assert plan_row["status"] == "active"
+    assert phase_row["project_id"] == "legacy-proj-work-items"
+    assert phase_row["title"] == "Phase Alpha"
+    assert phase_row["key"] == "legacy-phase-1"
+    assert task_row["project_id"] == "legacy-proj-work-items"
+    assert task_row["phase"] == "Phase Alpha"
+    assert task_row["phase_id"] == "legacy-phase-1"
+    assert task_row["key"] == "legacy-task-1"
+
+    payload = resolve_current_project(cwd=str(repo_path))
+    assert payload["id"] == "legacy-proj-work-items"
+    assert payload["active_plan_id"] == plan_row["id"]
+    assert payload["active_plan"]["id"] == plan_row["id"]
