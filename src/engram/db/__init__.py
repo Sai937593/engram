@@ -3,14 +3,15 @@ import warnings
 from pathlib import Path
 
 from .connection import create_db_connection
+from .identity_migrations import apply_identity_key_migrations
 from .migrations import (
-    apply_identity_key_migrations,
     apply_memories_column_migrations,
     apply_task_status_migrations,
     apply_tasks_column_migrations,
-    apply_workflow_verification_migrations,
     backfill_legacy_phase_ids,
 )
+from .plan_migrations import apply_plans_column_migrations
+from .plan_schema import create_plans_table
 from .schema import (
     create_audit_log_table,
     create_indexes,
@@ -22,6 +23,7 @@ from .schema import (
     create_workflow_verifications_table,
 )
 from .task_dependency_migrations import apply_task_dependency_ref_migrations
+from .workflow_verification_migrations import apply_workflow_verification_migrations
 
 
 def get_default_db_path() -> Path:
@@ -66,8 +68,10 @@ def init_db(db_path=None):
     cursor.execute("DROP TRIGGER IF EXISTS memories_au")
 
     create_projects_table(cursor)
+    create_plans_table(cursor)
     create_tasks_table(cursor)
     create_phases_table(cursor)
+    apply_plans_column_migrations(cursor)
     apply_tasks_column_migrations(cursor)
     create_memories_table(cursor)
     apply_memories_column_migrations(cursor)

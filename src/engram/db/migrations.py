@@ -10,11 +10,6 @@ def column_exists(cursor: sqlite3.Cursor, table_name: str, column_name: str) -> 
     return any(row["name"] == column_name for row in rows)
 
 
-def normalize_phase_title(phase: str | None) -> str:
-    """Normalize phase titles for matching and deduplication."""
-    return "" if phase is None else " ".join(phase.split()).casefold()
-
-
 def apply_tasks_column_migrations(cursor: sqlite3.Cursor) -> None:
     """Add missing legacy tasks columns for compatibility."""
     if not column_exists(cursor, "tasks", "depends_on"):
@@ -120,7 +115,7 @@ def backfill_legacy_phase_ids(cursor: sqlite3.Cursor) -> None:
     display_title_by_key: dict[tuple[str, str], str] = {}
     for row in legacy_rows:
         cleaned_title = " ".join(row["phase"].split())
-        normalized_title = normalize_phase_title(cleaned_title)
+        normalized_title = cleaned_title.casefold()
         if not normalized_title:
             continue
 
@@ -144,7 +139,7 @@ def backfill_legacy_phase_ids(cursor: sqlite3.Cursor) -> None:
         project_ids,
     ).fetchall()
     for row in existing_phase_rows:
-        normalized_title = normalize_phase_title(row["title"])
+        normalized_title = " ".join(row["title"].split()).casefold()
         if not normalized_title:
             continue
         phase_id_by_key.setdefault((row["project_id"], normalized_title), row["id"])
@@ -201,43 +196,3 @@ def apply_task_status_migrations(cursor: sqlite3.Cursor) -> None:
     cursor.execute("UPDATE tasks SET status = 'open' WHERE status = 'draft'")
     cursor.execute("UPDATE tasks SET status = 'in_progress' WHERE status = 'in-progress'")
     cursor.execute("UPDATE tasks SET status = 'done' WHERE status = 'completed'")
-
-
-def apply_workflow_verification_migrations(cursor: sqlite3.Cursor) -> None:
-    """Ensure workflow verification table columns exist for legacy upgrades."""
-    if not column_exists(cursor, "workflow_verifications", "details"):
-        cursor.execute("ALTER TABLE workflow_verifications ADD COLUMN details TEXT")
-    if not column_exists(cursor, "workflow_verifications", "verified_at"):
-        cursor.execute("ALTER TABLE workflow_verifications ADD COLUMN verified_at TEXT")
-
-
-def apply_identity_key_migrations(cursor: sqlite3.Cursor) -> None:
-    """Ensure project, phase, and task key columns exist and are backfilled."""
-    if not column_exists(cursor, "projects", "plan_key"):
-        cursor.execute("ALTER TABLE projects ADD COLUMN plan_key TEXT")
-    if not column_exists(cursor, "phases", "key"):
-        cursor.execute("ALTER TABLE phases ADD COLUMN key TEXT")
-    if not column_exists(cursor, "tasks", "key"):
-        cursor.execute("ALTER TABLE tasks ADD COLUMN key TEXT")
-
-    cursor.execute(
-        """
-        UPDATE projects
-        SET plan_key = id
-        WHERE plan_key IS NULL OR TRIM(plan_key) = ''
-        """
-    )
-    cursor.execute(
-        """
-        UPDATE phases
-        SET key = id
-        WHERE key IS NULL OR TRIM(key) = ''
-        """
-    )
-    cursor.execute(
-        """
-        UPDATE tasks
-        SET key = id
-        WHERE key IS NULL OR TRIM(key) = ''
-        """
-    )

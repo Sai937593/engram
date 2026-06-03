@@ -7,9 +7,16 @@ from typing import Any
 import engram.services.serializers as serializers
 from engram.models.memory import Memory
 from engram.models.phase import Phase
+from engram.models.plan import Plan
 from engram.models.project import Project
 from engram.models.task import Task
-from engram.services.serializers import memory_to_dict, phase_to_dict, project_to_dict, task_to_dict
+from engram.services.serializers import (
+    memory_to_dict,
+    phase_to_dict,
+    plan_to_dict,
+    project_to_dict,
+    task_to_dict,
+)
 
 
 def _assert_json_safe(value: Any) -> None:
@@ -41,6 +48,35 @@ def test_project_to_dict_shape_and_missing_optional_values():
         "summary": None,
         "status": "active",
         "repo_paths": ["D:/repo/engram"],
+    }
+    _assert_json_safe(payload)
+
+
+def test_plan_to_dict_shape_and_missing_optional_values():
+    plan = Plan(
+        id="plan1234",
+        project_id="proj1234",
+        title="Implementation Plan",
+        slug=" ",
+        status="review_pending",
+        source_doc_path="docs/plans/p0004/adr.md",
+        key="p0004",
+        created_at="2026-06-02 12:00:00",
+        updated_at=None,
+    )
+
+    payload = plan_to_dict(plan)
+
+    assert payload == {
+        "id": "plan1234",
+        "project_id": "proj1234",
+        "key": "p0004",
+        "title": "Implementation Plan",
+        "slug": None,
+        "status": "review_pending",
+        "source_doc_path": "docs/plans/p0004/adr.md",
+        "created_at": "2026-06-02 12:00:00",
+        "updated_at": None,
     }
     _assert_json_safe(payload)
 

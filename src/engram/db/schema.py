@@ -160,9 +160,14 @@ def create_memories_fts_and_triggers(cursor: sqlite3.Cursor) -> None:
 
 def create_indexes(cursor: sqlite3.Cursor) -> None:
     """Create secondary indexes for performance."""
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_plans_project_id ON plans(project_id)")
     cursor.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_plan_key ON projects(plan_key) "
         "WHERE plan_key IS NOT NULL"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_plans_project_key ON plans(project_id, key) "
+        "WHERE key IS NOT NULL"
     )
     cursor.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_phases_project_key ON phases(project_id, key) "

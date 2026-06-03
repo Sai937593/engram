@@ -51,8 +51,10 @@ def test_init_db_creates_parent_directory(tmp_path, monkeypatch):
     # Mock all internal init_db steps to avoid schema creation errors during simple dir test
     monkeypatch.setattr("engram.db.get_db_connection", MagicMock())
     monkeypatch.setattr("engram.db.create_projects_table", MagicMock())
+    monkeypatch.setattr("engram.db.create_plans_table", MagicMock())
     monkeypatch.setattr("engram.db.create_tasks_table", MagicMock())
     monkeypatch.setattr("engram.db.create_phases_table", MagicMock())
+    monkeypatch.setattr("engram.db.apply_plans_column_migrations", MagicMock())
     monkeypatch.setattr("engram.db.apply_tasks_column_migrations", MagicMock())
     monkeypatch.setattr("engram.db.create_memories_table", MagicMock())
     monkeypatch.setattr("engram.db.apply_memories_column_migrations", MagicMock())
@@ -103,8 +105,10 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
 
     # Mock all schema and migration functions
     mock_create_projects_table = MagicMock()
+    mock_create_plans_table = MagicMock()
     mock_create_tasks_table = MagicMock()
     mock_create_phases_table = MagicMock()
+    mock_apply_plans_column_migrations = MagicMock()
     mock_apply_tasks_column_migrations = MagicMock()
     mock_create_memories_table = MagicMock()
     mock_apply_memories_column_migrations = MagicMock()
@@ -119,8 +123,12 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     mock_apply_task_dependency_ref_migrations = MagicMock()
 
     monkeypatch.setattr("engram.db.create_projects_table", mock_create_projects_table)
+    monkeypatch.setattr("engram.db.create_plans_table", mock_create_plans_table)
     monkeypatch.setattr("engram.db.create_tasks_table", mock_create_tasks_table)
     monkeypatch.setattr("engram.db.create_phases_table", mock_create_phases_table)
+    monkeypatch.setattr(
+        "engram.db.apply_plans_column_migrations", mock_apply_plans_column_migrations
+    )
     monkeypatch.setattr(
         "engram.db.apply_tasks_column_migrations", mock_apply_tasks_column_migrations
     )
@@ -159,8 +167,10 @@ def test_init_db_calls_all_schema_functions(monkeypatch):
     mock_conn.cursor.assert_called_once()
 
     mock_create_projects_table.assert_called_once_with(mock_cursor)
+    mock_create_plans_table.assert_called_once_with(mock_cursor)
     mock_create_tasks_table.assert_called_once_with(mock_cursor)
     mock_create_phases_table.assert_called_once_with(mock_cursor)
+    mock_apply_plans_column_migrations.assert_called_once_with(mock_cursor)
     mock_apply_tasks_column_migrations.assert_called_once_with(mock_cursor)
     mock_create_memories_table.assert_called_once_with(mock_cursor)
     mock_apply_memories_column_migrations.assert_called_once_with(mock_cursor)
@@ -191,8 +201,10 @@ def test_init_db_handles_fts5_error(monkeypatch):
 
     # Mock all schema and migration functions to do nothing, except FTS
     monkeypatch.setattr("engram.db.create_projects_table", MagicMock())
+    monkeypatch.setattr("engram.db.create_plans_table", MagicMock())
     monkeypatch.setattr("engram.db.create_tasks_table", MagicMock())
     monkeypatch.setattr("engram.db.create_phases_table", MagicMock())
+    monkeypatch.setattr("engram.db.apply_plans_column_migrations", MagicMock())
     monkeypatch.setattr("engram.db.apply_tasks_column_migrations", MagicMock())
     monkeypatch.setattr("engram.db.create_memories_table", MagicMock())
     monkeypatch.setattr("engram.db.apply_memories_column_migrations", MagicMock())
@@ -337,6 +349,25 @@ def test_migration_adds_memory_review_outcome_column(tmp_path):
 
     names = {col[1] for col in columns}
     assert "memory_review_outcome" in names
+
+
+def test_init_db_creates_plans_table(tmp_db):
+    """Test that init_db creates the plans table with the expected columns."""
+    conn = get_db_connection(tmp_db)
+    columns = conn.execute("PRAGMA table_info(plans)").fetchall()
+    conn.close()
+    names = {row["name"] for row in columns}
+    assert {
+        "id",
+        "project_id",
+        "key",
+        "title",
+        "slug",
+        "status",
+        "source_doc_path",
+        "created_at",
+        "updated_at",
+    } <= names
 
 
 def test_init_db_creates_is_verified_column(tmp_db):
