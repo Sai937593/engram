@@ -53,10 +53,12 @@ def test_resolve_current_project_returns_serialized_project_for_bound_repo(tmp_p
     assert payload == {
         "id": "proj1234",
         "plan_key": "proj1234",
+        "active_plan_id": None,
         "name": "Bound Project",
         "summary": "Service test project",
         "status": "active",
         "repo_paths": [str(repo_path)],
+        "active_plan": None,
     }
 
 
@@ -131,6 +133,42 @@ def test_resolve_current_project_uses_os_getcwd_when_cwd_is_omitted(tmp_path, mo
     assert payload["id"] == "proj-cwd"
     assert payload["name"] == "Cwd Project"
     assert payload["repo_paths"] == [str(repo_path)]
+
+
+def test_resolve_current_project_includes_active_plan_payload(tmp_path):
+    repo_path = tmp_path / "repo_active_plan"
+    repo_path.mkdir()
+    (repo_path / ".git").mkdir()
+    (repo_path / ".engram").mkdir()
+
+    from engram.db import init_db
+    from engram.models.plan import Plan
+    from engram.models.project import Project
+
+    db_path = repo_path / ".engram" / "memory.db"
+    init_db(db_path)
+
+    project = Project.create(
+        id="proj-active-plan",
+        name="Active Plan Project",
+        summary="Project with active plan",
+        repo_paths=[str(repo_path)],
+        db_path=db_path,
+    )
+    plan = Plan.create(
+        project_id=project.id,
+        title="Implementation Plan",
+        key="p0004",
+        status="active",
+        db_path=db_path,
+    )
+    project.update(active_plan_id=plan.id, db_path=db_path)
+
+    payload = resolve_current_project(cwd=str(repo_path))
+
+    assert payload["active_plan_id"] == plan.id
+    assert payload["active_plan"]["id"] == plan.id
+    assert payload["active_plan"]["project_id"] == project.id
 
 
 def test_find_repo_root_success(tmp_path):

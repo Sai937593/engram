@@ -10,9 +10,14 @@ from engram.services.errors import EngramServiceError, JsonValue
 from engram.services.serializers import project_to_dict
 
 
+def _project_payload(project: Project, db_path: str | Path | None = None) -> dict[str, JsonValue]:
+    """Attach the resolved active plan before serializing a project."""
+    project.active_plan = project.get_active_plan(db_path=db_path)
+    return project_to_dict(project)
+
+
 def resolve_current_project(cwd: str | None = None) -> dict[str, JsonValue]:
     """Resolve and serialize the project bound to the current repository path."""
-    import json
     import sys
 
     from engram.services.project_path import find_repo_root, get_repo_local_db_path
@@ -40,18 +45,10 @@ def resolve_current_project(cwd: str | None = None) -> dict[str, JsonValue]:
                 row = None
 
             if row is not None:
-                repo_paths = json.loads(row["repo_paths"]) if row["repo_paths"] else []
-                if not repo_paths:
-                    repo_paths.append(str(repo_root))
-                project = Project(
-                    id=row["id"],
-                    plan_key=row["plan_key"] if "plan_key" in row.keys() else row["id"],
-                    name=row["name"],
-                    summary=row["summary"],
-                    status=row["status"],
-                    repo_paths=repo_paths,
-                )
-                return project_to_dict(project)
+                project = Project._from_row(row)
+                if not project.repo_paths:
+                    project.repo_paths.append(str(repo_root))
+                return _project_payload(project, db_path)
     except EngramServiceError as e:
         if e.code != "UNRESOLVED_WORKSPACE":
             raise
@@ -62,7 +59,7 @@ def resolve_current_project(cwd: str | None = None) -> dict[str, JsonValue]:
     if is_testing:
         project = Project.find_by_repo_path(resolved_cwd)
         if project is not None:
-            return project_to_dict(project)
+            return _project_payload(project)
 
     # If both repo-local DB and legacy fallbacks fail, raise PROJECT_NOT_BOUND
     raise EngramServiceError(

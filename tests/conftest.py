@@ -21,6 +21,7 @@ def tmp_db(tmp_path, monkeypatch):
     patch_modules = [
         "engram.db",
         "engram.models.project",
+        "engram.models.plan",
         "engram.models.task.model",
         "engram.models.task.queries",
         "engram.models.phase",
