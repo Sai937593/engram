@@ -72,6 +72,11 @@ def _respond_error(exc: EngramServiceError) -> str:
         "TASK_NOT_VERIFIED": "Run engram_workflow_verify first, then retry engram_workflow_finish_and_commit.",
         "WORKTREE_HAS_UNSTAGED_CHANGES": "Stage all intended changes before running engram_workflow_finish_and_commit.",
         "WORKTREE_HAS_UNTRACKED_FILES": "Stage or remove untracked files before running engram_workflow_finish_and_commit.",
+        "ACTIVE_PLAN_MISSING": "Create and activate a plan using engram_plan_create and engram_plan_activate.",
+        "PLAN_NOT_FOUND": "List plans using engram_plan_list to find the correct plan ID or key.",
+        "DUPLICATE_PLAN_KEY": "Choose a different plan key before retrying engram_plan_create.",
+        "INVALID_PLAN_STATUS": "Use a valid plan status (draft, active, review_pending, done, archived, cancelled) and update using engram_plan_update.",
+        "INVALID_PLAN_REFERENCE": "Provide a non-empty plan ID or key, then retry.",
     }
 
     details = _compact_error_details(exc)
@@ -138,18 +143,6 @@ def _resolve_error_fix(exc: EngramServiceError, known_fixes: dict[str, str]) -> 
     return " ".join(segments)
 
 
-def slim_task_dict(task: dict[str, Any]) -> dict[str, Any]:
-    """Prune a full task dictionary to essential scan fields only."""
-    return {
-        "id": task["id"],
-        "key": task.get("key"),
-        "title": task["title"],
-        "status": task["status"],
-        "phase_id": task.get("phase_id"),
-        "phase_key": task.get("phase_key"),
-        "phase_title": task.get("phase_title"),
-        "is_verified": task.get("is_verified"),
-    }
 
 
 def build_list_payload(
@@ -204,17 +197,4 @@ def build_task_list_payload(
     )
 
 
-def slim_phase_dict(phase: dict[str, Any]) -> dict[str, Any]:
-    """Prune a full phase dictionary to essential scan fields only."""
-    slimmed = {
-        "id": phase["id"],
-        "key": phase.get("key"),
-        "title": phase["title"],
-        "status": phase["status"],
-    }
-    if phase.get("status_label"):
-        slimmed["status_label"] = phase["status_label"]
-    for marker in ("current", "review_candidate", "next_planned"):
-        if marker in phase:
-            slimmed[marker] = phase[marker]
-    return slimmed
+

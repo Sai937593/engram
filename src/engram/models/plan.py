@@ -10,20 +10,16 @@ from engram.db import get_db_connection
 from engram.models.audit import AuditLog
 
 
+from engram.models.project_helpers import optional_text as _optional_text
+
+
 def _required_text(value: Any, field_name: str) -> str:
     """Return a stripped text value or raise if it is missing."""
-    text = "" if value is None else str(value).strip()
+    text = str(value or "").strip()
     if not text:
         raise ValueError(f"{field_name} is required.")
     return text
 
-
-def _optional_text(value: Any) -> str | None:
-    """Normalize blank optional values to None."""
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
 
 
 class Plan:
@@ -32,16 +28,9 @@ class Plan:
     VALID_STATUSES = {"draft", "active", "review_pending", "done", "archived", "cancelled"}
 
     def __init__(
-        self,
-        id: str,
-        project_id: str,
-        title: str,
-        slug: str | None = None,
-        status: str = "draft",
-        source_doc_path: str | None = None,
-        key: str | None = None,
-        created_at: str | None = None,
-        updated_at: str | None = None,
+        self, id: str, project_id: str, title: str, slug: str | None = None,
+        status: str = "draft", source_doc_path: str | None = None, key: str | None = None,
+        created_at: str | None = None, updated_at: str | None = None,
     ) -> None:
         self.id = id
         self.project_id = project_id
@@ -55,14 +44,8 @@ class Plan:
 
     @classmethod
     def create(
-        cls,
-        project_id: str,
-        title: str,
-        slug: str | None = None,
-        status: str = "draft",
-        source_doc_path: str | None = None,
-        id: str | None = None,
-        key: str | None = None,
+        cls, project_id: str, title: str, slug: str | None = None, status: str = "draft",
+        source_doc_path: str | None = None, id: str | None = None, key: str | None = None,
         db_path: str | Path | None = None,
     ) -> Plan:
         """Create a new plan record and return the persisted model."""
@@ -84,19 +67,8 @@ class Plan:
             raise ValueError(f"Plan key '{plan_key}' already exists in this project.")
 
         conn.execute(
-            """
-            INSERT INTO plans (id, project_id, key, title, slug, status, source_doc_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                plan_id,
-                resolved_project_id,
-                plan_key,
-                resolved_title,
-                resolved_slug,
-                resolved_status,
-                resolved_source_doc_path,
-            ),
+            "INSERT INTO plans (id, project_id, key, title, slug, status, source_doc_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (plan_id, resolved_project_id, plan_key, resolved_title, resolved_slug, resolved_status, resolved_source_doc_path),
         )
         row = conn.execute("SELECT * FROM plans WHERE id = ?", (plan_id,)).fetchone()
         conn.commit()
@@ -107,15 +79,14 @@ class Plan:
             raise ValueError(f"Plan '{plan_id}' was not persisted.")
         return cls.from_row(row)
 
+
     @classmethod
     def get(cls, id: str, db_path: str | Path | None = None) -> Plan | None:
         """Return a plan by its internal ID."""
         conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
         row = conn.execute("SELECT * FROM plans WHERE id = ?", (id,)).fetchone()
         conn.close()
-        if row is None:
-            return None
-        return cls.from_row(row)
+        return cls.from_row(row) if row else None
 
     @classmethod
     def get_by_key(
@@ -128,20 +99,14 @@ class Plan:
             (project_id, key),
         ).fetchone()
         conn.close()
-        if row is None:
-            return None
-        return cls.from_row(row)
+        return cls.from_row(row) if row else None
 
     @classmethod
     def list_by_project(cls, project_id: str, db_path: str | Path | None = None) -> list[Plan]:
         """Return all plans for one project ordered by creation time."""
         conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
         rows = conn.execute(
-            """
-            SELECT * FROM plans
-            WHERE project_id = ?
-            ORDER BY created_at ASC, id ASC
-            """,
+            "SELECT * FROM plans WHERE project_id = ? ORDER BY created_at ASC, id ASC",
             (project_id,),
         ).fetchall()
         conn.close()
@@ -150,17 +115,24 @@ class Plan:
     @classmethod
     def from_row(cls, row: Any) -> Plan:
         """Build a Plan from a SQLite row."""
+        k = row.keys()
+        slug = row["slug"] if "slug" in k else None
+        sd = row["source_doc_path"] if "source_doc_path" in k else None
+        key = row["key"] if "key" in k else row["id"]
+        cat = row["created_at"] if "created_at" in k else None
+        uat = row["updated_at"] if "updated_at" in k else None
         return cls(
             row["id"],
             row["project_id"],
             row["title"],
-            row["slug"] if "slug" in row.keys() else None,
+            slug,
             row["status"],
-            row["source_doc_path"] if "source_doc_path" in row.keys() else None,
-            row["key"] if "key" in row.keys() else row["id"],
-            row["created_at"] if "created_at" in row.keys() else None,
-            row["updated_at"] if "updated_at" in row.keys() else None,
+            sd,
+            key,
+            cat,
+            uat,
         )
+
 
     @classmethod
     def _validate_status(cls, status: str) -> str:
@@ -170,3 +142,55 @@ class Plan:
             allowed = ", ".join(sorted(cls.VALID_STATUSES))
             raise ValueError(f"Invalid plan status '{normalized}'. Allowed statuses: {allowed}.")
         return normalized
+
+    def update(
+        self,
+        title: str | None = None,
+        slug: str | None = None,
+        status: str | None = None,
+        source_doc_path: str | None = None,
+        db_path: str | Path | None = None,
+    ) -> None:
+        """Update mutable plan fields in database and in-memory model."""
+        conn = get_db_connection(db_path) if db_path is not None else get_db_connection()
+        updates = []
+        params = []
+
+        def upd(field: str, val: Any, required: bool = False) -> None:
+            val_text = _required_text(val, field) if required else _optional_text(val)
+            old_val = getattr(self, field)
+            if old_val != val_text:
+                updates.append(f"{field} = ?")
+                params.append(val_text)
+                setattr(self, field, val_text)
+                AuditLog.log(
+                    "plans",
+                    self.id,
+                    "update",
+                    field=field,
+                    old_value=old_val,
+                    new_value=val_text,
+                    conn=conn,
+                )
+
+        if title is not None:
+            upd("title", title, required=True)
+        if slug is not None:
+            upd("slug", slug)
+        if status is not None:
+            upd("status", self._validate_status(status), required=True)
+        if source_doc_path is not None:
+            upd("source_doc_path", source_doc_path)
+
+        if not updates:
+            conn.close()
+            return
+
+        updates.append("updated_at = datetime('now')")
+        params.append(self.id)
+
+        query = f"UPDATE plans SET {', '.join(updates)} WHERE id = ?"
+        conn.execute(query, params)
+        conn.commit()
+        conn.close()
+

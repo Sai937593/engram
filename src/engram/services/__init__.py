@@ -10,13 +10,27 @@ from engram.services.context_service import (
 from engram.services.errors import EngramServiceError
 from engram.services.memory_service import search_memories
 from engram.services.phase_service import get_active_phase, list_phases
+from engram.services.plan_service import (
+    activate_plan,
+    create_plan,
+    get_current_plan,
+    get_plan,
+    list_plans,
+    update_plan,
+)
 from engram.services.project_path import (
     find_repo_root,
     get_repo_local_db_path,
     get_repo_local_engram_dir,
 )
 from engram.services.project_service import resolve_current_project
-from engram.services.serializers import memory_to_dict, phase_to_dict, project_to_dict, task_to_dict
+from engram.services.serializers import (
+    memory_to_dict,
+    phase_to_dict,
+    plan_to_dict,
+    project_to_dict,
+    task_to_dict,
+)
 from engram.services.task import get_task, list_tasks, resolve_task_ref
 from engram.services.workflow_service import finish_workflow, start_workflow
 
@@ -33,10 +47,17 @@ __all__ = [
     "get_task",
     "list_phases",
     "get_active_phase",
+    "get_current_plan",
+    "create_plan",
+    "activate_plan",
+    "update_plan",
+    "list_plans",
+    "get_plan",
     "project_to_dict",
     "task_to_dict",
     "memory_to_dict",
     "phase_to_dict",
+    "plan_to_dict",
     "start_workflow",
     "finish_workflow",
     "task_service",
