@@ -516,6 +516,15 @@ def test_append_task_note_blank_rejection(tmp_db):
     assert exc.value.code == "INVALID_NOTE"
 
 
+def test_append_task_note_not_found(tmp_db):
+    project = _create_project("proj-u", "/tmp/proj-u")
+
+    with pytest.raises(EngramServiceError) as exc:
+        append_task_note(project_id=project.id, task_ref="invalid-task", note="some note")
+
+    assert exc.value.code == "TASK_NOT_FOUND"
+
+
 def test_start_task_success(tmp_db):
     project = _create_project("proj-start-t", "/tmp/proj-start-t")
     t = Task.create(project_id=project.id, id="task0101", title="Task 101", status="todo")
