@@ -55,7 +55,7 @@ def _build_fused_candidate(
     fts_candidate = channels.fts
     semantic_candidate = channels.semantic
     primary = fts_candidate or semantic_candidate
-    if primary is None:  # pragma: no cover - guarded by caller usage
+    if primary is None:
         raise ValueError(f"missing primary candidate for memory_id {memory_id}")
 
     exact_fts = bool(fts_candidate and _is_exact_fts_candidate(fts_candidate))

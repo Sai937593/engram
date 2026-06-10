@@ -5,6 +5,7 @@ from importlib.metadata import distribution, entry_points
 from click.testing import CliRunner
 
 from engram.cli import cli, main
+from engram.models.project import Project
 
 
 def test_console_entrypoint_resolves_to_package_main():
@@ -69,3 +70,91 @@ def test_db_command_runs_successfully(tmp_db):
     assert "Database Path:" in result.output
     assert "Database Exists: Yes" in result.output
     assert "Database Connection & Integrity: Healthy" in result.output
+
+
+def test_init_command_reports_already_bound_project(project, monkeypatch, tmp_path):
+    """Init should not create or rebind when the current repo is already registered."""
+    monkeypatch.chdir(tmp_path)
+    project.add_repo_path(str(tmp_path))
+
+    result = CliRunner().invoke(cli, ["init", "--name", "Ignored", "--id", "ignored"])
+
+    assert result.exit_code == 0, result.output
+    assert "already bound to project" in result.output
+    assert project.id in result.output
+
+
+def test_init_command_binds_existing_project_id(project, monkeypatch, tmp_path):
+    """Init should bind the current repo when the requested project id already exists."""
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(cli, ["init", "--name", "Renamed", "--id", project.id])
+
+    assert result.exit_code == 0, result.output
+    assert f"Project '{project.id}' already exists" in result.output
+    assert str(tmp_path) in Project.get(project.id).repo_paths
+
+
+def test_init_command_creates_slugged_project_when_id_is_omitted(tmp_db, monkeypatch, tmp_path):
+    """Init should slugify the prompted project name when --id is not supplied."""
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(
+        cli,
+        ["init", "--name", "My New Project", "--summary", "Created from CLI"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Initialized project 'my-new-project'" in result.output
+    created = Project.get("my-new-project")
+    assert created is not None
+    assert created.name == "My New Project"
+    assert created.summary == "Created from CLI"
+    assert str(tmp_path) in created.repo_paths
+
+
+def test_guide_command_reports_manual_read_errors(monkeypatch):
+    """Guide should surface packaged manual loading failures without crashing."""
+
+    class BrokenPackageFiles:
+        def __truediv__(self, _name):
+            return self
+
+        def read_text(self, encoding="utf-8"):
+            raise OSError("manual missing")
+
+    monkeypatch.setattr("engram.cli.utils_cmds.resources.files", lambda _package: BrokenPackageFiles())
+
+    result = CliRunner().invoke(cli, ["guide"])
+
+    assert result.exit_code == 0, result.output
+    assert "Error reading manual" in result.output
+    assert "manual missing" in result.output
+
+
+def test_db_command_reports_size_and_connection_errors(monkeypatch, tmp_path):
+    """DB command should handle stat and connection failures independently."""
+
+    class BrokenDbPath:
+        def exists(self):
+            return True
+
+        def stat(self):
+            raise OSError("stat denied")
+
+        def __str__(self):
+            return str(tmp_path / "broken.db")
+
+    def raise_connection_error():
+        raise RuntimeError("cannot open db")
+
+    monkeypatch.setattr("engram.db.DEFAULT_DB_PATH", BrokenDbPath())
+    monkeypatch.setattr("engram.db.get_db_connection", raise_connection_error)
+
+    result = CliRunner().invoke(cli, ["db"])
+
+    assert result.exit_code == 0, result.output
+    assert "Database Exists: Yes" in result.output
+    assert "Error reading size" in result.output
+    assert "Database Connection Error" in result.output
+    assert "cannot open db" in result.output

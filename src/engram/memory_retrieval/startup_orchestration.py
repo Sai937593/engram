@@ -270,7 +270,7 @@ def orchestrate_startup_task_memory_retrieval(
             pack_result=packed,
             retrieval_candidates=retrieval_result.candidates,
         )
-    except Exception as exc:  # pragma: no cover - safety net for startup resilience
+    except Exception as exc:
         return _build_fallback_result(
             project=project,
             selected_task=selected_task,
