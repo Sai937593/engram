@@ -6,6 +6,7 @@ import ast
 import importlib
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -539,6 +540,17 @@ def test_start_task_fails_if_dependency_unsatisfied(tmp_db):
     assert exc.value.details["depends_on"] == dep.id
 
 
+def test_start_task_not_found_when_task_deleted_after_resolve():
+    with (
+        patch("engram.services.task.lifecycle.resolve_task_ref", return_value="dummy_id"),
+        patch("engram.models.task.Task.get", return_value=None),
+    ):
+        with pytest.raises(EngramServiceError) as exc:
+            start_task("proj1", "dummy_ref")
+
+        assert exc.value.code == "TASK_NOT_FOUND"
+
+
 def test_complete_task_success_without_evidence(tmp_db):
     project = _create_project("proj-comp-t", "/tmp/proj-comp-t")
     t = Task.create(project_id=project.id, id="task0104", title="Task 104", status="in-progress")
@@ -558,3 +570,14 @@ def test_complete_task_success_with_evidence(tmp_db):
     assert dto["status"] == "done"
     assert "All completed smoothly" in dto["evidence"]
     assert "[" in dto["evidence"]
+
+
+def test_complete_task_not_found_when_task_deleted_after_resolve():
+    with (
+        patch("engram.services.task.lifecycle.resolve_task_ref", return_value="dummy_id"),
+        patch("engram.models.task.Task.get", return_value=None),
+    ):
+        with pytest.raises(EngramServiceError) as exc:
+            complete_task("proj1", "dummy_ref")
+
+        assert exc.value.code == "TASK_NOT_FOUND"
